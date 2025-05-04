@@ -1,0 +1,56 @@
+How the game should play?
+
+### Start screen
+- 4 letter game code input
+- Name input
+- Join Game btn
+- Create Game btn
+
+### Create Game Screen (not authenticated)
+- You need to be signed in to create a game.
+- Login tab
+- Sign up tab
+
+### Create Game Screen (authenticated)
+- Create quiz wizard
+- Pick a theme
+  - Enter a theme
+  - Generate theme btn
+  - 4 generated themes
+- Select quiz type
+  - True / False
+  - Multiple Option
+  - Fill in the blank
+- Set quiz options
+  - Number of questions (10)
+  - Difficulty (Beginner)
+  - Quizzes are timed by default
+
+### Lobby Screen (Host)
+- Game code (shareable)
+- Joined players
+
+### Lobby Screen (Guests)
+- Waiting for host to start the game
+- or Game not found
+- or Game already started
+
+### Game Screen
+- Current question with timer
+- Waiting for name1, name2, etc. to answer.
+- When all have answered, reveal answer and explanation
+- Game rules
+  - If host disconnects, game is halted (not furthered to next question)
+  - If host reconnects, game continues.
+  - If guests disconnect, game continues.
+  - If guests reconnect, they retain their points
+
+### Leaderboard Screen
+- Players ordered by score desc
+- Play same quiz (at host)
+- Play new quiz (at host)
+- Info: Playing new quiz prompts the host to create a new quiz without losing connection to guests.
+- At guests: Waiting for host to create a new game.
+
+X games free per month.
+Cheap subscription is for unlimited games.
