@@ -8,8 +8,6 @@ import { useRouter } from "next/navigation";
 import { User } from "@supabase/supabase-js";
 
 export default function Home() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [transport, setTransport] = useState("N/A");
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userCount, setUserCount] = useState(0);
@@ -17,7 +15,6 @@ export default function Home() {
   const supabase = createClient();
 
   useEffect(() => {
-    // Check user authentication status
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user || null);
@@ -37,34 +34,21 @@ export default function Home() {
     
     checkUser();
 
-    // Socket connection setup
     if (socket.connected) {
       onConnect();
     }
 
     function onConnect() {
-      setIsConnected(true);
-      setTransport(socket.io.engine.transport.name);
-
-      // Request current user count immediately after connecting
       socket.emit('get user count');
-      console.log('Requested user count');
-
-      socket.io.engine.on("upgrade", (transport) => {
-        setTransport(transport.name);
-      });
     }
 
     function onDisconnect() {
-      setIsConnected(false);
-      setTransport("N/A");
     }
 
     function onUserCount(data: { count: number }) {
       setUserCount(data.count);
     }
 
-    // Set up regular polling for user count
     const pollInterval = setInterval(() => {
       if (socket.connected) {
         socket.emit('get user count');
@@ -79,7 +63,7 @@ export default function Home() {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("user count", onUserCount);
-      clearInterval(pollInterval); // Clean up the interval
+      clearInterval(pollInterval);
     };
   }, []);
 
