@@ -12,6 +12,7 @@ export default function Home() {
   const [transport, setTransport] = useState("N/A");
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userCount, setUserCount] = useState(0);
   const router = useRouter();
   const supabase = createClient();
 
@@ -45,6 +46,10 @@ export default function Home() {
       setIsConnected(true);
       setTransport(socket.io.engine.transport.name);
 
+      // Request current user count immediately after connecting
+      socket.emit('get user count');
+      console.log('Requested user count');
+
       socket.io.engine.on("upgrade", (transport) => {
         setTransport(transport.name);
       });
@@ -55,12 +60,26 @@ export default function Home() {
       setTransport("N/A");
     }
 
+    function onUserCount(data: { count: number }) {
+      setUserCount(data.count);
+    }
+
+    // Set up regular polling for user count
+    const pollInterval = setInterval(() => {
+      if (socket.connected) {
+        socket.emit('get user count');
+      }
+    }, 5000); // Poll every 5 seconds
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
+    socket.on("user count", onUserCount);
 
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
+      socket.off("user count", onUserCount);
+      clearInterval(pollInterval); // Clean up the interval
     };
   }, []);
 
@@ -82,19 +101,21 @@ export default function Home() {
             <Button onClick={handleSignOut}>Sign Out</Button>
           </div>
           <p className="text-gray-600">Logged in as: {user.email}</p>
-          <div className="mt-6 p-4 border rounded-md">
-            <p>Socket Status: {isConnected ? "connected" : "disconnected"}</p>
-            <p>Transport: {transport}</p>
-          </div>
         </div>
       ) : (
         <div className="text-center">
           <p>You are not logged in.</p>
           <Button onClick={() => router.push('/login')} className="mt-4">
-            Go to Login
+            Login
           </Button>
         </div>
       )}
+      <div className="mt-6 p-4 border rounded-md">
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-center">
+          <p className="text-blue-800 font-medium text-lg">👥 Users Online: {userCount}</p>
+        </div>
+        ENTER GAME STUFF HERE
+      </div>
     </div>
   );
 }

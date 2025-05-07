@@ -17,6 +17,9 @@ const io = new Server(server, {
   }
 });
 
+// Track connected users count
+let connectedUsers = 0;
+
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 
 app.get('/', (req, res) => {
@@ -29,7 +32,18 @@ server.listen(PORT, () => {
 
 io.on('connection', (socket) => {
     console.log('a user connected');
+
+    connectedUsers++;
+    io.emit('user count', { count: connectedUsers });
+
+    socket.on('get user count', () => {
+        socket.emit('user count', { count: connectedUsers });
+    });
+    
     socket.on('disconnect', () => {
         console.log('user disconnected');
+
+        connectedUsers--;
+        io.emit('user count', { count: connectedUsers });
     });
 });
