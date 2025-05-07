@@ -7,8 +7,6 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 
-// A more comprehensive list of country codes to flag emojis
-// Country flags and names
 const countryInfo: Record<string, { flag: string, name: string }> = {
   'AD': { flag: '🇦🇩', name: 'Andorra' },
   'AE': { flag: '🇦🇪', name: 'United Arab Emirates' },

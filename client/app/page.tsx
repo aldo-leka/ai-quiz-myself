@@ -121,13 +121,21 @@ export default function Home() {
           </div>
         )}
         <div className="mt-6 p-6 sm:p-8 border rounded-lg shadow-sm bg-white max-w-lg mx-auto game-container">
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-            <p className="text-blue-800 font-medium text-xl">
-              👥 {(() => {
-                const totalPlayers = Object.values(onlinePlayers).reduce((sum, count) => sum + count, 0);
-                return `${totalPlayers} ${totalPlayers === 1 ? 'Player' : 'Players'} Online`;
-              })()}
-            </p>
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex flex-col sm:flex-row items-center justify-between">
+              <p className="text-blue-800 font-medium text-xl mb-3 sm:mb-0">
+                👥 {(() => {
+                  const totalPlayers = Object.values(onlinePlayers).reduce((sum, count) => sum + count, 0);
+                  return `${totalPlayers} ${totalPlayers === 1 ? 'Player' : 'Players'} Online`;
+                })()}
+              </p>
+              <Button 
+                className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md w-full sm:w-auto"
+                onClick={() => router.push('/game')}
+              >
+                <span className="mr-2">▶</span> Play Now
+              </Button>
+            </div>
           </div>
           <div className="grid w-full items-center gap-2 mb-6">
             <Label htmlFor="gameCode" className="text-base font-medium">Game Code</Label>
