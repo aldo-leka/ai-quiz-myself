@@ -321,7 +321,7 @@ export function CountryStrips({
         <div key={stripIndex} className="flex w-full h-9 overflow-hidden rounded-md shadow-sm">
           {strip.map(([countryCode, count], index) => {
             // Calculate relative width based on player count
-            const totalPlayers = strip.reduce((sum, [_, count]) => sum + count, 0);
+            const totalPlayers = strip.reduce((sum, [, count]) => sum + count, 0);
             const width = Math.max(5, (count / totalPlayers) * 100); // Minimum 5% width
             
             return (
