@@ -6,6 +6,9 @@ import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { User } from "@supabase/supabase-js";
+import {Input} from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {Label} from "@/components/ui/label";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -73,32 +76,44 @@ export default function Home() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div className="loading-spinner" aria-label="Loading"></div>;
   }
 
   return (
-    <div className="p-4">
-      {user ? (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Welcome!</h1>
-            <Button onClick={handleSignOut}>Sign Out</Button>
+    <div className="p-4 sm:p-6 md:p-8 min-h-screen bg-slate-50">
+      <div className="max-w-3xl mx-auto">
+        {user ? (
+          <div className="space-y-4 mb-8">
+            <div className="flex justify-between items-center">
+              <h1 className="text-2xl sm:text-3xl font-bold">Welcome!</h1>
+              <Button onClick={handleSignOut} className="px-6 py-2">Sign Out</Button>
+            </div>
+            <p className="text-gray-600">Logged in as: {user.email}</p>
           </div>
-          <p className="text-gray-600">Logged in as: {user.email}</p>
+        ) : (
+          <div className="text-center mb-8">
+            <p className="text-lg mb-4">You are not logged in.</p>
+            <Button onClick={() => router.push('/login')} className="px-8 py-2">
+              Login
+            </Button>
+          </div>
+        )}
+        <div className="mt-6 p-6 sm:p-8 border rounded-lg shadow-sm bg-white max-w-lg mx-auto game-container">
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+            <p className="text-blue-800 font-medium text-xl">👥 {userCount} Players Online</p>
+          </div>
+          <div className="grid w-full items-center gap-2 mb-6">
+            <Label htmlFor="gameCode" className="text-base font-medium">Game Code</Label>
+            <Input id="gameCode" type="text" placeholder="ABCD" className="text-lg h-12" />
+          </div>
+          <div className="grid w-full items-center gap-2 mb-6">
+            <Label htmlFor="nickname" className="text-base font-medium">Nickname</Label>
+            <Input id="nickname" type="text" placeholder="Nicholas" className="text-lg h-12" />
+          </div>
+          <Button type="submit" className="mb-6 w-full py-6 text-lg font-medium">Join Game</Button>
+          <Separator className="mb-6" />
+          <Button type="submit" className="w-full py-6 text-lg font-medium" variant="outline">Create New Game</Button>
         </div>
-      ) : (
-        <div className="text-center">
-          <p>You are not logged in.</p>
-          <Button onClick={() => router.push('/login')} className="mt-4">
-            Login
-          </Button>
-        </div>
-      )}
-      <div className="mt-6 p-4 border rounded-md">
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-center">
-          <p className="text-blue-800 font-medium text-lg">👥 Users Online: {userCount}</p>
-        </div>
-        ENTER GAME STUFF HERE
       </div>
     </div>
   );
