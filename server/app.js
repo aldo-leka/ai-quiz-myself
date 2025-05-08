@@ -17,68 +17,78 @@ const io = new Server(server, {
   }
 });
 
-let users = {}; // Format: { 'US': 3, 'CA': 2, etc. }
+// key: nickname
+// value: { socket id, country code, etc. }
+let onlineUsers = new Map();
+let disconnects = new Map();
 
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 
-app.get('/', (req, res) => {
-    res.send('Hello World')
+app.get('/users-by-country', (req, res) => {
+    const countryCounts = {};
+
+    for (const [, player] of onlineUsers) {
+        const country = player.country || 'GLOBAL';
+        countryCounts[country] = (countryCounts[country] || 0) + 1;
+    }
+
+    res.json(countryCounts);
 });
 
 server.listen(PORT, () => {
     console.log(`AI Quiz server app listening on port ${PORT}`)
-});
+})
 
 io.on('connection', (socket) => {
-    console.log('a user connected');
-
-    // Default country code for new connections
-    socket.countryCode = 'UNKNOWN';
-
-    broadcastCounts();
-    
-    // Handle request for user counts
-    socket.on('get user count', () => {
-        sendCountsToClient(socket);
-    });
-    
-    // Handle client setting their country
-    socket.on('set country', (data) => {
-        const oldCountry = socket.countryCode;
-        const newCountry = data.country;
-
-        if (oldCountry !== 'UNKNOWN' && users[oldCountry]) {
-            users[oldCountry]--;
-            if (users[oldCountry] <= 0) {
-                delete [oldCountry];
+    socket.on('register nickname', async (nickname) => {
+        const existing = onlineUsers.get(nickname)
+        if (existing && existing.socketId !== socket.id) {
+            if (!disconnects.has(nickname)) {
+                socket.emit('nickname unavailable')
+                return
             }
-        }
-        
-        socket.countryCode = newCountry;
-        users[newCountry] = (users[newCountry] || 0) + 1;
 
-        broadcastCounts();
-    });
-    
+            clearTimeout(disconnects.get(nickname))
+            disconnects.delete(nickname)
+            console.log(`${nickname} from ${existing.country} (ip: ${socket.handshake.address}) reconnected before timeout`);
+        }
+
+        let ip = socket.handshake.address
+        if (ip === '::1' || ip === '127.0.0.1') {
+            ip = '8.8.8.8';
+        }
+
+        const country = await getCountryFromIP(ip)
+
+        onlineUsers.set(nickname, { socketId: socket.id, country })
+        socket.nickname = nickname
+        console.log(`${nickname} connected from ${country} (ip: ${ip})`)
+
+        socket.emit('nickname accepted')
+    })
+
     socket.on('disconnect', () => {
-        console.log('user disconnected');
-        
-        // Remove from country count if they had set one
-        if (socket.countryCode !== 'UNKNOWN' && users[socket.countryCode]) {
-            users[socket.countryCode]--;
-            if (users[socket.countryCode] <= 0) {
-                delete users[socket.countryCode];
-            }
-        }
-        
-        broadcastCounts();
-    });
-});
+        const nickname = socket.nickname
+        if (!nickname) return
 
-function broadcastCounts() {
-    io.emit('user counts', users);
-}
+        const timeoutId = setTimeout(() => {
+            const country = onlineUsers.get(nickname).country
+            onlineUsers.delete(nickname);
+            disconnects.delete(nickname);
+            console.log(`${nickname} from ${country} (ip: ${socket.handshake.address}) removed after timeout`)
+        }, 30000)
 
-function sendCountsToClient(socket) {
-    socket.emit('user counts', users);
+        disconnects.set(nickname, timeoutId)
+    })
+})
+
+async function getCountryFromIP(ip) {
+    try {
+        const res = await fetch(`http://ip-api.com/json/${ip}`);
+        const data = await res.json();
+        if (data.status === 'success') return data.countryCode;
+    } catch (err) {
+        console.error('Geo lookup failed', err);
+    }
+    return null;
 }

@@ -1,35 +1,38 @@
-import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+"use client"
+
+import {useEffect, useState} from "react"
+import {User} from "@supabase/supabase-js"
+import { createClient } from "@/utils/supabase/client"
+import {useRouter} from "next/navigation";
 
 export default function CreatePage() {
+    const [user, setUser] = useState<User | null>(null)
+    const router = useRouter();
+    const supabase = createClient()
+
+    useEffect(() => {
+        const checkUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setUser(session?.user || null);
+        }
+
+        checkUser()
+    }, []);
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+    };
+
     return (
-        <div className="flex items-center justify-center h-screen">
-            <Card className="w-[400px]">
-                <CardHeader>
-                    <CardTitle>Sign in or Sign up</CardTitle>
-                    <CardDescription>
-                        Sign in or sign up with a link straight to your inbox.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                    <div className="space-y-1">
-                        <Label htmlFor="email">Email</Label>
-                        <Input id="email" placeholder="email@example.com" />
-                    </div>
-                </CardContent>
-                <CardFooter>
-                    <Button>Send Magic Link</Button>
-                </CardFooter>
-            </Card>
-        </div>
-    );
+        <>
+            Create Game
+            {user && (
+                <button onClick={handleSignOut}>Sign out</button>
+            )}
+            {!user && (
+                <button onClick={() => router.push('/login')}>Sign in</button>
+            )}
+        </>
+    )
 }
