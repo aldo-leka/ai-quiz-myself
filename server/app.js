@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
             console.log(`${nickname} from ${existing.country} (ip: ${socket.handshake.address}) reconnected before timeout`);
         }
 
-        let ip = socket.handshake.address
+        let ip = normalizeIP(socket.handshake.address)
         if (ip === '::1' || ip === '127.0.0.1') {
             ip = '8.8.8.8';
         }
@@ -81,6 +81,14 @@ io.on('connection', (socket) => {
         disconnects.set(nickname, timeoutId)
     })
 })
+
+function normalizeIP(ip) {
+    // Remove IPv6-mapped IPv4 prefix
+    if (ip.startsWith('::ffff:')) {
+        return ip.replace('::ffff:', '');
+    }
+    return ip;
+}
 
 async function getCountryFromIP(ip) {
     try {
