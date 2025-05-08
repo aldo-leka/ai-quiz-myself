@@ -53,10 +53,10 @@ io.on('connection', (socket) => {
             console.log(`${nickname} from ${existing.country} (ip: ${socket.handshake.address}) reconnected before timeout`);
         }
 
-        let ip = normalizeIP(socket.handshake.address)
-        if (ip === '::1' || ip === '127.0.0.1') {
-            ip = '8.8.8.8';
-        }
+        let ip =
+            socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() ||
+            socket.handshake.address
+        ip = normalizeIP(ip)
 
         const country = await getCountryFromIP(ip)
 
