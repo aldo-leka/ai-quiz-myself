@@ -27,35 +27,32 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<GameState>(initialState);
 
   useEffect(() => {
-    // Load state from localStorage on mount
     const storedNickname = localStorage.getItem("nickname");
-    const storedCountryCode = localStorage.getItem("countryCode");
     
     if (storedNickname) {
       setState(prev => ({ ...prev, nickname: storedNickname }));
       // Re-register with the server
       socket.emit("register nickname", storedNickname);
     }
-    
-    if (storedCountryCode) {
-      setState(prev => ({ ...prev, countryCode: storedCountryCode }));
-    }
+
+    const handleConnect = () => {
+      const nickname = localStorage.getItem("nickname");
+      if (nickname) {
+        socket.emit("register nickname", nickname);
+      }
+    };
 
     // Set up socket event listeners
     const handleNicknameAccepted = () => {
       setState(prev => ({ ...prev, isRegistered: true }));
     };
-    
-    const handleUserCounts = (data: Record<string, number>) => {
-      setState(prev => ({ ...prev, players: data }));
-    };
 
+    socket.on("connect", handleConnect);
     socket.on("nickname accepted", handleNicknameAccepted);
-    socket.on("user counts", handleUserCounts);
 
     return () => {
+      socket.off("connect", handleConnect);
       socket.off("nickname accepted", handleNicknameAccepted);
-      socket.off("user counts", handleUserCounts);
     };
   }, []);
 
