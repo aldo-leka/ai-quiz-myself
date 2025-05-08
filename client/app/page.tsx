@@ -25,7 +25,7 @@ export default function Home() {
 
     const intervalId: NodeJS.Timeout = setInterval(getPlayerCountries, 10_000)
     return () => clearInterval(intervalId);
-  }, [setPlayers])
+  }, [])
 
   if (!state.nickname) {
     return <NicknamePrompt />
