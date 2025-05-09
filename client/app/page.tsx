@@ -8,24 +8,10 @@ import { Label } from "@/components/ui/label";
 import { CountryStrips } from "@/components/CountryStrips";
 import NicknamePrompt from "@/components/NicknamePrompt";
 import { useGame } from "@/context/GameContext";
-import {useEffect} from "react";
 
 export default function Home() {
-  const { state, setPlayers } = useGame()
+  const { state } = useGame()
   const router = useRouter()
-
-  useEffect(() => {
-    const getPlayerCountries = async () => {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/users-by-country`)
-      const data = await response.json()
-      setPlayers(data)
-    }
-
-    getPlayerCountries()
-
-    const intervalId: NodeJS.Timeout = setInterval(getPlayerCountries, 10_000)
-    return () => clearInterval(intervalId);
-  }, [])
 
   if (!state.nickname) {
     return <NicknamePrompt />
