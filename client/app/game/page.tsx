@@ -329,8 +329,8 @@ export default function GamePage(){
                 )}
 
                 {phase && (
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center space-x-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-6">
+                        <div className="flex flex-wrap items-center gap-2">
                             {phase !== "leaderboard" && (
                                 <div className="text-sm font-medium text-gray-500">
                                     Question {currentQuestion + 1}/{totalQuestions}
@@ -346,7 +346,7 @@ export default function GamePage(){
                                 {difficulty}
                             </div>
                         </div>
-                        <div className="flex items-center px-3 py-1 bg-amber-50 border border-amber-200 rounded-md">
+                        <div className="flex items-center min-w-[100px] justify-center px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
                             <span className="text-xs font-medium text-amber-700 mr-2">
                                 {phase === "leaderboard" ? "YOUR SCORE" : "SCORE"}
                             </span>

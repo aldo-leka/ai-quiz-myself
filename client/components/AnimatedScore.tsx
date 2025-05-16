@@ -65,7 +65,7 @@ export function AnimatedScore({ score, className = "" }: AnimatedScoreProps) {
   }, [score]);
 
   return (
-    <div className={`font-semibold text-lg transition-all} ${className}`}
+    <div className={`font-semibold text-base sm:text-lg whitespace-nowrap transition-all ${className}`}
          style={{
            transition: 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.5s ease'
          }}>
