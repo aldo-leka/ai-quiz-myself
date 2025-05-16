@@ -13,7 +13,7 @@ export default function Home() {
   const { state } = useGame()
   const router = useRouter()
 
-  if (!state.nickname) {
+  if (!state.isRegistered) {
     return <NicknamePrompt />
   }
 

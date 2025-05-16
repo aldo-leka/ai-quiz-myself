@@ -10,6 +10,23 @@ const app = express()
 const PORT = process.env.PORT
 const CORS_ORIGIN = process.env.CORS_ORIGIN
 
+function log(message) {
+  // Create a date object in UTC
+  const date = new Date()
+  const timestamp = date.toLocaleString('en-GB', { 
+    timeZone: 'Europe/Paris', // CET timezone
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false  // Use 24-hour format
+  }).replace(',', '')
+  
+  console.log(`[${timestamp}] ${message}`)
+}
+
 const { Server } = require('socket.io')
 const { createServer } = require('node:http')
 const server = createServer(app)
@@ -24,7 +41,6 @@ const io = new Server(server, {
 let users = new Map() // key: nickname, value: { socketId, country, room, score, etc. }
 let disconnects = new Map() // key: nickname, value: timer id
 
-// Quiz questions data structure
 const quizQuestions = [
   {
     id: 1,
@@ -49,7 +65,13 @@ const quizQuestions = [
   }
 ]
 
-// Game state management
+// Game timing constants (in seconds)
+const GAME_TIMERS = {
+    QUESTION_DURATION: 15,
+    EXPLANATION_DURATION: 5,
+    LEADERBOARD_DURATION: 8
+}
+
 let gameState = {
     active: false,
     theme: "Programming",
@@ -87,23 +109,28 @@ app.get('/openai', async (req, res) => {
 })
 
 server.listen(PORT, () => {
-    console.log(`AI Quiz server app listening on port ${PORT}`)
+    log(`AI Quiz server app listening on port ${PORT}`)
 })
 
 function startNewGlobalGame() {
-  // Reset game state
-  gameState.active = true
-  gameState.currentQuestionIndex = -1
+    // Reset game state
+    gameState.active = true
+    gameState.currentQuestionIndex = -1
 
-  // Reset scores for all players in the global game room
-  for (const [nickname, player] of users) {
-    if (player.room === 'global game') {
-      player.score = 0;
-      users.set(nickname, player);
+    // Reset scores for all players in the global game room
+    for (const [nickname, player] of users) {
+        if (player.room === 'global game') {
+            player.score = 0
+            users.set(nickname, player)
+        }
     }
-  }
 
-  nextQuestion()
+    io.to('global game').emit('global game started', {
+        theme: gameState.theme,
+        difficulty: gameState.difficulty
+    })
+
+    setTimeout(nextQuestion, 3000)
 }
 
 function nextQuestion() {
@@ -117,7 +144,7 @@ function nextQuestion() {
   const currentQuestion = quizQuestions[gameState.currentQuestionIndex];
   gameState.phase = "question"
 
-    let remainingTime = 20
+  let remainingTime = GAME_TIMERS.QUESTION_DURATION
 
   // Send the current question to clients (without the answer)
   io.to('global game').emit('next global game question', {
@@ -145,7 +172,10 @@ function revealAnswer() {
     gameState.phase = "explanation"
     const currentQuestion = quizQuestions[gameState.currentQuestionIndex]
 
-  // Send the answer and explanation to clients
+    updatePlayerScores()
+
+    let remainingTime = GAME_TIMERS.EXPLANATION_DURATION
+
   io.to('global game').emit('reveal global game answer', {
       theme: gameState.theme,
       difficulty: gameState.difficulty,
@@ -154,10 +184,10 @@ function revealAnswer() {
       question: currentQuestion.question,
       options: currentQuestion.options,
       correctAnswerIndex: currentQuestion.correctAnswer,
-      explanation: currentQuestion.explanation
+      explanation: currentQuestion.explanation,
+      remainingTime: remainingTime
   });
 
-    let remainingTime = 5
     const timerInterval = setInterval(() => {
         remainingTime--;
         io.to('global game').emit('global game timer update', { remainingTime });
@@ -169,19 +199,34 @@ function revealAnswer() {
     }, 1000)
 }
 
+function updatePlayerScores() {
+    for (const [nickname, player] of users) {
+        if (player.room === 'global game') {
+            if (player.isCorrect) {
+                player.score = (player.score || 0) + 100
+                player.isCorrect = false
+                users.set(nickname, player)
+                io.sockets.sockets.get(player.socketId).emit('update global game score', {score: player.score})
+            }
+        }
+    }
+}
+
 function endGame() {
   gameState.active = false;
   gameState.phase = "leaderboard";
 
   const leaderboard = generateLeaderboard();
 
-  io.to('global game').emit('global game over', {
-      theme: gameState.theme,
-      difficulty: gameState.difficulty,
-      leaderboard
-  })
+    let remainingTime = GAME_TIMERS.LEADERBOARD_DURATION;
 
-    let remainingTime = 10;
+    io.to('global game').emit('global game over', {
+        theme: gameState.theme,
+        difficulty: gameState.difficulty,
+        leaderboard,
+        remainingTime: remainingTime
+    })
+
     const timerInterval = setInterval(() => {
         remainingTime--
         io.to('global game').emit('global game timer update', { remainingTime })
@@ -199,11 +244,11 @@ function generateLeaderboard() {
   // Collect scores for all players in the global game room
   for (const [nickname, player] of users) {
     if (player.room === 'global game') {
-      leaderboard.push({
-        nickname,
-        country: player.country,
-        score: player.score || 0
-      })
+        leaderboard.push({
+            nickname,
+            country: player.country,
+            score: player.score || 0
+        })
     }
   }
 
@@ -225,7 +270,7 @@ io.on('connection', (socket) => {
             clearTimeout(disconnects.get(nickname))
             disconnects.delete(nickname)
 
-            console.log(`${nickname} from ${existing.country} reconnected before timeout`);
+            log(`${nickname} from ${existing.country} reconnected before timeout`);
         }
 
         socket.nickname = nickname
@@ -233,35 +278,38 @@ io.on('connection', (socket) => {
         let ip =
             socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() ||
             socket.handshake.address
-        ip = normalizeIP(ip)
 
-        const country = await getCountryFromIP(ip)
+        const country = existing?.country || await getCountryFromIP(ip)
 
-        users.set(nickname, { ...(existing || {}), socketId: socket.id, country, score: 0 })
+        users.set(nickname, {
+            ...(existing || {}),
+            socketId: socket.id,
+            country
+        })
 
-        console.log(`${nickname} connected from ${country} (ip: ${ip})`)
+        log(`on register nickname: ${nickname} connected from ${country} (ip: ${ip})`)
 
         socket.emit('nickname accepted')
     })
 
     socket.on('join global game', () => {
         if (!socket.nickname) {
-            console.log('Socket tried to join global game without nickname')
+            log('Socket tried to join global game without nickname')
             return
         }
 
         socket.join('global game')
-        console.log(`${socket.nickname} joined global game room`)
+        log(`${socket.nickname} joined global game room`)
 
         const player = users.get(socket.nickname)
         if (!player) {
-            console.log(`on join global game: Player ${socket.nickname} not found in users map`)
+            log(`on join global game: Player ${socket.nickname} not found in users map`)
             return
         }
 
         player.room = 'global game'
         users.set(socket.nickname, player)
-        console.log(`Set ${socket.nickname}'s room to 'global game': ${JSON.stringify(player)}`)
+        log(`Set ${socket.nickname}'s room to 'global game': ${JSON.stringify(player)}`)
 
         socket.to('global game').emit('player joined global game', { nickname: socket.nickname, ...player })
 
@@ -276,7 +324,8 @@ io.on('connection', (socket) => {
                     questionIndex: gameState.currentQuestionIndex,
                     totalQuestions: quizQuestions.length,
                     question: currentQuestion.question,
-                    options: currentQuestion.options
+                    options: currentQuestion.options,
+                    remainingTime: GAME_TIMERS.QUESTION_DURATION
                 })
             } else if (gameState.phase === "explanation") {
                 socket.emit('reveal global game answer', {
@@ -287,19 +336,20 @@ io.on('connection', (socket) => {
                     question: currentQuestion.question,
                     options: currentQuestion.options,
                     correctAnswerIndex: currentQuestion.correctAnswer,
-                    explanation: currentQuestion.explanation
+                    explanation: currentQuestion.explanation,
+                    remainingTime: GAME_TIMERS.EXPLANATION_DURATION
                 })
             } else if (gameState.phase === "leaderboard") {
                 socket.emit('global game over', {
                     theme: gameState.theme,
                     difficulty: gameState.difficulty,
-                    leaderboard: generateLeaderboard()
+                    leaderboard: generateLeaderboard(),
+                    remainingTime: GAME_TIMERS.LEADERBOARD_DURATION
                 })
             }
         }
     })
 
-    // Handle player submitting an answer
     socket.on('submit global game answer', (answerIndex) => {
         if (!socket.nickname) return
         if (!gameState.active || gameState.phase !== "question") {
@@ -314,7 +364,7 @@ io.on('connection', (socket) => {
         const currentQuestion = quizQuestions[gameState.currentQuestionIndex]
         const isCorrect = answerIndex === currentQuestion.correctAnswer
 
-        player.score = (player.score || 0) + isCorrect ? 100 : 0
+        player.isCorrect = isCorrect
         users.set(socket.nickname, player)
     });
 
@@ -323,7 +373,7 @@ io.on('connection', (socket) => {
 
         const player = users.get(socket.nickname)
         if (!player) {
-            console.log(`on leave global game: Player ${socket.nickname} not found in users map`)
+            log(`on leave global game: Player ${socket.nickname} not found in users map`)
             return
         }
 
@@ -333,26 +383,21 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         const nickname = socket.nickname
-        if (!nickname) return
+        if (!nickname) {
+            log('Socket tried to disconnect without nickname')
+            return
+        }
 
         const timeoutId = setTimeout(() => {
             const country = users.get(nickname).country
             users.delete(nickname)
             disconnects.delete(nickname)
-            console.log(`${nickname} from ${country} (ip: ${socket.handshake.address}) removed after timeout`)
+            log(`${nickname} from ${country} (ip: ${socket.handshake.address}) removed after timeout`)
         }, 30_000)
 
         disconnects.set(nickname, timeoutId)
     })
 })
-
-function normalizeIP(ip) {
-    // Remove IPv6-mapped IPv4 prefix
-    if (ip.startsWith('::ffff:')) {
-        return ip.replace('::ffff:', '')
-    }
-    return ip
-}
 
 async function getCountryFromIP(ip) {
     try {
@@ -360,7 +405,7 @@ async function getCountryFromIP(ip) {
         const data = await res.json()
         if (data.status === 'success') return data.countryCode
     } catch (err) {
-        console.error('Geo lookup failed', err)
+        log(`Geo lookup failed: ${err.message}`)
     }
     return null
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import {Button} from "@/components/ui/button";
 import {CountryStrips} from "@/components/CountryStrips";
 import {useGame} from "@/context/GameContext";
 import NicknamePrompt from "@/components/NicknamePrompt";
@@ -12,12 +11,15 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { getCountryInfo } from "@/lib/countryFlags";
+import { AnimatedScore } from "@/components/AnimatedScore";
 import {
+    GlobalGameStarted,
     GlobalGameLeaderboardPlayer,
     GlobalGameOverMessage,
     GlobalGameTimerUpdateMessage,
     NextGlobalGameQuestionMessage,
     Player,
+    UpdateGlobalGameScoreMessage,
     RevealGlobalGameAnswerMessage
 } from "@/lib/types";
 
@@ -36,19 +38,48 @@ export default function GamePage(){
     const [answer, setAnswer] = useState("")
     const [lockAnswer, setLockAnswer] = useState(false)
     const [leaderBoard, setLeaderboard] = useState<GlobalGameLeaderboardPlayer[]>([])
+    const [score, setScore] = useState(0)
+
+    const [showIntro, setShowIntro] = useState(false)
+    const [introAnimationComplete, setIntroAnimationComplete] = useState(false)
+    const [introTheme, setIntroTheme] = useState("")
+    const [introDifficulty, setIntroDifficulty] = useState("")
 
     useEffect(() => {
-        if (state.nickname) socket.emit("join global game")
-
-        const handleConnect = () => {
-            console.log("on connect: emitting join global game")
-            if (state.nickname) socket.emit("join global game")
-        }
+        if (!state.isRegistered) return
 
         setGameCode("global game")
 
+        socket.emit("join global game")
+
+        const handleConnect = () => {
+            console.log("on connect: emitting join global game")
+            if (state.isRegistered) socket.emit("join global game")
+        }
+
         const handlePlayerJoin = (player: Player) => {
             console.log(`${player.nickname} from ${player.country} joined global game`)
+        }
+
+        const startGame = (msg: GlobalGameStarted) => {
+            console.log("Global game started", msg)
+            setTheme(msg.theme)
+            setDifficulty(msg.difficulty)
+            setScore(0)
+            
+            // Trigger intro animation
+            setIntroTheme(msg.theme)
+            setIntroDifficulty(msg.difficulty)
+            setShowIntro(true)
+            setIntroAnimationComplete(false)
+
+            setTimeout(() => {
+                setIntroAnimationComplete(true)
+
+                setTimeout(() => {
+                    setShowIntro(false)
+                }, 1000)
+            }, 2000)
         }
 
         const nextQuestion = (msg: NextGlobalGameQuestionMessage) => {
@@ -61,8 +92,8 @@ export default function GamePage(){
             setQuestion(msg.question)
             setOptions(msg.options)
             setRemainingTime(msg.remainingTime)
-            setAnswer("") // Reset answer for new question
-            setLockAnswer(false) // Reset lock state
+            setAnswer("")
+            setLockAnswer(false)
         }
 
         const revealAnswer = (msg: RevealGlobalGameAnswerMessage) => {
@@ -76,7 +107,13 @@ export default function GamePage(){
             setOptions(msg.options)
             setCorrectAnswerIndex(msg.correctAnswerIndex)
             setExplanation(msg.explanation)
-            setLockAnswer(true) // Lock answer during explanation
+            setRemainingTime(msg.remainingTime)
+            setLockAnswer(true)
+        }
+
+        const updateScore = (msg: UpdateGlobalGameScoreMessage) => {
+            console.log("Update global game score", msg)
+            setScore(msg.score)
         }
 
         const timerUpdate = (msg: GlobalGameTimerUpdateMessage) => {
@@ -90,66 +127,53 @@ export default function GamePage(){
             setTheme(msg.theme)
             setDifficulty(msg.difficulty)
             setLeaderboard(msg.leaderboard)
+            setRemainingTime(msg.remainingTime)
         }
 
         socket.on("connect", handleConnect)
 
+        socket.on("global game started", startGame)
         socket.on("next global game question", nextQuestion)
         socket.on("global game timer update", timerUpdate)
         socket.on("reveal global game answer", revealAnswer)
+        socket.on("update global game score", updateScore)
         socket.on("global game over", gameOver)
 
         socket.on("player joined global game", handlePlayerJoin)
 
         return () => {
             socket.emit("leave global game")
-            setGameCode(undefined)
 
             socket.off("connect", handleConnect)
 
             socket.off("next global game question", nextQuestion)
             socket.off("global game timer update", timerUpdate)
             socket.off("reveal global game answer", revealAnswer)
+            socket.off("update global game score", updateScore)
             socket.off("global game over", gameOver)
 
             socket.off("player joined global game", handlePlayerJoin)
         }
-    }, [state.nickname])
+    }, [state.isRegistered])
 
-    if (!state.nickname) {
+    if (!state.isRegistered) {
         return <NicknamePrompt />
     }
 
     const handleAnswerSelect = (selectedIndex: number) => {
-        if (answer !== "" || lockAnswer) return; // Already answered or locked
+        if (lockAnswer) return; // Already answered or locked
         setAnswer(options[selectedIndex]);
         socket.emit("submit global game answer", selectedIndex);
-    };
-
-    const handleLockAnswer = () => {
-        if (answer === "" || lockAnswer) return;
-        setLockAnswer(true);
-    };
+    }
 
     const renderQuestionPhase = () => {
         return (
             <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium text-gray-500">
-                        Question {currentQuestion + 1}/{totalQuestions}
-                    </div>
-                    <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                        {theme}
-                    </div>
-                    <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
-                        {difficulty}
-                    </div>
-                </div>
 
                 <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
                         className="absolute top-0 left-0 h-full bg-blue-500 transition-all duration-1000"
-                        style={{ width: `${(remainingTime || 0) / 20 * 100}%` }}
+                        style={{ width: `${(remainingTime || 0) / 15 * 100}%` }}
                     ></div>
                 </div>
 
@@ -167,7 +191,7 @@ export default function GamePage(){
                             <button
                                 key={index}
                                 onClick={() => handleAnswerSelect(index)}
-                                disabled={answer !== "" || lockAnswer}
+                                disabled={lockAnswer}
                                 className={`w-full p-4 text-left rounded-lg transition-colors ${answer === option
                                     ? 'bg-blue-100 border-2 border-blue-500'
                                     : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'}
@@ -177,23 +201,6 @@ export default function GamePage(){
                             </button>
                         ))}
                     </div>
-
-                    {answer && !lockAnswer && (
-                        <div className="mt-4 flex justify-end">
-                            <Button
-                                onClick={handleLockAnswer}
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                            >
-                                Lock Answer
-                            </Button>
-                        </div>
-                    )}
-
-                    {lockAnswer && answer && (
-                        <div className="mt-4 p-3 bg-gray-100 rounded-lg text-center text-gray-700">
-                            Your answer has been locked in
-                        </div>
-                    )}
                 </div>
             </div>
         );
@@ -204,17 +211,6 @@ export default function GamePage(){
 
         return (
             <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium text-gray-500">
-                        Question {currentQuestion + 1}/{totalQuestions}
-                    </div>
-                    <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                        {theme}
-                    </div>
-                    <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
-                        {difficulty}
-                    </div>
-                </div>
 
                 <div className="p-6 bg-white shadow-sm rounded-lg border border-gray-100">
                     <h2 className="text-xl font-semibold mb-4">{question}</h2>
@@ -248,7 +244,7 @@ export default function GamePage(){
 
                 <div className="flex justify-center mt-4">
                     <div className="text-gray-600">
-                        Proceeding to next question...
+                        Proceeding to next question in {remainingTime}s...
                     </div>
                 </div>
             </div>
@@ -258,17 +254,6 @@ export default function GamePage(){
     const renderLeaderboardPhase = () => {
         return (
             <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <div className="text-xl font-semibold">Leaderboard</div>
-                    <div className="flex space-x-2">
-                        <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                            {theme}
-                        </div>
-                        <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
-                            {difficulty}
-                        </div>
-                    </div>
-                </div>
 
                 <div className="p-6 bg-white shadow-sm rounded-lg border border-gray-100">
                     <div className="space-y-3">
@@ -300,7 +285,7 @@ export default function GamePage(){
 
                 <div className="flex justify-center mt-4">
                     <div className="text-gray-600 animate-pulse">
-                        Loading new game...
+                        Loading new game in {remainingTime}s...
                     </div>
                 </div>
             </div>
@@ -313,6 +298,62 @@ export default function GamePage(){
                 <div className="mb-6">
                     <CountryStrips countryData={state.players} maxStrips={3} />
                 </div>
+                
+                {/* Game Intro Animation */}
+                {showIntro && (
+                    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm">
+                        <div 
+                            className={`
+                                flex flex-col items-center gap-5 p-10 bg-white rounded-xl shadow-xl 
+                                transition-all duration-1000 ease-in-out transform
+                                ${introAnimationComplete ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
+                            `}
+                        >
+                            <h2 className="text-3xl font-bold text-gray-900">Get Ready!</h2>
+                            
+                            <div className="flex flex-col items-center gap-6 my-8">
+                                <div className="px-6 py-3 bg-blue-100 text-blue-800 rounded-full text-2xl font-bold">
+                                    {introTheme}
+                                </div>
+                                
+                                <div className="px-6 py-3 bg-purple-100 text-purple-800 rounded-full text-2xl font-bold">
+                                    {introDifficulty}
+                                </div>
+                            </div>
+                            
+                            <div className="text-lg text-gray-600 animate-pulse">
+                                Game starting...
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {phase && (
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center space-x-2">
+                            {phase !== "leaderboard" && (
+                                <div className="text-sm font-medium text-gray-500">
+                                    Question {currentQuestion + 1}/{totalQuestions}
+                                </div>
+                            )}
+                            {phase === "leaderboard" && (
+                                <div className="text-xl font-semibold">Leaderboard</div>
+                            )}
+                            <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                {theme}
+                            </div>
+                            <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                                {difficulty}
+                            </div>
+                        </div>
+                        <div className="flex items-center px-3 py-1 bg-amber-50 border border-amber-200 rounded-md">
+                            <span className="text-xs font-medium text-amber-700 mr-2">
+                                {phase === "leaderboard" ? "YOUR SCORE" : "SCORE"}
+                            </span>
+                            <AnimatedScore score={score} className="text-amber-600" />
+                        </div>
+                    </div>
+                )}
 
                 {phase === "question" && renderQuestionPhase()}
                 {phase === "explanation" && renderExplanationPhase()}
@@ -320,8 +361,8 @@ export default function GamePage(){
 
                 {!phase && (
                     <div className="flex flex-col items-center justify-center p-8">
-                        <div className="text-xl font-semibold mb-2">Waiting for game to start...</div>
-                        <div className="text-gray-600">You&apos;ll be automatically added to the next game</div>
+                        <div className="text-xl font-semibold mb-2">Waiting for game to start in {remainingTime}s...</div>
+                        <div className="text-gray-600 mb-4">You&apos;ll be automatically added to the next game</div>
                     </div>
                 )}
             </div>

@@ -49,6 +49,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Set up socket event listeners
     const handleNicknameAccepted = () => {
+      console.log("on nickname accepted")
       setState(prev => ({ ...prev, isRegistered: true }));
     }
 
