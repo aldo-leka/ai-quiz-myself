@@ -125,6 +125,29 @@ function startNewGlobalGame() {
         }
     }
 
+    const shuffledQuestions = [...quizQuestions].sort(() => Math.random() - 0.5)
+    
+    // Shuffle the answers for each question and update the correct answer index
+    shuffledQuestions.forEach(question => {
+        // Create pairs of [option, isCorrect] to track correct answer
+        const optionPairs = question.options.map((option, index) => 
+            [option, index === question.correctAnswer]
+        )
+        
+        // Shuffle the pairs
+        const shuffledPairs = optionPairs.sort(() => Math.random() - 0.5)
+        
+        // Update the question with shuffled options
+        question.options = shuffledPairs.map(pair => pair[0])
+        
+        // Find the new index of the correct answer
+        question.correctAnswer = shuffledPairs.findIndex(pair => pair[1])
+    })
+    
+    // Replace the original questions with shuffled ones
+    quizQuestions.length = 0
+    shuffledQuestions.forEach(q => quizQuestions.push(q))
+
     io.to('global game').emit('global game started', {
         theme: gameState.theme,
         difficulty: gameState.difficulty
