@@ -101,7 +101,7 @@ app.get('/users-by-country', (req, res) => {
 app.get('/openai', async (req, res) => {
     const client = new openai.OpenAI()
     const response = await client.responses.create({
-        model: "o4-mini",
+        model: "gpt-5-nano",
         input: "Write a one-sentence bedtime story about a unicorn.",
     })
 
