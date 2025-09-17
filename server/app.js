@@ -11,58 +11,58 @@ const PORT = process.env.PORT
 const CORS_ORIGIN = process.env.CORS_ORIGIN
 
 function log(message) {
-  // Create a date object in UTC
-  const date = new Date()
-  const timestamp = date.toLocaleString('en-GB', { 
-    timeZone: 'Europe/Paris', // CET timezone
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false  // Use 24-hour format
-  }).replace(',', '')
-  
-  console.log(`[${timestamp}] ${message}`)
+    // Create a date object in UTC
+    const date = new Date()
+    const timestamp = date.toLocaleString('en-GB', {
+        timeZone: 'Europe/Paris', // CET timezone
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false  // Use 24-hour format
+    }).replace(',', '')
+
+    console.log(`[${timestamp}] ${message}`)
 }
 
-const { Server } = require('socket.io')
-const { createServer } = require('node:http')
+const {Server} = require('socket.io')
+const {createServer} = require('node:http')
 const server = createServer(app)
 const io = new Server(server, {
-  cors: {
-    origin: CORS_ORIGIN,
-    methods: ["GET", "POST"],
-    credentials: true
-  }
+    cors: {
+        origin: CORS_ORIGIN,
+        methods: ["GET", "POST"],
+        credentials: true
+    }
 })
 
 let users = new Map() // key: nickname, value: { socketId, country, room, score, etc. }
 let disconnects = new Map() // key: nickname, value: timer id
 
 const quizQuestions = [
-  {
-    id: 1,
-    question: "Which programming language was created by Brendan Eich in 1995?",
-    options: ["Java", "JavaScript", "Python", "C++"],
-    correctAnswer: 1, // JavaScript (index 1)
-    explanation: "JavaScript was created by Brendan Eich in 1995 while he was working at Netscape. It was originally called Mocha, then LiveScript, before being renamed to JavaScript."
-  },
-  {
-    id: 2,
-    question: "What does HTML stand for?",
-    options: ["Hyperlinks and Text Markup Language", "Hyper Text Markup Language", "Home Tool Markup Language", "Hyper Technical Modern Language"],
-    correctAnswer: 1, // Hyper Text Markup Language (index 1)
-    explanation: "HTML stands for Hyper Text Markup Language. It is the standard markup language for creating web pages and describes the structure of a web page."
-  },
-  {
-    id: 3,
-    question: "Which of these is NOT a JavaScript framework/library?",
-    options: ["React", "Angular", "Vue", "Django"],
-    correctAnswer: 3, // Django (index 3)
-    explanation: "Django is a high-level Python web framework. React, Angular, and Vue are all JavaScript frameworks or libraries used for building user interfaces."
-  }
+    {
+        id: 1,
+        question: "Which programming language was created by Brendan Eich in 1995?",
+        options: ["Java", "JavaScript", "Python", "C++"],
+        correctAnswer: 1, // JavaScript (index 1)
+        explanation: "JavaScript was created by Brendan Eich in 1995 while he was working at Netscape. It was originally called Mocha, then LiveScript, before being renamed to JavaScript."
+    },
+    {
+        id: 2,
+        question: "What does HTML stand for?",
+        options: ["Hyperlinks and Text Markup Language", "Hyper Text Markup Language", "Home Tool Markup Language", "Hyper Technical Modern Language"],
+        correctAnswer: 1, // Hyper Text Markup Language (index 1)
+        explanation: "HTML stands for Hyper Text Markup Language. It is the standard markup language for creating web pages and describes the structure of a web page."
+    },
+    {
+        id: 3,
+        question: "Which of these is NOT a JavaScript framework/library?",
+        options: ["React", "Angular", "Vue", "Django"],
+        correctAnswer: 3, // Django (index 3)
+        explanation: "Django is a high-level Python web framework. React, Angular, and Vue are all JavaScript frameworks or libraries used for building user interfaces."
+    }
 ]
 
 // Game timing constants (in seconds)
@@ -80,10 +80,10 @@ let gameState = {
     phase: null // can be "question", "explanation", or "leaderboard"
 }
 
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }))
+app.use(cors({origin: CORS_ORIGIN, credentials: true}))
 
 app.get('/users-by-country', (req, res) => {
-    const { code } = req.query // e.g. ?code=global game
+    const {code} = req.query // e.g. ?code=global game
     const countryCounts = {}
 
     for (const [, player] of users) {
@@ -105,7 +105,49 @@ app.get('/openai', async (req, res) => {
         input: "Write a one-sentence bedtime story about a unicorn.",
     })
 
-    res.json({ text: response.output_text })
+    res.json({text: response.output_text})
+})
+
+app.get('/quiz', async (req, res) => {
+    const client = new openai.OpenAI()
+
+    const type = "multiple_choice"
+    const theme = "Programming"
+    const questionCount = 3
+    const difficultyInstructions = "The difficulty level should be MEDIUM"
+    const prompt = `You are an expert quiz creator who creates educational and engaging quizzes. Always respond with valid JSON.
+    Create a ${type} quiz about ${theme} with ${questionCount} questions. ${difficultyInstructions}
+    Return the response as a JSON object with the following structure:
+    {
+        "title": "Quiz title",
+        "description": "Brief description of the quiz",
+        "questions": [
+            {
+                "question": "Question text",
+                "options": ["Option A", "Option B", "Option C", "Option D"],
+                "correctAnswer": "Correct answer",
+                "explanation": "Explanation of the correct answer"
+            }
+        ]
+    }
+    For multiple choice questions:
+        - Each question should have exactly 4 options
+        - Only one option should be correct
+        - The correctAnswer should be the exact text of the correct option
+        - Make the questions engaging
+    `;
+
+    const response = await client.responses.create({
+        model: "gpt-5-nano",
+        input: prompt
+    })
+
+    const json = JSON.parse(response.output_text)
+    res.json({
+        title: json.title,
+        description: json.description,
+        questions: json.questions
+    })
 })
 
 server.listen(PORT, () => {
@@ -126,24 +168,24 @@ function startNewGlobalGame() {
     }
 
     const shuffledQuestions = [...quizQuestions].sort(() => Math.random() - 0.5)
-    
+
     // Shuffle the answers for each question and update the correct answer index
     shuffledQuestions.forEach(question => {
         // Create pairs of [option, isCorrect] to track correct answer
-        const optionPairs = question.options.map((option, index) => 
+        const optionPairs = question.options.map((option, index) =>
             [option, index === question.correctAnswer]
         )
-        
+
         // Shuffle the pairs
         const shuffledPairs = optionPairs.sort(() => Math.random() - 0.5)
-        
+
         // Update the question with shuffled options
         question.options = shuffledPairs.map(pair => pair[0])
-        
+
         // Find the new index of the correct answer
         question.correctAnswer = shuffledPairs.findIndex(pair => pair[1])
     })
-    
+
     // Replace the original questions with shuffled ones
     quizQuestions.length = 0
     shuffledQuestions.forEach(q => quizQuestions.push(q))
@@ -157,38 +199,38 @@ function startNewGlobalGame() {
 }
 
 function nextQuestion() {
-  gameState.currentQuestionIndex++;
+    gameState.currentQuestionIndex++;
 
-  if (gameState.currentQuestionIndex >= quizQuestions.length) {
-    endGame()
-    return
-  }
-
-  const currentQuestion = quizQuestions[gameState.currentQuestionIndex];
-  gameState.phase = "question"
-
-  let remainingTime = GAME_TIMERS.QUESTION_DURATION
-
-  // Send the current question to clients (without the answer)
-  io.to('global game').emit('next global game question', {
-      theme: gameState.theme,
-      difficulty: gameState.difficulty,
-      questionIndex: gameState.currentQuestionIndex,
-      totalQuestions: quizQuestions.length,
-      question: currentQuestion.question,
-      options: currentQuestion.options,
-      remainingTime: remainingTime
-  })
-
-  const timerInterval = setInterval(() => {
-    remainingTime--
-    io.to('global game').emit('global game timer update', { remainingTime })
-
-    if (remainingTime <= 0) {
-        clearInterval(timerInterval)
-        revealAnswer()
+    if (gameState.currentQuestionIndex >= quizQuestions.length) {
+        endGame()
+        return
     }
-  }, 1000)
+
+    const currentQuestion = quizQuestions[gameState.currentQuestionIndex];
+    gameState.phase = "question"
+
+    let remainingTime = GAME_TIMERS.QUESTION_DURATION
+
+    // Send the current question to clients (without the answer)
+    io.to('global game').emit('next global game question', {
+        theme: gameState.theme,
+        difficulty: gameState.difficulty,
+        questionIndex: gameState.currentQuestionIndex,
+        totalQuestions: quizQuestions.length,
+        question: currentQuestion.question,
+        options: currentQuestion.options,
+        remainingTime: remainingTime
+    })
+
+    const timerInterval = setInterval(() => {
+        remainingTime--
+        io.to('global game').emit('global game timer update', {remainingTime})
+
+        if (remainingTime <= 0) {
+            clearInterval(timerInterval)
+            revealAnswer()
+        }
+    }, 1000)
 }
 
 function revealAnswer() {
@@ -213,7 +255,7 @@ function revealAnswer() {
 
     const timerInterval = setInterval(() => {
         remainingTime--;
-        io.to('global game').emit('global game timer update', { remainingTime });
+        io.to('global game').emit('global game timer update', {remainingTime});
 
         if (remainingTime <= 0) {
             clearInterval(timerInterval);
@@ -236,10 +278,10 @@ function updatePlayerScores() {
 }
 
 function endGame() {
-  gameState.active = false;
-  gameState.phase = "leaderboard";
+    gameState.active = false;
+    gameState.phase = "leaderboard";
 
-  const leaderboard = generateLeaderboard();
+    const leaderboard = generateLeaderboard();
 
     let remainingTime = GAME_TIMERS.LEADERBOARD_DURATION;
 
@@ -252,7 +294,7 @@ function endGame() {
 
     const timerInterval = setInterval(() => {
         remainingTime--
-        io.to('global game').emit('global game timer update', { remainingTime })
+        io.to('global game').emit('global game timer update', {remainingTime})
 
         if (remainingTime <= 0) {
             clearInterval(timerInterval)
@@ -334,7 +376,7 @@ io.on('connection', (socket) => {
         users.set(socket.nickname, player)
         log(`Set ${socket.nickname}'s room to 'global game': ${JSON.stringify(player)}`)
 
-        socket.to('global game').emit('player joined global game', { nickname: socket.nickname, ...player })
+        socket.to('global game').emit('player joined global game', {nickname: socket.nickname, ...player})
 
         // Send current game state to the player if a game is in progress
         if (gameState.active) {
