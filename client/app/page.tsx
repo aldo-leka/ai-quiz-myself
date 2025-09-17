@@ -50,7 +50,9 @@ export default function Home() {
             <Button onClick={() => router.push('/single-player')} type="submit" className="w-2/5" variant="outline">
               New Single Game
             </Button>
-            <Button type="submit" className="w-2/5" variant="outline">New Multi Game</Button>
+            <Button onClick={() => router.push('/multi-player')} type="submit" className="w-2/5" variant="outline">
+              New Multi Game
+            </Button>
           </div>
         </div>
       </div>
