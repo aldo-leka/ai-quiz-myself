@@ -34,7 +34,7 @@ export default function Home() {
               </p>
               <Button 
                 className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md w-full sm:w-auto"
-                onClick={() => router.push('/game')}
+                onClick={() => router.push('/global-game')}
               >
                 <span className="mr-2">▶</span> Play Global Game
               </Button>
@@ -47,7 +47,9 @@ export default function Home() {
           <Button type="submit" className="mb-6 w-full py-6 text-lg font-medium">Join Game</Button>
           <Separator className="mb-6" />
           <div className="flex justify-between">
-            <Button type="submit" className="w-2/5" variant="outline">New Single Game</Button>
+            <Button onClick={() => router.push('/single-player')} type="submit" className="w-2/5" variant="outline">
+              New Single Game
+            </Button>
             <Button type="submit" className="w-2/5" variant="outline">New Multi Game</Button>
           </div>
         </div>
