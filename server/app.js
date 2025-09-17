@@ -199,17 +199,17 @@ function revealAnswer() {
 
     let remainingTime = GAME_TIMERS.EXPLANATION_DURATION
 
-  io.to('global game').emit('reveal global game answer', {
-      theme: gameState.theme,
-      difficulty: gameState.difficulty,
-      questionIndex: gameState.currentQuestionIndex,
-      totalQuestions: quizQuestions.length,
-      question: currentQuestion.question,
-      options: currentQuestion.options,
-      correctAnswerIndex: currentQuestion.correctAnswer,
-      explanation: currentQuestion.explanation,
-      remainingTime: remainingTime
-  });
+    io.to('global game').emit('reveal global game answer', {
+        theme: gameState.theme,
+        difficulty: gameState.difficulty,
+        questionIndex: gameState.currentQuestionIndex,
+        totalQuestions: quizQuestions.length,
+        question: currentQuestion.question,
+        options: currentQuestion.options,
+        correctAnswerIndex: currentQuestion.correctAnswer,
+        explanation: currentQuestion.explanation,
+        remainingTime: remainingTime
+    });
 
     const timerInterval = setInterval(() => {
         remainingTime--;
@@ -262,22 +262,22 @@ function endGame() {
 }
 
 function generateLeaderboard() {
-  const leaderboard = []
+    const leaderboard = []
 
-  // Collect scores for all players in the global game room
-  for (const [nickname, player] of users) {
-    if (player.room === 'global game') {
-        leaderboard.push({
-            nickname,
-            country: player.country,
-            score: player.score || 0
-        })
+    // Collect scores for all players in the global game room
+    for (const [nickname, player] of users) {
+        if (player.room === 'global game') {
+            leaderboard.push({
+                nickname,
+                country: player.country,
+                score: player.score || 0
+            })
+        }
     }
-  }
 
-  leaderboard.sort((a, b) => b.score - a.score)
+    leaderboard.sort((a, b) => b.score - a.score)
 
-  return leaderboard
+    return leaderboard
 }
 
 io.on('connection', (socket) => {
