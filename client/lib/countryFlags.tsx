@@ -125,6 +125,7 @@ export const countryInfo: Record<string, CountryInfo> = {
   'KW': { flag: '🇰🇼', name: 'Kuwait' },
   'KY': { flag: '🇰🇾', name: 'Cayman Islands' },
   'KZ': { flag: '🇰🇿', name: 'Kazakhstan' },
+  'XK': { flag: '🇽🇰', name: 'Kosovo' },
   'LA': { flag: '🇱🇦', name: 'Laos' },
   'LB': { flag: '🇱🇧', name: 'Lebanon' },
   'LC': { flag: '🇱🇨', name: 'Saint Lucia' },
