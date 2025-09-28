@@ -1,182 +1,115 @@
-"use client";
+"use client"
 
-import {useEffect} from "react";
 import {useGame} from "@/context/GameContext";
-import {useQuizGame} from "@/hooks/useQuizGame";
-import {useGameIntro} from "@/hooks/useGameIntro";
+import {useState} from "react";
 import NicknamePrompt from "@/components/NicknamePrompt";
-import Question from "@/components/quiz/Question";
-import Explanation from "@/components/quiz/Explanation";
-import Intro from "@/components/quiz/Intro";
-import Header from "@/components/quiz/Header";
+import Button from "@/components/Button";
+import { User } from "lucide-react";
+
 
 export default function SinglePlayer() {
     const { state } = useGame()
-    const game = useQuizGame();
-    const intro = useGameIntro();
+    const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null)
 
-    useEffect(() => {
-        if (!state.isRegistered) return
-
-        // TODO: Start single player game
-        // This is where you'll call your backend endpoint to start the game
-        startSinglePlayerGame();
-    }, [state.isRegistered])
-
-    // Placeholder function - you'll implement the actual API call
-    const startSinglePlayerGame = async () => {
-        // Example of how you might start the game
-        // const response = await fetch('/api/single-player/start');
-        // const data = await response.json();
-        // 
-        // Expected response format:
-        // {
-        //   theme: "Geography",
-        //   difficulty: "Medium", 
-        //   totalQuestions: 10,
-        //   firstQuestion: {
-        //     questionIndex: 0,
-        //     question: "What is the capital of France?",
-        //     options: ["London", "Berlin", "Paris", "Madrid"],
-        //     remainingTime: 15
-        //   }
-        // }
-        //
-        // game.setTheme(data.theme);
-        // game.setDifficulty(data.difficulty);
-        // game.setTotalQuestions(data.totalQuestions);
-        // intro.startIntro(data.theme, data.difficulty);
-        //
-        // After intro animation completes (3s), set the first question:
-        // setTimeout(() => {
-        //   game.setQuestionData(data.firstQuestion);
-        // }, 3000);
-        
-        // For now, just simulate starting a game
-        game.setTheme("Geography");
-        game.setDifficulty("Medium");
-        intro.startIntro("Geography", "Medium");
-    }
-
-    // Placeholder for answer submission - you'll implement the actual API call
-    const handleAnswerSelect = async (selectedIndex: number) => {
-        if (game.lockAnswer) return;
-        game.setAnswer(game.options[selectedIndex]);
-        game.setLockAnswer(true);
-        
-        // TODO: Submit answer to backend
-        // const response = await fetch('/api/single-player/answer', {
-        //     method: 'POST',
-        //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify({ 
-        //         questionIndex: game.currentQuestion,
-        //         answerIndex: selectedIndex 
-        //     })
-        // });
-        // const data = await response.json();
-        //
-        // Expected response format:
-        // {
-        //   correct: true/false,
-        //   score: 100,
-        //   correctAnswerIndex: 2,
-        //   explanation: "Paris is the capital of France...",
-        //   remainingTime: 5
-        // }
-        //
-        // game.setScore(data.score);
-        // game.setExplanationData({
-        //   ...game,  // spread current game state
-        //   correctAnswerIndex: data.correctAnswerIndex,
-        //   explanation: data.explanation,
-        //   remainingTime: data.remainingTime
-        // });
-        //
-        // After explanation timer, get next question:
-        // setTimeout(async () => {
-        //   const nextResponse = await fetch('/api/single-player/next');
-        //   const nextData = await nextResponse.json();
-        //   if (nextData.gameOver) {
-        //     game.setPhase("leaderboard");
-        //   } else {
-        //     game.setQuestionData(nextData);
-        //   }
-        // }, data.remainingTime * 1000);
+    function handleAnswerSelect(selectedIndex: number) {
+        setSelectedAnswerIndex(selectedIndex)
     }
 
     if (!state.isRegistered) {
         return <NicknamePrompt />
     }
 
+    const timePercentage = 80
+
+
     return (
-        <div className="p-4 sm:p-6 md:p-8 min-h-screen bg-slate-50">
-            <div className="max-w-3xl mx-auto p-4">
-                {/* Game Intro Animation */}
-                {intro.showIntro && <Intro 
-                    animationComplete={intro.introAnimationComplete} 
-                    theme={intro.introTheme} 
-                    difficulty={intro.introDifficulty} 
-                />}
+        <div className="p-8 mx-auto min-h-screen"
+             style={{
+                 backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px)',
+                 backgroundSize: '8px 8px'
+             }}>
 
-                {/* Game Header */}
-                {game.phase && <Header
-                    phase={game.phase}
-                    currentQuestion={game.currentQuestion}
-                    totalQuestions={game.totalQuestions}
-                    theme={game.theme}
-                    difficulty={game.difficulty}
-                    score={game.score}
-                />}
+            <div className="w-full h-2 bg-secondary relative">
+                <div
+                    className="h-full bg-primary transition-all duration-1000 ease-linear"
+                    style={{width: `${timePercentage}%`}}
+                />
+            </div>
+            <h2 className="py-4 text-xl font-semibold">
+                Which statement correctly describes a Python list?
+            </h2>
+            <Button
+                className="w-full mb-2"
+                     selected={selectedAnswerIndex === 0}
+                     onClick={() => handleAnswerSelect(0)}
+            >
+                A: It is a mutable, ordered collection.
+            </Button>
+            <Button
+                className="w-full mb-2"
+                     selected={selectedAnswerIndex === 1}
+                     onClick={() => handleAnswerSelect(1)}
+            >
+                B: It is an immutable, unordered collection.
+            </Button>
+            <Button
+                className="w-full mb-2"
+                selected={selectedAnswerIndex === 2}
+                onClick={() => handleAnswerSelect(2)}
+            >
+                C: It is a key-value mapping.
+            </Button>
+            <Button
+                className="w-full mb-6"
+                selected={selectedAnswerIndex === 3}
+                onClick={() => handleAnswerSelect(3)}
+            >
+                D: It is a sequence of characters only.
+            </Button>
 
-                {/* Question Phase */}
-                {game.phase === "question" && <Question
-                    remainingTime={game.remainingTime}
-                    question={game.question}
-                    options={game.options}
-                    answer={game.answer}
-                    handleAnswerSelect={handleAnswerSelect}
-                    lockAnswer={game.lockAnswer}
-                />}
-                
-                {/* Explanation Phase */}
-                {game.phase === "explanation" && <Explanation
-                    options={game.options}
-                    question={game.question}
-                    correctAnswerIndex={game.correctAnswerIndex}
-                    answer={game.answer}
-                    explanation={game.explanation}
-                    remainingTime={game.remainingTime}
-                />}
-                
-                {/* Game Over - Single Player doesn't have leaderboard, so show final score */}
-                {game.phase === "leaderboard" && (
-                    <div className="p-6 bg-white shadow-sm rounded-lg border border-gray-100 text-center">
-                        <h2 className="text-2xl font-bold mb-4">Game Over!</h2>
-                        <div className="text-4xl font-bold text-blue-600 mb-2">{game.score} points</div>
-                        <div className="text-gray-600 mb-6">
-                            You answered {game.currentQuestion + 1} questions
-                        </div>
-                        <button
-                            onClick={startSinglePlayerGame}
-                            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                            Play Again
-                        </button>
+            <div className="flex items-center justify-between mb-6">
+                <div className="px-3 py-2 text-sm font-medium">
+                    Is this your final answer?
+                </div>
+                <button className="w-20 h-20 rounded-full bg-muted-foreground text-white text-sm font-semibold flex items-center justify-center">
+                    YES
+                </button>
+            </div>
+
+            <div className="flex justify-between mb-6">
+                <Button
+                    className="w-36 mb-2"
+                    onClick={() => {
+                    }}
+                >
+                    50:50
+                </Button>
+                <Button
+                    className="w-40 mb-2"
+                    icon={<User size={16} />}
+                    onClick={() => {
+                    }}
+                >
+                    Ask the host
+                </Button>
+            </div>
+
+            <div className="mb-6 text-sm text-foreground">
+                <span className="font-semibold">Host:</span> So, you&apos;re going with D... Since it&apos;s in the easy category, I must tell you that lists can...
+            </div>
+
+            <div className="grid grid-cols-5 gap-2">
+                {[500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000].map((amount, index) => (
+                    <div
+                        key={amount}
+                        className={`
+                            h-12 flex items-center justify-center text-xs font-medium
+                            ${index < 2 ? 'bg-muted-foreground text-white' : 'bg-secondary text-foreground'}
+                        `}
+                    >
+                        {amount.toLocaleString()}
                     </div>
-                )}
-
-                {/* Waiting Screen */}
-                {!game.phase && !intro.showIntro && (
-                    <div className="flex flex-col items-center justify-center p-8">
-                        <div className="text-xl font-semibold mb-4">Ready to test your knowledge?</div>
-                        <button
-                            onClick={startSinglePlayerGame}
-                            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                            Start Game
-                        </button>
-                    </div>
-                )}
+                ))}
             </div>
         </div>
     )

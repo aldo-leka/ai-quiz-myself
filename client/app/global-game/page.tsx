@@ -130,7 +130,7 @@ export default function GamePage(){
 
                 {game.phase && <Header
                     phase={game.phase}
-                    currentQuestion={game.currentQuestion}
+                    currentQuestionIndex={game.currentQuestion}
                     totalQuestions={game.totalQuestions}
                     theme={game.theme}
                     difficulty={game.difficulty}
@@ -145,6 +145,7 @@ export default function GamePage(){
                     handleAnswerSelect={handleAnswerSelect}
                     lockAnswer={game.lockAnswer}
                 />}
+
                 {game.phase === "explanation" && <Explanation
                     options={game.options}
                     question={game.question}
@@ -153,6 +154,7 @@ export default function GamePage(){
                     explanation={game.explanation}
                     remainingTime={game.remainingTime}
                 />}
+
                 {game.phase === "leaderboard" && <Leaderboard
                     leaderBoard={game.leaderBoard}
                     remainingTime={game.remainingTime}

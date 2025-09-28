@@ -2,20 +2,20 @@ import {AnimatedScore} from "@/components/AnimatedScore";
 
 export interface HeaderProps {
     phase: string
-    currentQuestion: number
+    currentQuestionIndex: number
     totalQuestions: number
     theme: string
     difficulty: string
     score: number
 }
 
-export default function Header({ phase, currentQuestion, totalQuestions, theme, difficulty, score }: HeaderProps) {
+export default function Header({ phase, currentQuestionIndex, totalQuestions, theme, difficulty, score }: HeaderProps) {
     return (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-6">
             <div className="flex flex-wrap items-center gap-2">
                 {phase !== "leaderboard" && (
                     <div className="text-sm font-medium text-gray-500">
-                        Question {currentQuestion + 1}/{totalQuestions}
+                        Question {Math.min(currentQuestionIndex + 1, totalQuestions)}/{totalQuestions}
                     </div>
                 )}
                 {phase === "leaderboard" && (
