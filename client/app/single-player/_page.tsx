@@ -141,7 +141,7 @@ export default function SinglePlayer() {
                     question={game.currentQuestion.question}
                     correctAnswerIndex={game.currentQuestion.options.findIndex(option => option === game.currentQuestion?.correctAnswer)}
                     answer={game.selectedAnswer || ""}
-                    explanation={game.currentQuestion.explanation}
+                    explanation={game.currentQuestion.explanations[0]}
                     remainingTime={game.remainingTime}
                 />}
 

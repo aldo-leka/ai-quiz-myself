@@ -55,6 +55,7 @@ export default function SinglePlayer() {
         setIsLoading(false)
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
+        countdown(30, () => console.log('countdown done'))
     }
 
     function triggerConfetti() {
