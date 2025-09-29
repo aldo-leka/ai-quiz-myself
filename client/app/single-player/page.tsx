@@ -20,12 +20,13 @@ export default function SinglePlayer() {
 
     const timePercentage = 80
 
+    const showGrid = false
     return (
         <div className="min-h-screen"
-             style={{
+             style={showGrid ? {
                  backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px)',
                  backgroundSize: '8px 8px'
-             }}>
+             } : {}}>
             <div className="p-3 sm:p-4 md:p-6 lg:p-8 mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl">
                 <div className="w-full h-2 bg-secondary relative">
                     <div
