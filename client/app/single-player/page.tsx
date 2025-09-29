@@ -4,29 +4,73 @@ import {useGame} from "@/context/GameContext";
 import {useEffect, useRef, useState} from "react";
 import NicknamePrompt from "@/components/NicknamePrompt";
 import Button from "@/components/Button";
+import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
+import {loadingActions} from "@/lib/constants";
+import confetti from "canvas-confetti";
 
 export default function SinglePlayer() {
     const {state} = useGame()
+    const [isLoading, setIsLoading] = useState(true)
+    const [loadingAction, setLoadingAction] = useState("")
     const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null)
     const [questions, setQuestions] = useState<SingleGameQuestion[]>([])
     const [totalTime, setTotalTime] = useState<number | null>(null)
     const [remainingTime, setRemainingTime] = useState<number | null>(null)
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null)
+    const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const [confettiBtnSelected, setConfettiBtnSelected] = useState(false)
+    const confettiBtnTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         startGame()
+        startLoadingActions()
+
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
+            if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
+            if (confettiBtnTimeoutRef.current) clearInterval(confettiBtnTimeoutRef.current)
         }
     }, [])
 
+    function startLoadingActions() {
+        const getRandomAction = () => {
+            const randomIndex = Math.floor(Math.random() * loadingActions.length)
+            return loadingActions[randomIndex]
+        }
+
+        setLoadingAction(getRandomAction())
+
+        loadingIntervalRef.current = setInterval(() => {
+            setLoadingAction(getRandomAction())
+        }, Math.random() * 2000 + 3000)
+    }
+
     async function startGame() {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/gemini`)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz`)
         const data = await response.json()
+        if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
+        setIsLoading(false)
         setQuestions(data.questions)
-        countdown(30, () => console.log('Finished!'))
+        setCurrentQuestionIndex(0)
+    }
+
+    function triggerConfetti() {
+        if (confettiBtnTimeoutRef.current)
+            clearInterval(confettiBtnTimeoutRef.current)
+
+        setConfettiBtnSelected(true)
+        confetti({
+            particleCount: 100,
+            spread: 70
+        })
+        confettiBtnTimeoutRef.current = setTimeout(() => {
+            if (confettiBtnTimeoutRef.current)
+                clearInterval(confettiBtnTimeoutRef.current)
+            setConfettiBtnSelected(false)
+        }, 500)
     }
 
     function countdown(seconds: number, callback: () => void){
@@ -57,6 +101,27 @@ export default function SinglePlayer() {
         return <NicknamePrompt/>
     }
 
+    if (isLoading) {
+        return (
+            <div className="min-h-screen grid grid-cols-3 grid-rows-3">
+                <div className="col-start-2 row-start-1 flex flex-col items-center justify-end">
+                    <h2 className=" text-lg sm:text-xl md:text-2xl font-semibold text-center">
+                        Loading...
+                    </h2>
+                    <div className="text-sm text-center min-h-[60px] flex items-center">
+                        {loadingAction}
+                    </div>
+                </div>
+
+                <div className="col-start-2 row-start-2 flex items-center justify-center">
+                    <CircularButton onClick={triggerConfetti} selected={confettiBtnSelected}>
+                        Confetti!
+                    </CircularButton>
+                </div>
+            </div>
+        )
+    }
+
     const timerPercentage = remainingTime !== null && totalTime !== null ? (remainingTime / totalTime) * 100 : 100
     const showGrid = false
 
@@ -74,7 +139,7 @@ export default function SinglePlayer() {
                     />
                 </div>
                 <h2 className="py-3 sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
-                    Which statement correctly describes a Python list?
+                    {questions[currentQuestionIndex!].question}
                 </h2>
                 <Button
                     className="w-full mb-1 sm:mb-2"
@@ -109,10 +174,9 @@ export default function SinglePlayer() {
                     <div className="px-3 py-2 text-sm font-medium">
                         Is this your final answer?
                     </div>
-                    <button
-                        className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full bg-muted-foreground text-white text-xs sm:text-sm md:text-base font-semibold flex items-center justify-center">
+                    <CircularButton selected>
                         YES
-                    </button>
+                    </CircularButton>
                 </div>
 
                 <div className="flex justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
