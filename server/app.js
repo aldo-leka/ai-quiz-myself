@@ -65,7 +65,7 @@ let gameState = {
 
 app.use(cors({origin: CORS_ORIGIN, credentials: true}))
 
-app.get('/users-by-country', (req, res) => {
+app.get('/api/users-by-country', (req, res) => {
     const {code} = req.query // e.g. ?code=global game
     const countryCounts = {}
 

@@ -63,12 +63,12 @@ router.get('/generate-quiz', async (req, res) => {
         - Make the questions engaging
     `;
 
-    const response = await client.responses.create({
-        model: "gpt-5-nano",
-        input: prompt
+    const response = await gemini.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: prompt,
     })
 
-    const json = JSON.parse(response.output_text)
+    const json = JSON.parse(response.text.replace(/^```json\s*|\s*```$/g, '').trim())
     res.json({
         theme: theme,
         questions: json.questions

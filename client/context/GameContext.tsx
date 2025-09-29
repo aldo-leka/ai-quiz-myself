@@ -65,7 +65,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const getPlayerCountries = async () => {
       const query = state.gameCode ? `?code=${encodeURIComponent(state.gameCode)}` : "";
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/users-by-country${query}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/users-by-country${query}`);
       const data = await response.json();
       setPlayers(data);
     };
