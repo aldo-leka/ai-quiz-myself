@@ -1,12 +1,10 @@
-import dotenv from 'dotenv'
+import './config.js'
 import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { createServer } from 'node:http';
 import log from './log.js'
 import api from './api.js';
-
-dotenv.config()
 
 const app = express()
 app.use('/api', api);

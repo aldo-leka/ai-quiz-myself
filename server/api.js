@@ -1,7 +1,13 @@
+import './config.js'
 import express from 'express'
 import OpenAI from 'openai'
+import { GoogleGenAI } from "@google/genai"
+import log from "./log.js";
 
 const router = express.Router()
+
+log(process.env.GEMINI_API_KEY)
+const gemini = new GoogleGenAI({})
 
 router.get('/openai', async (req, res) => {
     const client = new OpenAI()
@@ -11,6 +17,15 @@ router.get('/openai', async (req, res) => {
     })
 
     res.json({text: response.output_text})
+})
+
+router.get('/gemini', async (req, res) => {
+    const response = await gemini.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: "Write a one-sentence bedtime story about a unicorn.",
+    })
+
+    res.json({text: response.text})
 })
 
 router.get('/generate-quiz', async (req, res) => {
