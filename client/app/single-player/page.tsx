@@ -1,14 +1,53 @@
 "use client"
 
 import {useGame} from "@/context/GameContext";
-import {useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import NicknamePrompt from "@/components/NicknamePrompt";
 import Button from "@/components/Button";
 import {User} from "lucide-react";
+import {SingleGameQuestion} from "@/lib/types";
 
 export default function SinglePlayer() {
     const {state} = useGame()
     const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null)
+    const [questions, setQuestions] = useState<SingleGameQuestion[]>([])
+    const [totalTime, setTotalTime] = useState<number | null>(null)
+    const [remainingTime, setRemainingTime] = useState<number | null>(null)
+    const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+    useEffect(() => {
+        startGame()
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current)
+        }
+    }, [])
+
+    async function startGame() {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/gemini`)
+        const data = await response.json()
+        setQuestions(data.questions)
+        countdown(30, () => console.log('Finished!'))
+    }
+
+    function countdown(seconds: number, callback: () => void){
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current)
+        }
+
+        setTotalTime(seconds)
+        setRemainingTime(seconds)
+        intervalRef.current = setInterval(() => {
+            setRemainingTime(prev => {
+                const newTime = prev! - 1
+                if (newTime < 0) {
+                    if (intervalRef.current) clearInterval(intervalRef.current)
+                    callback()
+                    return 0
+                }
+                return newTime
+            })
+        }, 1000)
+    }
 
     function handleAnswerSelect(selectedIndex: number) {
         setSelectedAnswerIndex(selectedIndex)
@@ -18,9 +57,9 @@ export default function SinglePlayer() {
         return <NicknamePrompt/>
     }
 
-    const timePercentage = 80
-
+    const timerPercentage = remainingTime !== null && totalTime !== null ? (remainingTime / totalTime) * 100 : 100
     const showGrid = false
+
     return (
         <div className="min-h-screen"
              style={showGrid ? {
@@ -31,7 +70,7 @@ export default function SinglePlayer() {
                 <div className="w-full h-2 bg-secondary relative">
                     <div
                         className="h-full bg-primary transition-all duration-1000 ease-linear"
-                        style={{width: `${timePercentage}%`}}
+                        style={{width: `${timerPercentage}%`}}
                     />
                 </div>
                 <h2 className="py-3 sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">

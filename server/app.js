@@ -6,11 +6,12 @@ import { createServer } from 'node:http';
 import log from './log.js'
 import api from './api.js';
 
-const app = express()
-app.use('/api', api);
-
 const PORT = process.env.PORT
 const CORS_ORIGIN = process.env.CORS_ORIGIN
+
+const app = express()
+app.use(cors({origin: CORS_ORIGIN, credentials: true}))
+app.use('/api', api);
 
 const server = createServer(app)
 const io = new Server(server, {
@@ -62,8 +63,6 @@ let gameState = {
     currentQuestionIndex: -1,
     phase: null // can be "question", "explanation", or "leaderboard"
 }
-
-app.use(cors({origin: CORS_ORIGIN, credentials: true}))
 
 app.get('/api/users-by-country', (req, res) => {
     const {code} = req.query // e.g. ?code=global game
