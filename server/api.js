@@ -54,6 +54,7 @@ router.get('/generate-quiz', async (req, res) => {
 })
 
 router.get('/gemini', async (req, res) => {
+    await new Promise(resolve => setTimeout(resolve, 2000))
     res.json({
         "theme": "general knowledge",
         "questions": [
