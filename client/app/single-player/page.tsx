@@ -9,17 +9,20 @@ import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
 import {loadingActions} from "@/lib/constants";
 import confetti from "canvas-confetti";
+import {clearTimeout} from "node:timers";
 
 export default function SinglePlayer() {
     const {state} = useGame()
-    const [isLoading, setIsLoading] = useState(true)
-    const [loadingAction, setLoadingAction] = useState("")
     const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null)
     const [questions, setQuestions] = useState<SingleGameQuestion[]>([])
     const [totalTime, setTotalTime] = useState<number | null>(null)
     const [remainingTime, setRemainingTime] = useState<number | null>(null)
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null)
+
+    // Loading state
+    const [isLoading, setIsLoading] = useState(true)
+    const [loadingAction, setLoadingAction] = useState("")
     const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null)
     const [confettiBtnSelected, setConfettiBtnSelected] = useState(false)
     const confettiBtnTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -31,7 +34,7 @@ export default function SinglePlayer() {
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
             if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
-            if (confettiBtnTimeoutRef.current) clearInterval(confettiBtnTimeoutRef.current)
+            if (confettiBtnTimeoutRef.current) clearTimeout(confettiBtnTimeoutRef.current)
         }
     }, [])
 
