@@ -145,34 +145,32 @@ export default function SinglePlayer() {
                 <h2 className="py-3 sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
                     {questions[currentQuestionIndex!].question}
                 </h2>
-                <Button
-                    className="w-full mb-1 sm:mb-2"
-                    selected={selectedAnswerIndex === 0}
-                    onClick={() => handleAnswerSelect(0)}
-                >
-                    A: It is a mutable, ordered collection.
-                </Button>
-                <Button
-                    className="w-full mb-1 sm:mb-2"
-                    selected={selectedAnswerIndex === 1}
-                    onClick={() => handleAnswerSelect(1)}
-                >
-                    B: It is an immutable, unordered collection.
-                </Button>
-                <Button
-                    className="w-full mb-1 sm:mb-2"
-                    selected={selectedAnswerIndex === 2}
-                    onClick={() => handleAnswerSelect(2)}
-                >
-                    C: It is a key-value mapping.
-                </Button>
-                <Button
-                    className="w-full mb-4 sm:mb-6"
-                    selected={selectedAnswerIndex === 3}
-                    onClick={() => handleAnswerSelect(3)}
-                >
-                    D: It is a sequence of characters only.
-                </Button>
+                <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
+                    <Button
+                        selected={selectedAnswerIndex === 0}
+                        onClick={() => handleAnswerSelect(0)}
+                    >
+                        A: {questions[currentQuestionIndex!].options[0]}
+                    </Button>
+                    <Button
+                        selected={selectedAnswerIndex === 1}
+                        onClick={() => handleAnswerSelect(1)}
+                    >
+                        B: {questions[currentQuestionIndex!].options[1]}
+                    </Button>
+                    <Button
+                        selected={selectedAnswerIndex === 2}
+                        onClick={() => handleAnswerSelect(2)}
+                    >
+                        C: {questions[currentQuestionIndex!].options[2]}
+                    </Button>
+                    <Button
+                        selected={selectedAnswerIndex === 3}
+                        onClick={() => handleAnswerSelect(3)}
+                    >
+                        D: {questions[currentQuestionIndex!].options[3]}
+                    </Button>
+                </div>
 
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                     <div className="px-3 py-2 text-sm font-medium">

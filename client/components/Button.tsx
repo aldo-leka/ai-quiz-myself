@@ -7,8 +7,7 @@ interface ButtonProps {
 }
 
 export default function Button({ className = "", onClick, children, selected = false, icon }: ButtonProps) {
-    // Remove w-full from base, let className control width
-    const baseClasses = "h-10 px-4 text-sm text-left flex items-center gap-2"
+    const baseClasses = "h-12 px-4 text-sm text-left flex items-center gap-2"
     const bgClass = selected ? "bg-muted-foreground text-white" : "bg-secondary"
 
     return (
