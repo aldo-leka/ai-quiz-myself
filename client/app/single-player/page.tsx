@@ -9,7 +9,6 @@ import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
 import {loadingActions} from "@/lib/constants";
 import confetti from "canvas-confetti";
-import {clearTimeout} from "node:timers";
 
 export default function SinglePlayer() {
     const {state} = useGame()
