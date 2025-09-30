@@ -7,29 +7,32 @@ const router = express.Router()
 const gemini = new GoogleGenAI({})
 
 router.get('/generate-quiz', async (req, res) => {
-    const client = new OpenAI()
-
     const type = "multiple choice"
-    const theme = "general knowledge"
     const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
     const questionCount = moneyLadder.length
-    const difficultyInstructions = `The difficulty level per question should match the money amount of that question
-     for the given money ladder: ${moneyLadder.map(m => "$" + m).join(', ')} starting from easiest to hardest.`
-    const prompt = `You are an expert game show producer that creates and devises quiz shows. 
-    Always respond with valid JSON.
-    Create a ${type} quiz about ${theme} with ${questionCount} questions. ${difficultyInstructions}
-    Return the response as a JSON object with the following structure:
+    const prompt = `You are an expert game show producer creating "Who Wants to Be a Millionaire"-style quiz shows.
+    Create a ${type} quiz with ${questionCount} questions. Try to cover all classic quiz subjects (biology, history, arts etc.).
+    Add as many contemporary questions as possible. The show is for family entertainment so avoid unpleasant questions regarding 
+    dictators, terrorists and tsunamis. Put great care into choosing answer possibilities to maximise discussion and deliberation 
+    in the studio and for the viewers. When you as the question editor have a sizeable database of questions,
+    stack them for the show in stacks of 15, so that each stack is increasingly more difficult and has questions from many subjects, 
+    but only one question about each subject. The aim is a varied stack going from easy to hard, so that winning the big prize 
+    requires very broad knowledge in both classical and contemporary subjects.
+    An example quiz is this Matt Damon and Ken Jennings celebrity contest: ${sample1()}
+    Always respond with valid JSON. Return the response as a JSON object with the following structure:
     {
         "questions": [
             {
                 "question": "Question text",
                 "options": ["Option A", "Option B", "Option C", "Option D"],
+                "difficulty": "easy" | "medium" | "hard"
+                "subject": "History" | "Biology" | "Arts" | "Pop Culture"
                 "correctAnswer": "Correct answer",
                 "explanations": [
-                    "Explanation why A is wrong or right",
-                    "Explanation why B is wrong or right", 
-                    "Explanation why C is wrong or right", 
-                    "Explanation why D is wrong or right"
+                    "Explanation why A is wrong / right",
+                    "Explanation why B is wrong / right", 
+                    "Explanation why C is wrong / right", 
+                    "Explanation why D is wrong / right"
                 ]
             }
         ]
@@ -38,7 +41,8 @@ router.get('/generate-quiz', async (req, res) => {
         - Each question should have exactly 4 options
         - Only one option should be correct
         - The correctAnswer should be the exact text of the correct option
-        - Make the questions engaging
+        - Explanations must provide educational context, not just say ‘this is correct’ or ‘this is wrong’
+        - The stack of 14 questions should flow from easy to hard
     `;
 
     const response = await gemini.models.generateContent({
@@ -48,7 +52,6 @@ router.get('/generate-quiz', async (req, res) => {
 
     const json = JSON.parse(response.text.replace(/^```json\s*|\s*```$/g, '').trim())
     res.json({
-        theme: theme,
         questions: json.questions
     })
 })
@@ -56,230 +59,257 @@ router.get('/generate-quiz', async (req, res) => {
 router.get('/gemini', async (req, res) => {
     await new Promise(resolve => setTimeout(resolve, 2000))
     res.json({
-        "theme": "general knowledge",
         "questions": [
             {
-                "question": "What is the capital city of Australia?",
+                "question": "What is the name of the wizard who guides Frodo Baggins in \"The Lord of the Rings\"?",
                 "options": [
-                    "Sydney",
-                    "Melbourne",
-                    "Canberra",
-                    "Brisbane"
+                    "Dumbledore",
+                    "Gandalf",
+                    "Merlin",
+                    "Alatar"
                 ],
-                "correctAnswer": "Canberra",
+                "difficulty": "easy",
+                "subject": "Pop Culture",
+                "correctAnswer": "Gandalf",
                 "explanations": [
-                    "Sydney is Australia's largest city and a major port, but it is not the capital.",
-                    "Melbourne is a significant cultural hub and former capital, but Canberra holds the current status.",
-                    "Canberra was specifically designed and established as the federal capital of Australia in 1908.",
-                    "Brisbane is the capital of the state of Queensland, but not the national capital."
+                    "Albus Dumbledore is the headmaster of Hogwarts in the Harry Potter series, not Middle-earth.",
+                    "Gandalf is the iconic wizard of the Istari order who serves as a mentor and guide to the Fellowship of the Ring in J.R.R. Tolkien's \"The Lord of the Rings.\"",
+                    "Merlin is a legendary sorcerer from Arthurian mythology, not part of Tolkien's world.",
+                    "Alatar is one of the two Blue Wizards in Tolkien's lore, but he is not the main wizard who guides Frodo."
                 ]
             },
             {
-                "question": "Which large fruit is famous for being a good source of potassium?",
+                "question": "Which large marine mammal is known for its distinctive blowhole on top of its head, used for breathing?",
                 "options": [
-                    "Apple",
-                    "Orange",
-                    "Banana",
-                    "Grape"
+                    "Shark",
+                    "Dolphin",
+                    "Whale",
+                    "Seal"
                 ],
-                "correctAnswer": "Banana",
+                "difficulty": "easy",
+                "subject": "Biology",
+                "correctAnswer": "Whale",
                 "explanations": [
-                    "Apples are known for fiber and Vitamin C, but not primarily for potassium.",
-                    "Oranges are rich in Vitamin C, but bananas contain significantly more potassium.",
-                    "Bananas are widely recognized as an excellent source of potassium, essential for heart and muscle function.",
-                    "Grapes are high in antioxidants and vitamins, but less so in potassium compared to a banana."
+                    "Sharks are fish and breathe through gills, not blowholes.",
+                    "Dolphins are marine mammals that have blowholes, but they are a specific type of toothed whale. The question broadly asks for 'a large marine mammal,' for which 'Whale' is the most encompassing and iconic answer.",
+                    "Whales are large marine mammals that breathe air through a blowhole located on the top of their heads.",
+                    "Seals are marine mammals that breathe air through nostrils, not a blowhole."
                 ]
             },
             {
-                "question": "Which gas do plants absorb from the atmosphere for photosynthesis?",
+                "question": "The Eiffel Tower is a famous landmark located in which European capital city?",
                 "options": [
-                    "Oxygen",
-                    "Nitrogen",
-                    "Carbon Dioxide",
-                    "Hydrogen"
+                    "London",
+                    "Rome",
+                    "Paris",
+                    "Berlin"
                 ],
-                "correctAnswer": "Carbon Dioxide",
+                "difficulty": "easy",
+                "subject": "Geography",
+                "correctAnswer": "Paris",
                 "explanations": [
-                    "Plants release Oxygen as a byproduct of photosynthesis, they do not absorb it for the process.",
-                    "Nitrogen is crucial for plant growth, but it's absorbed from the soil, not directly from the atmosphere for photosynthesis.",
-                    "Carbon Dioxide is the primary gas absorbed by plants from the atmosphere, which they use along with water and sunlight to create food.",
-                    "Hydrogen is a component of water, which plants use, but they do not absorb elemental hydrogen gas from the atmosphere."
+                    "London is the capital of England and the United Kingdom, famous for landmarks like the Tower Bridge and Buckingham Palace.",
+                    "Rome is the capital of Italy, home to the Colosseum and Vatican City.",
+                    "Paris is the capital of France and is famously home to the Eiffel Tower, one of the world's most recognizable structures.",
+                    "Berlin is the capital of Germany, known for the Brandenburg Gate and the Reichstag Building."
                 ]
             },
             {
-                "question": "Who wrote the classic novel 'To Kill a Mockingbird'?",
+                "question": "Which social media platform is primarily known for short-form video content and viral dance challenges?",
                 "options": [
-                    "J.K. Rowling",
-                    "Harper Lee",
-                    "Ernest Hemingway",
-                    "F. Scott Fitzgerald"
+                    "Facebook",
+                    "X (formerly Twitter)",
+                    "TikTok",
+                    "Instagram"
                 ],
-                "correctAnswer": "Harper Lee",
+                "difficulty": "easy",
+                "subject": "Technology",
+                "correctAnswer": "TikTok",
                 "explanations": [
-                    "J.K. Rowling is famous for the 'Harry Potter' series, a different literary genre.",
-                    "Harper Lee is the celebrated author of the Pulitzer Prize-winning novel 'To Kill a Mockingbird'.",
-                    "Ernest Hemingway wrote classics like 'The Old Man and the Sea', but not 'To Kill a Mockingbird'.",
-                    "F. Scott Fitzgerald is known for 'The Great Gatsby', another American literary staple."
+                    "Facebook is a general social networking platform primarily focused on text, photos, and longer videos.",
+                    "X (formerly Twitter) is a microblogging platform known for short text posts and real-time news.",
+                    "TikTok gained immense popularity for its user-generated short-form video content, often featuring music, dance, and viral trends.",
+                    "Instagram focuses primarily on photo and short video sharing, but TikTok is more synonymous with the viral dance challenge culture."
                 ]
             },
             {
-                "question": "Which of the following is NOT one of the Seven Wonders of the Ancient World?",
+                "question": "In what year did the first iPhone, revolutionizing mobile technology, make its debut?",
                 "options": [
-                    "The Great Pyramid of Giza",
-                    "The Colossus of Rhodes",
-                    "The Great Wall of China",
-                    "The Lighthouse of Alexandria"
+                    "2005",
+                    "2007",
+                    "2009",
+                    "2011"
                 ],
-                "correctAnswer": "The Great Wall of China",
+                "difficulty": "medium",
+                "subject": "History",
+                "correctAnswer": "2007",
                 "explanations": [
-                    "The Great Pyramid of Giza is indeed the only Ancient Wonder still largely intact today.",
-                    "The Colossus of Rhodes, a giant statue of the sun god Helios, was one of the Seven Wonders.",
-                    "The Great Wall of China, while an incredible ancient construction, was not included in the original list of the Seven Wonders of the Ancient World.",
-                    "The Lighthouse of Alexandria, a monumental lighthouse, was a prominent Ancient Wonder."
+                    "2005 saw significant tech releases like YouTube, but not the iPhone.",
+                    "Apple CEO Steve Jobs unveiled the original iPhone in January 2007, and it went on sale in June of the same year, fundamentally changing the smartphone industry.",
+                    "2009 was the year the iPhone 3GS was released, an update to the second-generation iPhone.",
+                    "2011 was when the iPhone 4S was introduced, notable for the debut of Siri."
                 ]
             },
             {
-                "question": "What is the chemical symbol for the element gold?",
+                "question": "Which pop superstar recently broke attendance records with her \"Eras Tour,\" celebrating her entire musical career?",
                 "options": [
-                    "Ag",
-                    "Fe",
-                    "Au",
-                    "Pb"
+                    "Beyoncé",
+                    "Adele",
+                    "Taylor Swift",
+                    "Rihanna"
                 ],
-                "correctAnswer": "Au",
+                "difficulty": "medium",
+                "subject": "Music",
+                "correctAnswer": "Taylor Swift",
                 "explanations": [
-                    "Ag is the chemical symbol for Silver.",
-                    "Fe is the chemical symbol for Iron.",
-                    "Au is the correct chemical symbol for Gold, derived from its Latin name 'aurum'.",
-                    "Pb is the chemical symbol for Lead."
+                    "Beyoncé recently embarked on her highly successful \"Renaissance World Tour.\"",
+                    "Adele is known for her powerful vocals and specific concert residencies, but not the \"Eras Tour.\"",
+                    "Taylor Swift's \"The Eras Tour\" is a monumental stadium tour showcasing her musical journey through different albums and phases of her career, breaking numerous records.",
+                    "Rihanna has had major tours in the past, but has not recently conducted a tour named the \"Eras Tour.\""
                 ]
             },
             {
-                "question": "In which year did the first human land on the Moon?",
+                "question": "What is the name of the nearest large galaxy to our Milky Way, which is on a collision course with it in billions of years?",
                 "options": [
-                    "1965",
-                    "1969",
-                    "1972",
-                    "1975"
+                    "Triangulum Galaxy",
+                    "Sombrero Galaxy",
+                    "Andromeda Galaxy",
+                    "Whirlpool Galaxy"
                 ],
-                "correctAnswer": "1969",
+                "difficulty": "medium",
+                "subject": "Science",
+                "correctAnswer": "Andromeda Galaxy",
                 "explanations": [
-                    "While a significant year in the space race, 1965 was too early for the first moon landing.",
-                    "On July 20, 1969, Neil Armstrong became the first person to walk on the Moon during the Apollo 11 mission.",
-                    "1972 saw the final Apollo mission, Apollo 17, but not the first landing.",
-                    "1975 was the year of the Apollo-Soyuz Test Project, a joint US-Soviet space mission, well after the initial moon landing."
+                    "The Triangulum Galaxy (M33) is another relatively nearby galaxy but is smaller and less massive than Andromeda.",
+                    "The Sombrero Galaxy (M104) is a famous unbarred spiral galaxy known for its distinctive dust lane, but it is much farther away from the Milky Way.",
+                    "The Andromeda Galaxy (M31) is the closest large spiral galaxy to the Milky Way, located about 2.5 million light-years away. Scientists predict the two galaxies will collide and merge in approximately 4.5 billion years.",
+                    "The Whirlpool Galaxy (M51) is a classic example of an interacting grand-design spiral galaxy, but it is too distant to be on a collision course with the Milky Way."
                 ]
             },
             {
-                "question": "Which of these famous figures is credited with discovering penicillin?",
+                "question": "Which British author created the best-selling \"Harry Potter\" series of fantasy novels?",
                 "options": [
-                    "Louis Pasteur",
-                    "Marie Curie",
-                    "Alexander Fleming",
-                    "Jonas Salk"
+                    "J.R.R. Tolkien",
+                    "C.S. Lewis",
+                    "Roald Dahl",
+                    "J.K. Rowling"
                 ],
-                "correctAnswer": "Alexander Fleming",
+                "difficulty": "medium",
+                "subject": "Literature",
+                "correctAnswer": "J.K. Rowling",
                 "explanations": [
-                    "Louis Pasteur is known for pasteurization and vaccines, not penicillin.",
-                    "Marie Curie is famous for her groundbreaking work in radioactivity, discovering polonium and radium.",
-                    "Alexander Fleming accidentally discovered penicillin in 1928, observing its antibacterial properties.",
-                    "Jonas Salk developed one of the first successful polio vaccines."
+                    "J.R.R. Tolkien is the author of \"The Hobbit\" and \"The Lord of the Rings,\" set in Middle-earth.",
+                    "C.S. Lewis is known for \"The Chronicles of Narnia\" series.",
+                    "Roald Dahl is a celebrated children's author known for classics like \"Charlie and the Chocolate Factory\" and \"Matilda.\"",
+                    "J.K. Rowling is the acclaimed British author who created the incredibly popular \"Harry Potter\" series, which follows the adventures of a young wizard and his friends at Hogwarts."
                 ]
             },
             {
-                "question": "Which mountain range separates Europe and Asia?",
+                "question": "Which sport features a \"slam dunk\" as one of its most exciting and high-scoring plays?",
                 "options": [
-                    "The Alps",
-                    "The Himalayas",
-                    "The Ural Mountains",
-                    "The Andes"
+                    "Tennis",
+                    "Soccer",
+                    "Basketball",
+                    "Volleyball"
                 ],
-                "correctAnswer": "The Ural Mountains",
+                "difficulty": "medium",
+                "subject": "Sports",
+                "correctAnswer": "Basketball",
                 "explanations": [
-                    "The Alps are a major mountain range in Central Europe, but they do not separate Europe from Asia.",
-                    "The Himalayas are located in Asia, forming a natural border between the Indian subcontinent and the Tibetan Plateau.",
-                    "The Ural Mountains are traditionally considered the natural boundary between Europe and Asia.",
-                    "The Andes are the longest continental mountain range in the world, located along the western coast of South America."
+                    "Tennis involves serving, volleys, and groundstrokes, with points scored when the opponent fails to return the ball.",
+                    "Soccer (football) involves kicking a ball into a goal, with scoring plays like headers and penalty kicks.",
+                    "A \"slam dunk\" is a signature move in basketball where a player jumps and forcefully shoves the ball through the basket from above, often for two points.",
+                    "Volleyball involves hitting the ball over a net, with scoring plays like spikes and blocks."
                 ]
             },
             {
-                "question": "What is the name of the ancient trade route that connected the East and West?",
+                "question": "What popular fermented tea drink, often marketed for its health benefits, has seen a surge in popularity in recent years?",
                 "options": [
-                    "The Spice Route",
-                    "The Amber Road",
-                    "The Silk Road",
-                    "The Royal Road"
+                    "Espresso",
+                    "Kombucha",
+                    "Smoothie",
+                    "Green Tea"
                 ],
-                "correctAnswer": "The Silk Road",
+                "difficulty": "medium",
+                "subject": "Food & Drink",
+                "correctAnswer": "Kombucha",
                 "explanations": [
-                    "The Spice Route was a network of sea routes connecting the East with Europe, primarily for spices.",
-                    "The Amber Road was an ancient trade route for the transfer of amber from the North Sea and Baltic Sea to Southern Europe.",
-                    "The Silk Road was an extensive network of trade routes, crucial for cultural and commercial exchange between Asia and Europe, predominantly for silk.",
-                    "The Royal Road was an ancient highway reorganized and rebuilt by the Persian king Darius the Great in the 5th century BC, mainly within the Persian Empire."
+                    "Espresso is a concentrated coffee beverage, not a fermented tea.",
+                    "Kombucha is a fermented, lightly effervescent, sweetened black or green tea drink, popular for its distinctive flavor and perceived health benefits, experiencing a significant rise in popularity.",
+                    "A smoothie is a blended beverage typically made from fruit, vegetables, and often yogurt or milk, not a fermented tea.",
+                    "Green Tea is a type of tea that is not fermented, though it is healthy, it doesn't fit the specific description of a 'fermented tea drink' that has recently surged in popularity in this specific way."
                 ]
             },
             {
-                "question": "Which literary character famously lives in a house called '221B Baker Street'?",
+                "question": "The construction of the Berlin Wall in 1961 was primarily to prevent what?",
                 "options": [
-                    "Hercule Poirot",
-                    "Miss Marple",
-                    "Sherlock Holmes",
-                    "James Bond"
+                    "An invasion from West Germany",
+                    "Espionage by Western powers",
+                    "Mass defection from East to West Germany",
+                    "Economic collapse of East Berlin"
                 ],
-                "correctAnswer": "Sherlock Holmes",
+                "difficulty": "hard",
+                "subject": "History",
+                "correctAnswer": "Mass defection from East to West Germany",
                 "explanations": [
-                    "Hercule Poirot is another famous detective, created by Agatha Christie, but he does not reside at 221B Baker Street.",
-                    "Miss Marple, also by Agatha Christie, is a beloved elderly amateur sleuth, but not associated with Baker Street.",
-                    "Sherlock Holmes, the iconic consulting detective created by Sir Arthur Conan Doyle, is famously associated with his residence at 221B Baker Street in London.",
-                    "James Bond is a fictional British Secret Service agent, created by Ian Fleming, whose headquarters are in MI6, not Baker Street."
+                    "While Cold War tensions were high, the Berlin Wall was an internal measure by East Germany, not a defense against an external invasion.",
+                    "Espionage was a constant concern during the Cold War, but the primary reason for such a massive physical barrier was not solely to stop individual spies.",
+                    "The Berlin Wall was erected by the German Democratic Republic (East Germany) to physically seal off East Berlin from West Berlin, preventing the large-scale defection of its citizens, particularly skilled workers and professionals, to the capitalist West.",
+                    "While the exodus of skilled labor contributed to economic instability, the immediate and direct purpose of the wall was to halt the human outflow, rather than being built solely as a response to an imminent 'economic collapse'."
                 ]
             },
             {
-                "question": "Which scientific principle states that 'for every action, there is an equal and opposite reaction'?",
+                "question": "Which human organ is responsible for producing insulin, a hormone vital for regulating blood sugar?",
                 "options": [
-                    "Newton's First Law of Motion",
-                    "Newton's Second Law of Motion",
-                    "Newton's Third Law of Motion",
-                    "The Law of Conservation of Energy"
+                    "Liver",
+                    "Kidneys",
+                    "Pancreas",
+                    "Spleen"
                 ],
-                "correctAnswer": "Newton's Third Law of Motion",
+                "difficulty": "hard",
+                "subject": "Biology",
+                "correctAnswer": "Pancreas",
                 "explanations": [
-                    "Newton's First Law (Inertia) states that an object at rest stays at rest, and an object in motion stays in motion with the same speed and in the same direction unless acted upon by an unbalanced force.",
-                    "Newton's Second Law (Force and Acceleration) states that the acceleration of an object as produced by a net force is directly proportional to the magnitude of the net force, in the same direction as the net force, and inversely proportional to the mass of the object (F=ma).",
-                    "Newton's Third Law of Motion precisely states that for every action (force) in nature, there is an equal and opposite reaction.",
-                    "The Law of Conservation of Energy states that energy can neither be created nor destroyed, only converted from one form to another."
+                    "The liver plays a crucial role in blood sugar regulation by storing and releasing glucose, but it does not produce insulin.",
+                    "The kidneys are primarily responsible for filtering waste from the blood, maintaining fluid and electrolyte balance, and producing hormones related to blood pressure and red blood cell production.",
+                    "The pancreas is an organ located behind the stomach that produces digestive enzymes and hormones, including insulin and glucagon, which are essential for regulating blood glucose levels.",
+                    "The spleen is an organ that filters blood, removes old red blood cells, and plays a role in the immune system, but it is not involved in insulin production."
                 ]
             },
             {
-                "question": "Which country is the world's leading producer of coffee?",
+                "question": "Which contemporary Japanese artist is globally recognized for her distinctive polka dot patterns and large-scale installations, including \"Infinity Mirror Rooms\"?",
                 "options": [
-                    "Colombia",
-                    "Vietnam",
-                    "Ethiopia",
-                    "Brazil"
+                    "Yayoi Kusama",
+                    "Mariko Mori",
+                    "Takashi Murakami",
+                    "Yoko Ono"
                 ],
-                "correctAnswer": "Brazil",
+                "difficulty": "hard",
+                "subject": "Arts",
+                "correctAnswer": "Yayoi Kusama",
                 "explanations": [
-                    "Colombia is renowned for its high-quality Arabica coffee, but it is not the largest producer globally.",
-                    "Vietnam is a major producer, especially of Robusta coffee, ranking second globally but not first.",
-                    "Ethiopia is considered the birthplace of coffee and has a rich coffee culture, but its production volume is not the highest.",
-                    "Brazil has been the world's largest producer of coffee for over 150 years, largely due to its vast plantations and favorable climate."
+                    "Yayoi Kusama is a highly influential contemporary Japanese artist, renowned for her pervasive use of polka dots, nets, and immersive, hallucinatory environments like her famous \"Infinity Mirror Rooms.\"",
+                    "Mariko Mori is a Japanese artist known for her technologically advanced and spiritually themed works that often fuse ancient Japanese culture with futuristic elements.",
+                    "Takashi Murakami is a Japanese contemporary artist who works in fine arts media as well as commercial media, known for his 'Superflat' art movement and characters like Mr. DOB.",
+                    "Yoko Ono is a Japanese-American artist, singer, songwriter, and peace activist, widely known for her conceptual art and experimental music, and her marriage to John Lennon."
                 ]
             },
             {
-                "question": "What is the name of the deepest known point in the Earth's oceans?",
+                "question": "What is the term for a type of artificial intelligence that can generate new content, such as text, images, or audio, based on learned patterns?",
                 "options": [
-                    "Puerto Rico Trench",
-                    "Java Trench",
-                    "Mariana Trench",
-                    "Kermadec Trench"
+                    "Predictive AI",
+                    "Generative AI",
+                    "Analytical AI",
+                    "Reactive AI"
                 ],
-                "correctAnswer": "Mariana Trench",
+                "difficulty": "hard",
+                "subject": "Technology",
+                "correctAnswer": "Generative AI",
                 "explanations": [
-                    "The Puerto Rico Trench is the deepest point in the Atlantic Ocean, but not globally.",
-                    "The Java Trench (also known as the Sunda Trench) is the deepest point in the Indian Ocean, not the world.",
-                    "The Mariana Trench, located in the western Pacific Ocean near the Mariana Islands, contains the Challenger Deep, which is the deepest known point on Earth.",
-                    "The Kermadec Trench is a deep ocean trench in the South Pacific, but it is not the deepest overall."
+                    "Predictive AI focuses on forecasting future outcomes by analyzing historical data and identifying patterns, such as predicting stock prices or customer behavior.",
+                    "Generative AI is a category of artificial intelligence that can produce novel outputs like text, images, code, or audio, by learning patterns from vast datasets and creating new, original content based on that understanding.",
+                    "Analytical AI is designed to analyze data, extract insights, and assist in decision-making by identifying trends and correlations, rather than creating new content.",
+                    "Reactive AI is the most basic type of AI, designed to react to immediate situations based on predefined rules without memory or learning from past experiences."
                 ]
             }
         ]
@@ -516,5 +546,163 @@ router.get('/openai', async (req, res) => {
             }]
     })
 })
+
+// Matt Damon and Ken Jennings // Celebrity contest // https://millionaire.fandom.com/wiki/Matt_Damon_and_Ken_Jennings
+function sample1() {
+    return {
+        "questions": [
+            // {
+            //     "question": "A popular role-playing game described as \"the nerdiest of nerdy pastimes\" is called \"Dungeons &\" what?",
+            //     "options": [
+            //         "Doritos",
+            //         "Dragons",
+            //         "Deodorant",
+            //         "Celibacy"
+            //     ],
+            //     "correctAnswer": "Dragons"
+            // },
+            {
+                "question": "Which of these words is derived from a Latin term meaning \"mother's brother\"?",
+                "options": [
+                    "Niece",
+                    "Nephew",
+                    "Sister",
+                    "Uncle"
+                ],
+                "correctAnswer": "Uncle"
+            },
+            {
+                "question": "Made by Nabisco, Teddy Grahams are shaped like what animals??",
+                "options": [
+                    "Worms",
+                    "Bears",
+                    "Flamingos",
+                    "Crabs"
+                ],
+                "correctAnswer": "Bears"
+            },
+            {
+                "question": "Achieving statehood in 1912, what is the newest state with the word \"New\" in its name?",
+                "options": [
+                    "New Hampshire",
+                    "New York",
+                    "New Mexico",
+                    "New Jersey"
+                ],
+                "correctAnswer": "New Mexico"
+            },
+            {
+                "question": "\"Clucking\" in at just 34 seconds, the shortest Billboard Hot 100 hit ever is Jack Black's \"Steve's Lava Chicken,\" a song from what 2025 film?",
+                "options": [
+                    "A Minecraft Movie",
+                    "Snow White",
+                    "Lilo & Stitch",
+                    "Novocaine"
+                ],
+                "correctAnswer": "A Minecraft Movie"
+            },
+            {
+                "question": "A rock hound is a nickname for someone who specializes in what scientific field?",
+                "options": [
+                    "Botany",
+                    "Geology",
+                    "Anatomy",
+                    "Psychology"
+                ],
+                "correctAnswer": "Geology"
+            },
+            {
+                "question": "Though Donatella will still serve as its Chief Brand Ambassador, what Italian fashion house was bought by rival Prada in 2025 for a reported $1.4 billion?",
+                "options": [
+                    "Armani",
+                    "Fendi",
+                    "Gucci",
+                    "Versace"
+                ],
+                "correctAnswer": "Versace"
+            },
+            {
+                "question": "In Philadelphia, a sculpture that reads \"YO\" from one side, but a different word from the other side, sits in front of a museum dedicated to what?",
+                "options": [
+                    "Astronomy",
+                    "Jazz",
+                    "Jewish history",
+                    "Classic cars"
+                ],
+                "correctAnswer": "Jewish history"
+            },
+            {
+                "question": "With stops in Maui, Taormina and Koh Samui, Four Seasons offers a jet-setting tour inspired by locations featured in what TV series?",
+                "options": [
+                    "The Last of Us",
+                    "Succession",
+                    "The Bear",
+                    "The White Lotus"
+                ],
+                "correctAnswer": "The White Lotus"
+            },
+            {
+                "question": "Prince wrote the hit song \"1999\" after watching a documentary about what historic figure?",
+                "options": [
+                    "Nostradamus",
+                    "Rasputin",
+                    "Plato",
+                    "Charlemagne"
+                ],
+                "correctAnswer": "Nostradamus"
+            },
+            {
+                "question": "Which of these acclaimed novels is the only one that was originally written in English?",
+                "options": [
+                    "Around the World in Eighty Days",
+                    "All Quiet on the Western Front",
+                    "A Passage to India",
+                    "Love in the Time of Cholera"
+                ],
+                "correctAnswer": "A Passage to India"
+            },
+            {
+                "question": "In a popular Spanish New Year's Eve tradition, revelers attempt to eat and swallow 12 of which food before the midnight bell tolls 12 times?",
+                "options": [
+                    "Pimentos",
+                    "Grapes",
+                    "Anchovies",
+                    "Hazelnuts"
+                ],
+                "correctAnswer": "Grapes"
+            },
+            {
+                "question": "Believed to help them conserve energy, \"vertical sleeping\" is a unique behavior exhibited by which of these animals?",
+                "options": [
+                    "Sperm whale",
+                    "Bactrian camel",
+                    "Canada goose",
+                    "Ring-tailed lemur"
+                ],
+                "correctAnswer": "Sperm whale"
+            },
+            {
+                "question": "With another career path already established, who got his first taste of the entertainment world when he entered a Steve Martin look-alike contest?",
+                "options": [
+                    "Dr. Oz",
+                    "Jerry Springer",
+                    "Bill Nye",
+                    "Anthony Bourdain"
+                ],
+                "correctAnswer": "Bill Nye"
+            },
+            {
+                "question": "Which of these words is often used to describe one of the most beautiful auditory effects on Earth: the sound made by the leaves of trees when wind blows through them?",
+                "options": [
+                    "Apricity",
+                    "Petrichor",
+                    "Susurrus",
+                    "Eudaemonia"
+                ],
+                "correctAnswer": "Susurrus"
+            }
+        ]
+    }
+}
 
 export default router;
