@@ -66,7 +66,6 @@ function getSuspenseDelay(speed: SuspenseSpeed): number {
 function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[] {
     const chunks: Chunk[] = []
     let currentChunkParts: ChunkPart[] = []
-    let currentChunkLength = 0
     let currentLineLength = 0
     let linesInChunk = 0
 
@@ -99,15 +98,12 @@ function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[
                     currentTextPart = word + ' '
                     linesInChunk = 0
                     currentLineLength = wordLength
-                    currentChunkLength = wordLength
                 } else {
                     currentTextPart += word + ' '
-                    currentChunkLength += wordLength
                 }
             } else {
                 currentTextPart += word + ' '
                 currentLineLength += wordLength
-                currentChunkLength += wordLength
             }
         }
 
