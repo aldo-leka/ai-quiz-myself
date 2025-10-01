@@ -198,7 +198,7 @@ export default function HostMessage({ message, onComplete }: HostMessageProps) {
                 onComplete={handleChunkComplete}
                 isWaitingForTap={waitingForTap}
             />
-            <span className="ml-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="ml-2 text-xs text-muted-foreground">
                 {waitingForTap ? '(tap to continue)' : '(tap to skip)'}
             </span>
         </div>
