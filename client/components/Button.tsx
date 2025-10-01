@@ -11,7 +11,7 @@ interface ButtonProps {
 export default function Button({ className = "", onClick, children, selected = false, icon, centered = false, disabled = false }: ButtonProps) {
     const baseClasses = `h-12 px-4 text-sm ${centered ? 'justify-center' : 'text-left'} flex items-center gap-2`
     const bgClass = selected ? "bg-muted-foreground text-white" : "bg-secondary"
-    const disabledClass = disabled ? "opacity-50 cursor-not-allowed" : ""
+    const disabledClass = disabled ? "cursor-not-allowed" : "" // opacity-50
 
     return (
         <button

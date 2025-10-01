@@ -14,11 +14,15 @@ const SCENE_PROMPTS = {
 - The more they get right, the more money they win
 - Get the audience excited and hyped up!
 
-Use "|||" to separate dramatic beats/pauses. Be energetic and build excitement!
+Use delimiters to separate dramatic beats/pauses with speed indicators:
+- "|||fast|||" for quick transitions (welcome, acknowledgments)
+- "|||medium|||" for normal pacing
+- "|||slow|||" for dramatic pauses
+Be energetic and build excitement!
 Keep it to 3-5 segments maximum.
 Do NOT use asterisks for actions - only speak your lines.
 
-Example: "Welcome to Who Wants to Be a Millionaire!|||You are 14 questions away from one million dollars.|||The rules are simple: the more you get right, the more money you win.|||You have 2 lifelines to help along the way: 50-50, and ask the host.|||Are you ready to play?|||Audience, are you ready to play?|||Okay, we are ready to play. Let's play Who Wants to Be a Millionaire!"`,
+Example: "Welcome to Who Wants to Be a Millionaire!|||fast|||You are 14 questions away from one million dollars.|||fast|||The rules are simple: the more you get right, the more money you win.|||medium|||You have 2 lifelines to help along the way: 50-50, and ask the host.|||medium|||Are you ready to play?|||fast|||Audience, are you ready to play?|||slow|||Okay, we are ready to play. Let's play Who Wants to Be a Millionaire!"`,
 
     BEGIN_QUESTION: (currentSetting) => `You are the host introducing a new question. The player is ready to see the next question.
 
@@ -30,10 +34,10 @@ Game State:
 
 Read out the question and all 4 options dramatically. Build excitement based on the money value.
 For higher values, add more tension and drama.
-Use "|||" to separate dramatic beats.
+Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
 Keep it to 2-4 segments.
 
-Example: "At your monitor, the first question for $${currentSetting.moneyValue}: ${currentSetting.question}|||${currentSetting.options?.[0]}...|||${currentSetting.options?.[1]}...|||${currentSetting.options?.[2]}...|||or ${currentSetting.options?.[3]}?"`,
+Example: "At your monitor, the first question for $${currentSetting.moneyValue}: ${currentSetting.question}|||fast|||${currentSetting.options?.[0]}...|||fast|||${currentSetting.options?.[1]}...|||fast|||${currentSetting.options?.[2]}...|||medium|||or ${currentSetting.options?.[3]}?"`,
 
     NEXT_QUESTION: (currentSetting) => `You are the host transitioning to the next question after a correct answer.
 
@@ -64,13 +68,13 @@ Build SUSPENSE before revealing if they're right or wrong:
 2. Build dramatic tension (more for higher values)
 3. Finally reveal if correct or wrong
 
-Use "|||" to separate dramatic beats.
+Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
 For correct: celebrate appropriately for the money level
 For wrong: show disappointment/shock based on money level
 
-Example (correct): "You've selected ${selectedAnswer}...|||${currentSetting.moneyValue >= 100000 ? 'For $' + currentSetting.moneyValue + ', ' : ''}Let me see if that's right...|||And... that is CORRECT!|||${selectedAnswer} is indeed the right answer!"
+Example (correct): "You've selected ${selectedAnswer}...|||medium|||${currentSetting.moneyValue >= 100000 ? 'For $' + currentSetting.moneyValue + ', ' : ''}Let me see if that's right...|||slow|||And... that is CORRECT!|||fast|||${selectedAnswer} is indeed the right answer!"
 
-Example (wrong): "You've selected ${selectedAnswer}...|||Oh no...|||I'm sorry, but that's incorrect.|||The correct answer was ${currentSetting.correctAnswer}."`,
+Example (wrong): "You've selected ${selectedAnswer}...|||medium|||Oh no...|||slow|||I'm sorry, but that's incorrect.|||fast|||The correct answer was ${currentSetting.correctAnswer}."`,
 
     TIME_WARNING: (currentSetting) => `You are the host commenting on the remaining time.
 
@@ -111,8 +115,8 @@ Example: "Alright, let me help you out...|||I can tell you that it's definitely 
 }
 
 router.post('/host', async (req, res) => {
-    res.status(500).json({ error: 'Failed to communicate with host' })
-    return
+    // res.status(500).json({ error: 'Failed to communicate with host' })
+    // return
 
     const { history, currentSetting, action, actionType, additionalData } = req.body
 

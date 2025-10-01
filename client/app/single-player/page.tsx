@@ -7,9 +7,10 @@ import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {LOADING_ACTIONS, OPTION_REVEAL_DELAY} from "@/lib/constants";
+import {LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY} from "@/lib/constants";
 import confetti from "canvas-confetti";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
+import HostMessage from "@/components/HostMessage";
 
 export default function SinglePlayer() {
     const {state} = useGame()
@@ -22,9 +23,16 @@ export default function SinglePlayer() {
     const [finalAnswerBtnSelected, setFinalAnswerBtnSelected] = useState(false)
     const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([])
     const [hostMessage, setHostMessage] = useState<string>("")
+    const [hostMessageOnComplete, setHostMessageOnComplete] = useState<(() => void) | undefined>(undefined)
     const hostMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const [visibleOptions, setVisibleOptions] = useState<number>(0)
     const optionsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const [usedLifelines, setUsedLifelines] = useState({
+        fiftyFifty: false,
+        askHost: false
+    })
+    const [optionsDisabled, setOptionsDisabled] = useState(true)
+    const [lifelineUsedThisQuestion, setLifelineUsedThisQuestion] = useState(false)
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
 
@@ -52,7 +60,7 @@ export default function SinglePlayer() {
     }, [])
 
     async function startGame() {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/gemini`)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz`)
         const data = await response.json()
         if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
         setIsLoading(false)
@@ -71,11 +79,8 @@ export default function SinglePlayer() {
         })
 
         if (hostResponse) {
-            const segments = hostResponse.split('|||').map(s => s.trim())
-            displayHostMessageSegments(segments, () => {
-                // After welcome, begin first question
-                beginFirstQuestion()
-            })
+            setHostMessage(hostResponse)
+            setHostMessageOnComplete(() => beginFirstQuestion)
         } else {
             // Host unresponsive, proceed without welcome
             beginFirstQuestion()
@@ -84,6 +89,9 @@ export default function SinglePlayer() {
 
     async function beginFirstQuestion() {
         setGameState('playing')
+        setOptionsDisabled(true)
+        setSelectedAnswerIndex(null)
+        setLifelineUsedThisQuestion(false)
 
         const hostResponse = await sendAction({
             actionType: 'BEGIN_QUESTION',
@@ -94,13 +102,12 @@ export default function SinglePlayer() {
         })
 
         if (hostResponse) {
-            const segments = hostResponse.split('|||').map(s => s.trim())
-            // Start revealing options immediately
-            revealOptions()
-            // Display host message segments alongside option reveals
-            displayHostMessageSegments(segments, () => {
+            setHostMessage(hostResponse)
+            setHostMessageOnComplete(() => () => {
                 // After host finishes narrating, timer should already be running
             })
+            // Start revealing options immediately
+            revealOptions()
         } else {
             // Host unresponsive, proceed with game
             revealOptions()
@@ -109,6 +116,7 @@ export default function SinglePlayer() {
 
     function revealOptions() {
         setVisibleOptions(0)
+        setOptionsDisabled(true)
         let currentOption = 0
 
         const revealNext = () => {
@@ -117,7 +125,8 @@ export default function SinglePlayer() {
             if (currentOption < 4) {
                 optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
             } else {
-                // All options revealed, start countdown
+                // All options revealed, enable buttons and start countdown
+                setOptionsDisabled(false)
                 countdown(30, () => console.log('countdown done'))
             }
         }
@@ -149,8 +158,23 @@ export default function SinglePlayer() {
         setSelectedAnswerIndex(selectedIndex)
     }
 
+    function handleFiftyFifty() {
+        setUsedLifelines(prev => ({ ...prev, fiftyFifty: true }))
+        setLifelineUsedThisQuestion(true)
+        // TODO: Implement 50:50 lifeline logic
+        console.log('50:50 lifeline used')
+    }
+
+    function handleAskHost() {
+        setUsedLifelines(prev => ({ ...prev, askHost: true }))
+        setLifelineUsedThisQuestion(true)
+        // TODO: Implement ask host lifeline logic
+        console.log('Ask host lifeline used')
+    }
+
     async function confirmFinalAnswer() {
         setFinalAnswerBtnSelected(true)
+        setOptionsDisabled(true)
         if (timerRef.current) clearInterval(timerRef.current)
 
         const currentQuestion = questions[currentQuestionIndex!]
@@ -168,39 +192,11 @@ export default function SinglePlayer() {
         })
 
         if (hostResponse) {
-            // Split by delimiter and display segments with pauses
-            const segments = hostResponse.split('|||').map(s => s.trim())
-            displayHostMessageSegments(segments, () => revealAnswer())
+            setHostMessage(hostResponse)
+            setHostMessageOnComplete(() => revealAnswer)
         } else {
             // Skip host talk on error, reveal answer immediately
             revealAnswer()
-        }
-    }
-
-    function displayHostMessageSegments(segments: string[], onComplete?: () => void) {
-        let index = 0
-        setHostMessage(segments[0])
-
-        const displayNext = () => {
-            index++
-            if (index < segments.length) {
-                setHostMessage(prev => prev + ' ' + segments[index])
-                hostMessageTimeoutRef.current = setTimeout(displayNext, 1500)
-            } else {
-                // All segments displayed
-                if (onComplete) {
-                    hostMessageTimeoutRef.current = setTimeout(onComplete, 2000)
-                }
-            }
-        }
-
-        if (segments.length > 1) {
-            hostMessageTimeoutRef.current = setTimeout(displayNext, 1500)
-        } else {
-            // Only one segment
-            if (onComplete) {
-                hostMessageTimeoutRef.current = setTimeout(onComplete, 2000)
-            }
         }
     }
 
@@ -273,7 +269,7 @@ export default function SinglePlayer() {
                  backgroundSize: '8px 8px'
              } : {}}>
             {/* Conversation History Sidebar */}
-            {isDevelopment && <div className="w-64 border-r border-border p-4 overflow-y-auto bg-background">
+            {isDevelopment && <div className="w-64 border-r border-border p-4 overflow-y-auto bg-background fixed left-0 top-0 h-screen">
                 <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Conversation History</h3>
                 <div className="space-y-2">
                     {conversationHistory.map((msg, index) => (
@@ -283,7 +279,7 @@ export default function SinglePlayer() {
                                 : 'bg-secondary text-foreground'
                         }`}>
                             <div className="font-semibold mb-1 capitalize">{msg.role}:</div>
-                            <div className="text-foreground/80">{msg.content}</div>
+                            <div className={`text-foreground/80 ${msg.role === 'host' ? 'line-clamp-3' : ''}`}>{msg.content}</div>
                         </div>
                     ))}
                     {conversationHistory.length === 0 && (
@@ -305,25 +301,28 @@ export default function SinglePlayer() {
                 </h2>
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                     <Button
-                        disabled
+                        disabled={optionsDisabled}
                         selected={selectedAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
                         {gameState === 'playing' && visibleOptions >= 1 && `A: ${questions[currentQuestionIndex!].options[0]}`}
                     </Button>
                     <Button
+                        disabled={optionsDisabled}
                         selected={selectedAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
                         {gameState === 'playing' && visibleOptions >= 2 && `B: ${questions[currentQuestionIndex!].options[1]}`}
                     </Button>
                     <Button
+                        disabled={optionsDisabled}
                         selected={selectedAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
                         {gameState === 'playing' && visibleOptions >= 3 && `C: ${questions[currentQuestionIndex!].options[2]}`}
                     </Button>
                     <Button
+                        disabled={optionsDisabled}
                         selected={selectedAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
@@ -332,10 +331,10 @@ export default function SinglePlayer() {
                 </div>
 
                 {selectedAnswerIndex != null && <div className="flex items-center justify-between mb-4 sm:mb-6">
-                    <div className="px-3 py-2 text-sm font-medium">
+                    <div className={`px-3 py-2 text-sm font-medium ${finalAnswerBtnSelected ? 'opacity-50' : ''}`}>
                         Is this your final answer?
                     </div>
-                    <CircularButton disabled onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
+                    <CircularButton disabled={finalAnswerBtnSelected} onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
                         YES
                     </CircularButton>
                 </div>}
@@ -343,8 +342,8 @@ export default function SinglePlayer() {
                 <div className="flex justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
                     <Button
                         className="flex-1 sm:w-32 md:w-36 mb-2"
-                        onClick={() => {
-                        }}
+                        disabled={optionsDisabled || usedLifelines.fiftyFifty || lifelineUsedThisQuestion}
+                        onClick={handleFiftyFifty}
                         centered
                     >
                         50:50
@@ -352,20 +351,18 @@ export default function SinglePlayer() {
                     <Button
                         className="flex-1 sm:w-36 md:w-40 mb-2"
                         icon={<User size={16}/>}
-                        onClick={() => {
-                        }}
+                        disabled={optionsDisabled || usedLifelines.askHost || lifelineUsedThisQuestion}
+                        onClick={handleAskHost}
                         centered
                     >
                         Ask the host
                     </Button>
                 </div>
 
-                {hostMessage && <div className="mb-4 sm:mb-6 text-xs sm:text-sm text-foreground">
-                    <span className="font-semibold">Host:</span> {hostMessage}
-                </div>}
+                {hostMessage && <HostMessage message={hostMessage} onComplete={hostMessageOnComplete} />}
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
-                    {[500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000].map((amount, index) => (
+                    {MONEY_LADDER.map((amount, index) => (
                         <div
                             key={amount}
                             className={`
