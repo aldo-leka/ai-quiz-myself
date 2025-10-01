@@ -7,7 +7,7 @@ import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {loadingActions} from "@/lib/constants";
+import {LOADING_ACTIONS, OPTION_REVEAL_DELAY} from "@/lib/constants";
 import confetti from "canvas-confetti";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
 
@@ -23,6 +23,8 @@ export default function SinglePlayer() {
     const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([])
     const [hostMessage, setHostMessage] = useState<string>("")
     const hostMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const [visibleOptions, setVisibleOptions] = useState<number>(0)
+    const optionsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
 
@@ -42,6 +44,7 @@ export default function SinglePlayer() {
             if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
             if (confettiBtnTimeoutRef.current) clearTimeout(confettiBtnTimeoutRef.current)
             if (hostMessageTimeoutRef.current) clearTimeout(hostMessageTimeoutRef.current)
+            if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
         }
     }, [])
 
@@ -52,7 +55,25 @@ export default function SinglePlayer() {
         setIsLoading(false)
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
-        countdown(30, () => console.log('countdown done'))
+        revealOptions()
+    }
+
+    function revealOptions() {
+        setVisibleOptions(0)
+        let currentOption = 0
+
+        const revealNext = () => {
+            currentOption++
+            setVisibleOptions(currentOption)
+            if (currentOption < 4) {
+                optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
+            } else {
+                // All options revealed, start countdown
+                countdown(30, () => console.log('countdown done'))
+            }
+        }
+
+        optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
     }
 
     function countdown(seconds: number, callback: () => void){
@@ -133,8 +154,8 @@ export default function SinglePlayer() {
 
     function startLoadingSequence() {
         const getRandomAction = () => {
-            const randomIndex = Math.floor(Math.random() * loadingActions.length)
-            return loadingActions[randomIndex]
+            const randomIndex = Math.floor(Math.random() * LOADING_ACTIONS.length)
+            return LOADING_ACTIONS[randomIndex]
         }
 
         setLoadingAction(getRandomAction())
@@ -186,17 +207,16 @@ export default function SinglePlayer() {
     }
 
     const timerPercentage = remainingTime !== null && totalTime !== null ? (remainingTime / totalTime) * 100 : 100
-    const showGrid = false
-    const showConversationHistory = false
+    const isDevelopment = process.env.NODE_ENV === 'development';
 
     return (
         <div className="min-h-screen flex"
-             style={showGrid ? {
+             style={isDevelopment ? {
                  backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px)',
                  backgroundSize: '8px 8px'
              } : {}}>
             {/* Conversation History Sidebar */}
-            {showConversationHistory && <div className="w-64 border-r border-border p-4 overflow-y-auto bg-background">
+            {isDevelopment && <div className="w-64 border-r border-border p-4 overflow-y-auto bg-background">
                 <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Conversation History</h3>
                 <div className="space-y-2">
                     {conversationHistory.map((msg, index) => (
@@ -231,25 +251,25 @@ export default function SinglePlayer() {
                         selected={selectedAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
-                        A: {questions[currentQuestionIndex!].options[0]}
+                        {visibleOptions >= 1 && `A: ${questions[currentQuestionIndex!].options[0]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
-                        B: {questions[currentQuestionIndex!].options[1]}
+                        {visibleOptions >= 2 && `B: ${questions[currentQuestionIndex!].options[1]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
-                        C: {questions[currentQuestionIndex!].options[2]}
+                        {visibleOptions >= 3 && `C: ${questions[currentQuestionIndex!].options[2]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
-                        D: {questions[currentQuestionIndex!].options[3]}
+                        {visibleOptions >= 4 && `D: ${questions[currentQuestionIndex!].options[3]}`}
                     </Button>
                 </div>
 
@@ -267,6 +287,7 @@ export default function SinglePlayer() {
                         className="flex-1 sm:w-32 md:w-36 mb-2"
                         onClick={() => {
                         }}
+                        centered
                     >
                         50:50
                     </Button>
@@ -275,6 +296,7 @@ export default function SinglePlayer() {
                         icon={<User size={16}/>}
                         onClick={() => {
                         }}
+                        centered
                     >
                         Ask the host
                     </Button>

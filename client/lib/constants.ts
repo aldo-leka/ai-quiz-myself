@@ -1,6 +1,7 @@
-export const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
+export const MONEY_LADDER = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
+export const OPTION_REVEAL_DELAY = 2000
 
-export const loadingActions = [
+export const LOADING_ACTIONS = [
     "Warming up the spotlight",
     "Cueing dramatic music",
     "Adjusting the lifelines",
