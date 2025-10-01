@@ -305,6 +305,7 @@ export default function SinglePlayer() {
                 </h2>
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                     <Button
+                        disabled
                         selected={selectedAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
@@ -334,7 +335,7 @@ export default function SinglePlayer() {
                     <div className="px-3 py-2 text-sm font-medium">
                         Is this your final answer?
                     </div>
-                    <CircularButton onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
+                    <CircularButton disabled onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
                         YES
                     </CircularButton>
                 </div>}

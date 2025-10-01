@@ -111,6 +111,9 @@ Example: "Alright, let me help you out...|||I can tell you that it's definitely 
 }
 
 router.post('/host', async (req, res) => {
+    res.status(500).json({ error: 'Failed to communicate with host' })
+    return
+
     const { history, currentSetting, action, actionType, additionalData } = req.body
 
     // Build context from history
@@ -240,7 +243,7 @@ router.get('/generate-quiz', async (req, res) => {
 })
 
 router.get('/gemini', async (req, res) => {
-    await new Promise(resolve => setTimeout(resolve, 5000))
+    await new Promise(resolve => setTimeout(resolve, 2000))
     res.json({
         "questions": [
             {
