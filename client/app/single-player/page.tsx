@@ -267,7 +267,7 @@ export default function SinglePlayer() {
     const isDevelopment = process.env.NODE_ENV === 'development';
 
     return (
-        <div className="min-h-screen flex"
+        <div className="min-h-screen flex select-none"
              style={isDevelopment ? {
                  backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px)',
                  backgroundSize: '8px 8px'
