@@ -7,7 +7,7 @@ import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {loadingActions, moneyLadder} from "@/lib/constants";
+import {loadingActions} from "@/lib/constants";
 import confetti from "canvas-confetti";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
 
@@ -22,8 +22,6 @@ export default function SinglePlayer() {
     const [finalAnswerBtnSelected, setFinalAnswerBtnSelected] = useState(false)
     const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([])
     const [hostMessage, setHostMessage] = useState<string>("")
-    const [hostMessageSegments, setHostMessageSegments] = useState<string[]>([])
-    const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number>(0)
     const hostMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
@@ -98,8 +96,6 @@ export default function SinglePlayer() {
         if (hostResponse) {
             // Split by delimiter and display segments with pauses
             const segments = hostResponse.split('|||').map(s => s.trim())
-            setHostMessageSegments(segments)
-            setCurrentSegmentIndex(0)
             displayHostMessageSegments(segments)
         } else {
             // Skip host talk on error, reveal answer immediately
@@ -114,7 +110,6 @@ export default function SinglePlayer() {
         const displayNext = () => {
             index++
             if (index < segments.length) {
-                setCurrentSegmentIndex(index)
                 setHostMessage(prev => prev + ' ' + segments[index])
                 hostMessageTimeoutRef.current = setTimeout(displayNext, 1500)
             } else {
