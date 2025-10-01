@@ -5,51 +5,171 @@ import { GoogleGenAI } from "@google/genai"
 const router = express.Router()
 const gemini = new GoogleGenAI({})
 
-router.post('/host-talk', async (req, res) => {
-    const { history, currentSetting, action } = req.body
+// Scene-specific system prompts for different parts of the game
+const SCENE_PROMPTS = {
+    WELCOME: (moneyValue) => `You are the charismatic host of "Who Wants to Be a Millionaire". The player just arrived on stage. Welcome them warmly and explain the game:
+- The player is competing for $1,000,000
+- They start at $${moneyValue} and work their way up through 14 questions
+- They have 2 lifelines: 50-50 (removes 2 wrong answers) and Ask the Host (you give a hint)
+- The more they get right, the more money they win
+- Get the audience excited and hyped up!
+
+Use "|||" to separate dramatic beats/pauses. Be energetic and build excitement!
+Keep it to 3-5 segments maximum.
+Do NOT use asterisks for actions - only speak your lines.
+
+Example: "Welcome to Who Wants to Be a Millionaire!|||You are 14 questions away from one million dollars.|||The rules are simple: the more you get right, the more money you win.|||You have 2 lifelines to help along the way: 50-50, and ask the host.|||Are you ready to play?|||Audience, are you ready to play?|||Okay, we are ready to play. Let's play Who Wants to Be a Millionaire!"`,
+
+    BEGIN_QUESTION: (currentSetting) => `You are the host introducing a new question. The player is ready to see the next question.
+
+Game State:
+- Money Value: $${currentSetting.moneyValue}
+- Question: ${currentSetting.question}
+- Options: ${currentSetting.options?.join(', ')}
+- Difficulty: ${currentSetting.difficulty}
+
+Read out the question and all 4 options dramatically. Build excitement based on the money value.
+For higher values, add more tension and drama.
+Use "|||" to separate dramatic beats.
+Keep it to 2-4 segments.
+
+Example: "At your monitor, the first question for $${currentSetting.moneyValue}: ${currentSetting.question}|||${currentSetting.options?.[0]}...|||${currentSetting.options?.[1]}...|||${currentSetting.options?.[2]}...|||or ${currentSetting.options?.[3]}?"`,
+
+    NEXT_QUESTION: (currentSetting) => `You are the host transitioning to the next question after a correct answer.
+
+Game State:
+- Money Value: $${currentSetting.moneyValue}
+- Question: ${currentSetting.question}
+- Options: ${currentSetting.options?.join(', ')}
+- Previous Money: Was less, now at $${currentSetting.moneyValue}
+
+Congratulate them briefly on the previous answer, then introduce the next question.
+Increase drama as money values get higher.
+Use "|||" to separate dramatic beats.
+
+Example: "Excellent work! You're now playing for $${currentSetting.moneyValue}|||Let's see your next question...|||${currentSetting.question}|||Is it ${currentSetting.options?.[0]}, ${currentSetting.options?.[1]}, ${currentSetting.options?.[2]}, or ${currentSetting.options?.[3]}?"`,
+
+    FINAL_ANSWER_CONFIRM: (currentSetting, selectedAnswer, isCorrect) => `You are the host reacting to the player's final answer selection.
+
+Game State:
+- Money Value: $${currentSetting.moneyValue}
+- Question: ${currentSetting.question}
+- Selected Answer: ${selectedAnswer}
+- Correct Answer: ${currentSetting.correctAnswer}
+- Is Correct: ${isCorrect}
+- Time Remaining: ${currentSetting.remainingTime}s
+
+Build SUSPENSE before revealing if they're right or wrong:
+1. React to their selection with uncertainty
+2. Build dramatic tension (more for higher values)
+3. Finally reveal if correct or wrong
+
+Use "|||" to separate dramatic beats.
+For correct: celebrate appropriately for the money level
+For wrong: show disappointment/shock based on money level
+
+Example (correct): "You've selected ${selectedAnswer}...|||${currentSetting.moneyValue >= 100000 ? 'For $' + currentSetting.moneyValue + ', ' : ''}Let me see if that's right...|||And... that is CORRECT!|||${selectedAnswer} is indeed the right answer!"
+
+Example (wrong): "You've selected ${selectedAnswer}...|||Oh no...|||I'm sorry, but that's incorrect.|||The correct answer was ${currentSetting.correctAnswer}."`,
+
+    TIME_WARNING: (currentSetting) => `You are the host commenting on the remaining time.
+
+Game State:
+- Time Remaining: ${currentSetting.remainingTime}s
+- Money Value: $${currentSetting.moneyValue}
+
+Make a brief, urgent comment about the time running out.
+Keep it to 1-2 segments maximum.
+Use "|||" for dramatic pause if needed.
+
+Example: "Time is running out!|||Better make a decision soon!"`,
+
+    LIFELINE_5050: (currentSetting, remainingOptions) => `You are the host acknowledging the player used the 50-50 lifeline.
+
+Game State:
+- Money Value: $${currentSetting.moneyValue}
+- Remaining Options: ${remainingOptions?.join(', ')}
+
+Announce the lifeline usage and reveal which 2 options remain.
+Keep it brief and clear.
+
+Example: "You've chosen 50-50!|||Let's remove two incorrect answers...|||That leaves you with ${remainingOptions?.[0]} and ${remainingOptions?.[1]}."`,
+
+    LIFELINE_ASK_HOST: (currentSetting) => `You are the host being asked for help by the player.
+
+Game State:
+- Money Value: $${currentSetting.moneyValue}
+- Question: ${currentSetting.question}
+- Options: ${currentSetting.options?.join(', ')}
+- Correct Answer: ${currentSetting.correctAnswer}
+
+Give a helpful hint that narrows it down but doesn't give away the answer completely.
+Be supportive but maintain the game's challenge.
+Use "|||" for dramatic pauses.
+
+Example: "Alright, let me help you out...|||I can tell you that it's definitely not ${currentSetting.options?.find(o => o !== currentSetting.correctAnswer)}...|||And between the remaining options, think about what makes sense historically."`,
+}
+
+router.post('/host', async (req, res) => {
+    const { history, currentSetting, action, actionType, additionalData } = req.body
 
     // Build context from history
     const conversationContext = history?.map(msg =>
         `${msg.role === 'player' ? 'Player' : 'Host'}: ${msg.content}`
     ).join('\n') || ''
 
-    // Determine drama level based on money value
-    const moneyValue = currentSetting?.moneyValue || 0
-    const dramaLevel = moneyValue >= 100000 ? 'very high' : moneyValue >= 10000 ? 'high' : 'moderate'
+    // Determine which scene prompt to use based on actionType
+    let systemPrompt = ''
 
-    const systemPrompt = `You are the charismatic and suspenseful host of "Who Wants to Be a Millionaire". Your personality:
+    switch (actionType) {
+        case 'WELCOME':
+            systemPrompt = SCENE_PROMPTS.WELCOME(currentSetting?.moneyValue || 500)
+            break
+        case 'BEGIN_QUESTION':
+            systemPrompt = SCENE_PROMPTS.BEGIN_QUESTION(currentSetting)
+            break
+        case 'NEXT_QUESTION':
+            systemPrompt = SCENE_PROMPTS.NEXT_QUESTION(currentSetting)
+            break
+        case 'FINAL_ANSWER_CONFIRM':
+            const isCorrect = additionalData?.selectedAnswer === currentSetting?.correctAnswer
+            systemPrompt = SCENE_PROMPTS.FINAL_ANSWER_CONFIRM(
+                currentSetting,
+                additionalData?.selectedAnswer,
+                isCorrect
+            )
+            break
+        case 'TIME_WARNING':
+            systemPrompt = SCENE_PROMPTS.TIME_WARNING(currentSetting)
+            break
+        case 'LIFELINE_5050':
+            systemPrompt = SCENE_PROMPTS.LIFELINE_5050(currentSetting, additionalData?.remainingOptions)
+            break
+        case 'LIFELINE_ASK_HOST':
+            systemPrompt = SCENE_PROMPTS.LIFELINE_ASK_HOST(currentSetting)
+            break
+        default:
+            // Fallback to generic host response
+            const moneyValue = currentSetting?.moneyValue || 0
+            const dramaLevel = moneyValue >= 100000 ? 'very high' : moneyValue >= 10000 ? 'high' : 'moderate'
 
-- Build SUSPENSE and DRAMA in your responses, especially for higher money values
-- Use "|||" as a delimiter to separate dramatic beats/pauses in your response
-- Each segment between ||| delimiters should be shown sequentially with timing at the frontend
-- Reference the game setting naturally (time remaining, difficulty, money at stake)
-- Your tone varies based on money value: playful at low amounts, intensely dramatic at high amounts
-- When player selects an answer, you NEVER immediately confirm if it's right or wrong. Build tension first.
-- Sometimes cast doubt even on correct answers to create suspense: "Are you sure about that?|||Let me see..."
-- For wrong answers on easy questions, show gentle disappointment; for high-value questions, show dramatic shock
-- Be encouraging but mischievous - you want players to succeed but love the drama
-- Keep total response concise (2-5 segments with ||| delimiters)
-- Current drama level: ${dramaLevel}
-
-Example responses:
-- "You've selected D...|||Interesting choice...|||That is... CORRECT! Well done!"
-- "Ooh, running out of time there!|||Better make a decision soon!"
-- "For $500,000...|||Are you absolutely certain?|||This is your final answer?"
+            systemPrompt = `You are the charismatic host of "Who Wants to Be a Millionaire".
 
 Game State:
 - Money Value: $${moneyValue}
 - Time Remaining: ${currentSetting?.remainingTime}s
-- Difficulty: ${currentSetting?.difficulty}
 - Question: ${currentSetting?.question}
-- Correct Answer: ${currentSetting?.correctAnswer}
-- Options: ${currentSetting?.options?.join(', ')}
+- Drama level: ${dramaLevel}
 
 Recent Conversation:
 ${conversationContext}
 
 Player Action: ${action}
 
-Respond as the host. Be theatrical and create suspense using ||| delimiters. Do NOT use asterisks for actions - only speak your lines.`
+Respond naturally as the host. Use "|||" for dramatic pauses. Keep it brief (2-3 segments).`
+    }
+
+    systemPrompt += `\n\nRecent Conversation History:\n${conversationContext}`
 
     try {
         const response = await gemini.models.generateContent({
@@ -120,7 +240,7 @@ router.get('/generate-quiz', async (req, res) => {
 })
 
 router.get('/gemini', async (req, res) => {
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise(resolve => setTimeout(resolve, 5000))
     res.json({
         "questions": [
             {

@@ -35,6 +35,9 @@ export default function SinglePlayer() {
     const [confettiBtnSelected, setConfettiBtnSelected] = useState(false)
     const confettiBtnTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+    // Game state
+    const [gameState, setGameState] = useState<'welcome' | 'playing' | 'finished'>('welcome')
+
     useEffect(() => {
         startGame()
         startLoadingSequence()
@@ -55,7 +58,53 @@ export default function SinglePlayer() {
         setIsLoading(false)
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
-        revealOptions()
+
+        // Welcome the player
+        await welcomePlayer()
+    }
+
+    async function welcomePlayer() {
+        const hostResponse = await sendAction({
+            actionType: 'WELCOME',
+            action: 'Player has entered the game',
+            currentQuestionIndex: 0
+        })
+
+        if (hostResponse) {
+            const segments = hostResponse.split('|||').map(s => s.trim())
+            displayHostMessageSegments(segments, () => {
+                // After welcome, begin first question
+                beginFirstQuestion()
+            })
+        } else {
+            // Host unresponsive, proceed without welcome
+            beginFirstQuestion()
+        }
+    }
+
+    async function beginFirstQuestion() {
+        setGameState('playing')
+
+        const hostResponse = await sendAction({
+            actionType: 'BEGIN_QUESTION',
+            action: 'Presenting the first question',
+            currentQuestion: questions[0],
+            currentQuestionIndex: 0,
+            remainingTime: 30
+        })
+
+        if (hostResponse) {
+            const segments = hostResponse.split('|||').map(s => s.trim())
+            // Start revealing options immediately
+            revealOptions()
+            // Display host message segments alongside option reveals
+            displayHostMessageSegments(segments, () => {
+                // After host finishes narrating, timer should already be running
+            })
+        } else {
+            // Host unresponsive, proceed with game
+            revealOptions()
+        }
     }
 
     function revealOptions() {
@@ -107,24 +156,28 @@ export default function SinglePlayer() {
         const currentQuestion = questions[currentQuestionIndex!]
         const selectedAnswer = currentQuestion.options[selectedAnswerIndex!]
 
-        const hostResponse = await sendAction(
-            `Player selected answer: ${selectedAnswer}. Final answer confirmed.`,
+        const hostResponse = await sendAction({
+            actionType: 'FINAL_ANSWER_CONFIRM',
+            action: `Player selected answer: ${selectedAnswer}. Final answer confirmed.`,
             currentQuestion,
-            currentQuestionIndex!,
-            remainingTime
-        )
+            currentQuestionIndex: currentQuestionIndex!,
+            remainingTime,
+            additionalData: {
+                selectedAnswer
+            }
+        })
 
         if (hostResponse) {
             // Split by delimiter and display segments with pauses
             const segments = hostResponse.split('|||').map(s => s.trim())
-            displayHostMessageSegments(segments)
+            displayHostMessageSegments(segments, () => revealAnswer())
         } else {
             // Skip host talk on error, reveal answer immediately
             revealAnswer()
         }
     }
 
-    function displayHostMessageSegments(segments: string[]) {
+    function displayHostMessageSegments(segments: string[], onComplete?: () => void) {
         let index = 0
         setHostMessage(segments[0])
 
@@ -134,16 +187,20 @@ export default function SinglePlayer() {
                 setHostMessage(prev => prev + ' ' + segments[index])
                 hostMessageTimeoutRef.current = setTimeout(displayNext, 1500)
             } else {
-                // All segments displayed, now reveal answer
-                hostMessageTimeoutRef.current = setTimeout(revealAnswer, 2000)
+                // All segments displayed
+                if (onComplete) {
+                    hostMessageTimeoutRef.current = setTimeout(onComplete, 2000)
+                }
             }
         }
 
         if (segments.length > 1) {
             hostMessageTimeoutRef.current = setTimeout(displayNext, 1500)
         } else {
-            // Only one segment, reveal answer after short delay
-            hostMessageTimeoutRef.current = setTimeout(revealAnswer, 2000)
+            // Only one segment
+            if (onComplete) {
+                hostMessageTimeoutRef.current = setTimeout(onComplete, 2000)
+            }
         }
     }
 
@@ -244,32 +301,32 @@ export default function SinglePlayer() {
                     />
                 </div>
                 <h2 className="py-3 sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
-                    {questions[currentQuestionIndex!].question}
+                    {gameState === 'playing' && questions[currentQuestionIndex!].question}
                 </h2>
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                     <Button
                         selected={selectedAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
-                        {visibleOptions >= 1 && `A: ${questions[currentQuestionIndex!].options[0]}`}
+                        {gameState === 'playing' && visibleOptions >= 1 && `A: ${questions[currentQuestionIndex!].options[0]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
-                        {visibleOptions >= 2 && `B: ${questions[currentQuestionIndex!].options[1]}`}
+                        {gameState === 'playing' && visibleOptions >= 2 && `B: ${questions[currentQuestionIndex!].options[1]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
-                        {visibleOptions >= 3 && `C: ${questions[currentQuestionIndex!].options[2]}`}
+                        {gameState === 'playing' && visibleOptions >= 3 && `C: ${questions[currentQuestionIndex!].options[2]}`}
                     </Button>
                     <Button
                         selected={selectedAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
-                        {visibleOptions >= 4 && `D: ${questions[currentQuestionIndex!].options[3]}`}
+                        {gameState === 'playing' && visibleOptions >= 4 && `D: ${questions[currentQuestionIndex!].options[3]}`}
                     </Button>
                 </div>
 

@@ -11,37 +11,62 @@ interface UseHostCommunicationProps {
     setConversationHistory: React.Dispatch<React.SetStateAction<{ role: string; content: string }[]>>
 }
 
+export type HostActionType =
+    | 'WELCOME'
+    | 'BEGIN_QUESTION'
+    | 'NEXT_QUESTION'
+    | 'FINAL_ANSWER_CONFIRM'
+    | 'TIME_WARNING'
+    | 'LIFELINE_5050'
+    | 'LIFELINE_ASK_HOST'
+
+interface SendActionParams {
+    actionType: HostActionType
+    action: string
+    currentQuestion?: SingleGameQuestion
+    currentQuestionIndex?: number
+    remainingTime?: number | null
+    additionalData?: {
+        selectedAnswer?: string
+        remainingOptions?: string[]
+    }
+}
+
 export function useHostCommunication({ conversationHistory, setConversationHistory }: UseHostCommunicationProps) {
     const [state, setState] = useState<HostCommunicationState>({
         isLoading: false,
         error: false
     })
 
-    const sendAction = async (
-        action: string,
-        currentQuestion: SingleGameQuestion,
-        currentQuestionIndex: number,
-        remainingTime: number | null
-    ): Promise<string | null> => {
+    const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
+
+    const sendAction = async ({
+        actionType,
+        action,
+        currentQuestion,
+        currentQuestionIndex = 0,
+        remainingTime = null,
+        additionalData = {}
+    }: SendActionParams): Promise<string | null> => {
         setState({ isLoading: true, error: false })
 
-        const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
-
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/host-talk`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/host`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     history: conversationHistory,
-                    currentSetting: {
+                    currentSetting: currentQuestion ? {
                         moneyValue: moneyLadder[currentQuestionIndex],
                         remainingTime: remainingTime,
                         difficulty: currentQuestion.difficulty,
                         question: currentQuestion.question,
                         correctAnswer: currentQuestion.correctAnswer,
                         options: currentQuestion.options
-                    },
-                    action
+                    } : { moneyValue: moneyLadder[currentQuestionIndex] },
+                    action,
+                    actionType,
+                    additionalData
                 })
             })
 
