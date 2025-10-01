@@ -56,6 +56,8 @@ export interface SingleGameQuestion {
     options: string[]
     correctAnswer: string
     explanations: string[]
+    difficulty?: string
+    subject?: string
 }
 
 export type SinglePlayerGamePhase = "waiting" | "intro" | "question" | "explanation" | "completed";

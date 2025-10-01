@@ -11,6 +11,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN
 
 const app = express()
 app.use(cors({origin: CORS_ORIGIN, credentials: true}))
+app.use(express.json())
 app.use('/api', api);
 
 const server = createServer(app)

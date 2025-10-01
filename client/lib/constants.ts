@@ -1,3 +1,5 @@
+export const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
+
 export const loadingActions = [
     "Warming up the spotlight",
     "Cueing dramatic music",

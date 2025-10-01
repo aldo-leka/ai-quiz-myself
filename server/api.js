@@ -1,10 +1,73 @@
 import './config.js'
 import express from 'express'
-import OpenAI from 'openai'
 import { GoogleGenAI } from "@google/genai"
 
 const router = express.Router()
 const gemini = new GoogleGenAI({})
+
+router.post('/host-talk', async (req, res) => {
+    const { history, currentSetting, action } = req.body
+
+    // Build context from history
+    const conversationContext = history?.map(msg =>
+        `${msg.role === 'player' ? 'Player' : 'Host'}: ${msg.content}`
+    ).join('\n') || ''
+
+    // Determine drama level based on money value
+    const moneyValue = currentSetting?.moneyValue || 0
+    const dramaLevel = moneyValue >= 100000 ? 'very high' : moneyValue >= 10000 ? 'high' : 'moderate'
+
+    const systemPrompt = `You are the charismatic and suspenseful host of "Who Wants to Be a Millionaire". Your personality:
+
+- Build SUSPENSE and DRAMA in your responses, especially for higher money values
+- Use "|||" as a delimiter to separate dramatic beats/pauses in your response
+- Each segment between ||| delimiters should be shown sequentially with timing at the frontend
+- Reference the game setting naturally (time remaining, difficulty, money at stake)
+- Your tone varies based on money value: playful at low amounts, intensely dramatic at high amounts
+- When player selects an answer, you NEVER immediately confirm if it's right or wrong. Build tension first.
+- Sometimes cast doubt even on correct answers to create suspense: "Are you sure about that?|||Let me see..."
+- For wrong answers on easy questions, show gentle disappointment; for high-value questions, show dramatic shock
+- Be encouraging but mischievous - you want players to succeed but love the drama
+- Keep total response concise (2-5 segments with ||| delimiters)
+- Current drama level: ${dramaLevel}
+
+Example responses:
+- "You've selected D...|||Interesting choice...|||That is... CORRECT! Well done!"
+- "Ooh, running out of time there!|||Better make a decision soon!"
+- "For $500,000...|||Are you absolutely certain?|||This is your final answer?"
+
+Game State:
+- Money Value: $${moneyValue}
+- Time Remaining: ${currentSetting?.remainingTime}s
+- Difficulty: ${currentSetting?.difficulty}
+- Question: ${currentSetting?.question}
+- Correct Answer: ${currentSetting?.correctAnswer}
+- Options: ${currentSetting?.options?.join(', ')}
+
+Recent Conversation:
+${conversationContext}
+
+Player Action: ${action}
+
+Respond as the host. Be theatrical and create suspense using ||| delimiters. Do NOT use asterisks for actions - only speak your lines.`
+
+    try {
+        const response = await gemini.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: systemPrompt,
+        })
+
+        const hostMessage = response.text.trim()
+
+        res.json({
+            response: hostMessage
+        })
+
+    } catch (error) {
+        console.error('Host communication error:', error)
+        res.status(500).json({ error: 'Failed to communicate with host' })
+    }
+})
 
 router.get('/generate-quiz', async (req, res) => {
     const type = "multiple choice"
