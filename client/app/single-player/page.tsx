@@ -7,7 +7,7 @@ import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY} from "@/lib/constants";
+import {GAME_LENGTH, LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY} from "@/lib/constants";
 import confetti from "canvas-confetti";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
 import HostMessage from "@/components/HostMessage";
@@ -67,7 +67,6 @@ export default function SinglePlayer() {
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
 
-        // Welcome the player
         await welcomePlayer()
     }
 
@@ -127,7 +126,7 @@ export default function SinglePlayer() {
             } else {
                 // All options revealed, enable buttons and start countdown
                 setOptionsDisabled(false)
-                countdown(30, () => console.log('countdown done'))
+                countdown(GAME_LENGTH, () => console.log('countdown done'))
             }
         }
 
