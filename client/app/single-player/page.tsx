@@ -78,6 +78,7 @@ export default function SinglePlayer() {
         setOptionsDisabled(true)
         setVisibleOptions(0)
         optionCuesDetectedRef.current = false
+        setConversationHistory([])
 
         await welcomePlayer(data.questions)
     }
