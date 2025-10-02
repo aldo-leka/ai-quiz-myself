@@ -197,7 +197,7 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
         console.log('[HostMessage] Tap:', { waitingForTap, currentChunkIndex })
 
         if (!waitingForTap) {
-            // Tap during animation - AnimatedText will handle skip
+            // Tap during animation - let it bubble to AnimatedText for skip handling
             return
         }
 
@@ -248,11 +248,9 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
                 isWaitingForTap={waitingForTap}
                 onCharProgress={handleCharProgress}
             />
-            {waitingForTap && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                    (tap to continue)
-                </span>
-            )}
+            <span className="ml-2 text-xs text-muted-foreground">
+                (tap to {waitingForTap ? 'continue' : 'skip'})
+            </span>
         </div>
     )
 }
