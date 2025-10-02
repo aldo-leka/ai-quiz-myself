@@ -25,7 +25,6 @@ interface HostMessageProps {
     message: string
     onComplete?: () => void
     onOptionCue?: (option: 'A' | 'B' | 'C' | 'D') => void
-    onSkip?: () => void
 }
 
 // Parse message with speed delimiters like "text|||fast|||more text|||slow|||end"
@@ -147,10 +146,11 @@ function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[
     return chunks.length > 0 ? chunks : [{ parts: [] }]
 }
 
-export default function HostMessage({ message, onComplete, onOptionCue, onSkip }: HostMessageProps) {
+export default function HostMessage({ message, onComplete, onOptionCue }: HostMessageProps) {
     const [currentChunkIndex, setCurrentChunkIndex] = useState(0)
     const [waitingForTap, setWaitingForTap] = useState(false)
     const [currentCharCount, setCurrentCharCount] = useState(0)
+    const [completedCharsCount, setCompletedCharsCount] = useState(0)
 
     const chunksRef = useRef<Chunk[]>([])
     const optionCuesRef = useRef<Map<number, 'A' | 'B' | 'C' | 'D'>>(new Map())
@@ -171,6 +171,7 @@ export default function HostMessage({ message, onComplete, onOptionCue, onSkip }
         setCurrentChunkIndex(0)
         setWaitingForTap(false)
         setCurrentCharCount(0)
+        setCompletedCharsCount(0)
     }, [message])
 
     // Check for option cues as character count increases
@@ -196,15 +197,19 @@ export default function HostMessage({ message, onComplete, onOptionCue, onSkip }
         console.log('[HostMessage] Tap:', { waitingForTap, currentChunkIndex })
 
         if (!waitingForTap) {
-            // Tap during animation - trigger skip callback immediately
-            if (onSkip) {
-                onSkip()
-            }
-            // Then pass it down to AnimatedText
+            // Tap during animation - AnimatedText will handle skip
             return
         }
 
-        // Player finished reading - move to next chunk
+        // Player finished reading - calculate completed chars and move to next chunk
+        const currentChunk = chunksRef.current[currentChunkIndex]
+        const chunkTextLength = currentChunk.parts
+            .filter(part => part.type === 'text')
+            .reduce((sum, part) => sum + (part.content?.length || 0), 0)
+
+        const newCompletedCount = completedCharsCount + chunkTextLength
+        setCompletedCharsCount(newCompletedCount)
+
         setWaitingForTap(false)
         const nextIndex = currentChunkIndex + 1
 
@@ -226,7 +231,8 @@ export default function HostMessage({ message, onComplete, onOptionCue, onSkip }
     }
 
     const handleCharProgress = (charCount: number) => {
-        setCurrentCharCount(charCount)
+        // Add completed chars from previous chunks to current animation progress
+        setCurrentCharCount(completedCharsCount + charCount)
     }
 
     return (
@@ -242,9 +248,11 @@ export default function HostMessage({ message, onComplete, onOptionCue, onSkip }
                 isWaitingForTap={waitingForTap}
                 onCharProgress={handleCharProgress}
             />
-            <span className="ml-2 text-xs text-muted-foreground">
-                {waitingForTap ? '(tap to continue)' : '(tap to skip)'}
-            </span>
+            {waitingForTap && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                    (tap to continue)
+                </span>
+            )}
         </div>
     )
 }

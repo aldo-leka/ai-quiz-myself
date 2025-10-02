@@ -177,29 +177,6 @@ export default function SinglePlayer() {
         }
     }
 
-    // Handle skip - reveal all options immediately and enable game
-    function handleSkipToEndState() {
-        console.log('[SinglePlayer] Skip triggered - revealing all options')
-
-        // Clear any pending timeouts
-        if (fallbackTimeoutRef.current) {
-            clearTimeout(fallbackTimeoutRef.current)
-            fallbackTimeoutRef.current = null
-        }
-        if (optionsTimeoutRef.current) {
-            clearTimeout(optionsTimeoutRef.current)
-            optionsTimeoutRef.current = null
-        }
-
-        // Reveal all options immediately
-        setVisibleOptions(4)
-        setOptionsDisabled(false)
-
-        // Start countdown if not already running
-        if (timerRef.current === null && gameState === 'playing') {
-            countdown(GAME_LENGTH, () => console.log('countdown done'))
-        }
-    }
 
     function countdown(seconds: number, callback: () => void){
         if (timerRef.current) {
@@ -433,7 +410,7 @@ export default function SinglePlayer() {
                     </Button>
                 </div>
 
-                {hostMessage && <HostMessage message={hostMessage} onComplete={hostMessageOnComplete} onOptionCue={handleOptionCue} onSkip={handleSkipToEndState} />}
+                {hostMessage && <HostMessage message={hostMessage} onComplete={hostMessageOnComplete} onOptionCue={handleOptionCue} />}
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
                     {MONEY_LADDER.map((amount, index) => (
