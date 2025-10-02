@@ -29,6 +29,7 @@ export default function SinglePlayer() {
     const optionsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const optionCuesDetectedRef = useRef<boolean>(false)
+    const partialRevealTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const [usedLifelines, setUsedLifelines] = useState({
         fiftyFifty: false,
         askHost: false
@@ -63,6 +64,7 @@ export default function SinglePlayer() {
             if (hostMessageTimeoutRef.current) clearTimeout(hostMessageTimeoutRef.current)
             if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
             if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
+            if (partialRevealTimeoutRef.current) clearTimeout(partialRevealTimeoutRef.current)
         }
     }, [])
 
@@ -180,12 +182,43 @@ export default function SinglePlayer() {
         const optionIndex = option.charCodeAt(0) - 'A'.charCodeAt(0) + 1
         setVisibleOptions(prev => Math.max(prev, optionIndex))
 
+        // Clear any existing partial reveal timeout
+        if (partialRevealTimeoutRef.current) {
+            clearTimeout(partialRevealTimeoutRef.current)
+        }
+
         // If all options revealed, enable buttons and start countdown
         if (optionIndex >= 4) {
             setOptionsDisabled(false)
             if (timerRef.current === null) {
                 countdown(GAME_LENGTH, () => console.log('countdown done'))
             }
+        } else {
+            // Some options detected but not all - start timeout to complete reveal if needed
+            partialRevealTimeoutRef.current = setTimeout(() => {
+                setVisibleOptions(current => {
+                    if (current < 4) {
+                        console.log('[SinglePlayer] Partial reveal timeout - completing option reveal')
+                        // Reveal remaining options sequentially
+                        let nextOption = current
+                        const revealNext = () => {
+                            nextOption++
+                            setVisibleOptions(nextOption)
+                            if (nextOption < 4) {
+                                optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
+                            } else {
+                                // All options revealed, enable buttons and start countdown
+                                setOptionsDisabled(false)
+                                if (timerRef.current === null) {
+                                    countdown(GAME_LENGTH, () => console.log('countdown done'))
+                                }
+                            }
+                        }
+                        optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
+                    }
+                    return current
+                })
+            }, OPTION_CUE_FALLBACK_TIMEOUT)
         }
     }
 
@@ -343,6 +376,7 @@ export default function SinglePlayer() {
         if (timerRef.current) clearInterval(timerRef.current)
         if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
         if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
+        if (partialRevealTimeoutRef.current) clearTimeout(partialRevealTimeoutRef.current)
 
         const hostResponse = await sendAction({
             actionType: 'BEGIN_QUESTION',
