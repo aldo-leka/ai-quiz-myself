@@ -7,7 +7,7 @@ import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {GAME_LENGTH, LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY, OPTION_CUE_FALLBACK_TIMEOUT} from "@/lib/constants";
+import {GAME_LENGTH, LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY, OPTION_CUE_FALLBACK_TIMEOUT, CHECKPOINTS} from "@/lib/constants";
 import confetti from "canvas-confetti";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
 import HostMessage from "@/components/HostMessage";
@@ -539,17 +539,22 @@ export default function SinglePlayer() {
                 {hostMessage && <HostMessage message={hostMessage} onComplete={hostMessageOnComplete} onOptionCue={handleOptionCue} />}
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
-                    {MONEY_LADDER.map((amount, index) => (
-                        <div
-                            key={amount}
-                            className={`
-                            h-8 sm:h-10 md:h-12 flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-medium px-1
-                            ${index <= currentQuestionIndex! ? 'bg-muted-foreground text-white' : 'bg-secondary text-foreground'}
-                        `}
-                        >
-                            {amount.toLocaleString()}
-                        </div>
-                    ))}
+                    {MONEY_LADDER.map((amount, index) => {
+                        const isCheckpoint = CHECKPOINTS.includes(index)
+                        const isCheckpointReached = isCheckpoint && index <= currentQuestionIndex!
+
+                        return (
+                            <div
+                                key={amount}
+                                className={`
+                                h-8 sm:h-10 md:h-12 flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-medium px-1
+                                ${isCheckpointReached ? 'bg-green-600 text-white' : index <= currentQuestionIndex! ? 'bg-muted-foreground text-white' : 'bg-secondary text-foreground'}
+                            `}
+                            >
+                                {amount.toLocaleString()}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         </div>
