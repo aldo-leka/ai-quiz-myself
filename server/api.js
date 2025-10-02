@@ -120,20 +120,25 @@ Use "|||" for dramatic pauses.
 
 Example: "You've chosen 50-50!|||Let's see which two options remain!"`,
 
-    LIFELINE_ASK_HOST: (currentSetting) => `You are the host being asked for help by the player.
+    LIFELINE_ASK_HOST: (currentSetting, remainingOptions) => `You are the host being asked for help by the player.
 
 Game State:
 - Money Value: $${currentSetting.moneyValue}
 - Question: ${currentSetting.question}
-- Options: ${currentSetting.options?.join(', ')}
-- Correct Answer: ${currentSetting.correctAnswer}
+- Options: ${remainingOptions?.join(', ')}
 
 CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
-Give a brief helpful hint that narrows it down without giving away the answer.
-Use "|||" for dramatic pauses.
+CRITICAL INSTRUCTIONS:
+1. Start with "Here's what I think..."
+2. Use your knowledge and reasoning to determine what you believe is the correct answer
+3. Provide intelligent reasoning about why you think it's the right answer
+4. You MUST end by saying "Final answer" after stating what you believe is correct
+5. Be helpful and confident, like an intelligent game show host using their general knowledge
+6. Use "|||" for dramatic pauses
+7. IMPORTANT: You don't know the correct answer - you're genuinely using your knowledge to help
 
-Example: "Well, I can tell you it's definitely not ${currentSetting.options?.find(o => o !== currentSetting.correctAnswer)}...|||Think carefully about the remaining options!"`,
+Example: "Here's what I think...|||Based on what I know about this topic, I'm fairly confident the answer is [your best guess].|||That just makes the most sense to me.|||Final answer!"`,
 }
 
 router.post('/host', async (req, res) => {
@@ -184,7 +189,7 @@ router.post('/host', async (req, res) => {
             systemPrompt = SCENE_PROMPTS.LIFELINE_5050(currentSetting, additionalData?.remainingOptions)
             break
         case 'LIFELINE_ASK_HOST':
-            systemPrompt = SCENE_PROMPTS.LIFELINE_ASK_HOST(currentSetting)
+            systemPrompt = SCENE_PROMPTS.LIFELINE_ASK_HOST(currentSetting, additionalData?.remainingOptions || currentSetting?.options)
             break
         default:
             // Fallback to generic host response

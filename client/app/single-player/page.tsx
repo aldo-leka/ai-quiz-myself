@@ -34,7 +34,7 @@ export default function SinglePlayer() {
         askHost: false
     })
     const [optionsDisabled, setOptionsDisabled] = useState(true)
-    const [lifelineUsedThisQuestion, setLifelineUsedThisQuestion] = useState(false)
+    const [eliminatedOptions, setEliminatedOptions] = useState<number[]>([])
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
 
@@ -97,7 +97,7 @@ export default function SinglePlayer() {
         setGameState('playing')
         setOptionsDisabled(true)
         setSelectedAnswerIndex(null)
-        setLifelineUsedThisQuestion(false)
+        setEliminatedOptions([])
         setVisibleOptions(0)
         optionCuesDetectedRef.current = false
 
@@ -202,18 +202,67 @@ export default function SinglePlayer() {
         setSelectedAnswerIndex(selectedIndex)
     }
 
-    function handleFiftyFifty() {
+    async function handleFiftyFifty() {
         setUsedLifelines(prev => ({ ...prev, fiftyFifty: true }))
-        setLifelineUsedThisQuestion(true)
-        // TODO: Implement 50:50 lifeline logic
-        console.log('50:50 lifeline used')
+
+        const currentQuestion = questions[currentQuestionIndex!]
+        const correctAnswerIndex = currentQuestion.options.indexOf(currentQuestion.correctAnswer)
+
+        // Get all incorrect answer indices
+        const incorrectIndices = [0, 1, 2, 3].filter(i => i !== correctAnswerIndex)
+
+        // Randomly select 2 incorrect answers to eliminate
+        const shuffled = incorrectIndices.sort(() => Math.random() - 0.5)
+        const toEliminate = shuffled.slice(0, 2)
+
+        setEliminatedOptions(toEliminate)
+
+        // Prepare remaining options for the host (correct answer + 1 wrong answer)
+        const remainingIndices = [0, 1, 2, 3].filter(i => !toEliminate.includes(i))
+        const remainingOptions = remainingIndices.map(i => `${String.fromCharCode(65 + i)}: ${currentQuestion.options[i]}`)
+
+        const hostResponse = await sendAction({
+            actionType: 'LIFELINE_5050',
+            action: 'Player used 50:50 lifeline',
+            currentQuestion,
+            currentQuestionIndex: currentQuestionIndex!,
+            remainingTime,
+            additionalData: {
+                remainingOptions
+            }
+        })
+
+        if (hostResponse) {
+            setHostMessage(hostResponse)
+        }
     }
 
-    function handleAskHost() {
+    async function handleAskHost() {
         setUsedLifelines(prev => ({ ...prev, askHost: true }))
-        setLifelineUsedThisQuestion(true)
-        // TODO: Implement ask host lifeline logic
-        console.log('Ask host lifeline used')
+
+        const currentQuestion = questions[currentQuestionIndex!]
+
+        // If 50:50 was used, only show the host the remaining options
+        let remainingOptionsForHost
+        if (eliminatedOptions.length > 0) {
+            const remainingIndices = [0, 1, 2, 3].filter(i => !eliminatedOptions.includes(i))
+            remainingOptionsForHost = remainingIndices.map(i => `${String.fromCharCode(65 + i)}: ${currentQuestion.options[i]}`)
+        }
+
+        const hostResponse = await sendAction({
+            actionType: 'LIFELINE_ASK_HOST',
+            action: 'Player is asking the host for help',
+            currentQuestion,
+            currentQuestionIndex: currentQuestionIndex!,
+            remainingTime,
+            additionalData: remainingOptionsForHost ? {
+                remainingOptions: remainingOptionsForHost
+            } : undefined
+        })
+
+        if (hostResponse) {
+            setHostMessage(hostResponse)
+        }
     }
 
     async function confirmFinalAnswer() {
@@ -352,32 +401,32 @@ export default function SinglePlayer() {
                 </h2>
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                     <Button
-                        disabled={optionsDisabled}
+                        disabled={optionsDisabled || eliminatedOptions.includes(0)}
                         selected={selectedAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
-                        {gameState === 'playing' && visibleOptions >= 1 && `A: ${questions[currentQuestionIndex!].options[0]}`}
+                        {gameState === 'playing' && visibleOptions >= 1 && !eliminatedOptions.includes(0) && `A: ${questions[currentQuestionIndex!].options[0]}`}
                     </Button>
                     <Button
-                        disabled={optionsDisabled}
+                        disabled={optionsDisabled || eliminatedOptions.includes(1)}
                         selected={selectedAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
-                        {gameState === 'playing' && visibleOptions >= 2 && `B: ${questions[currentQuestionIndex!].options[1]}`}
+                        {gameState === 'playing' && visibleOptions >= 2 && !eliminatedOptions.includes(1) && `B: ${questions[currentQuestionIndex!].options[1]}`}
                     </Button>
                     <Button
-                        disabled={optionsDisabled}
+                        disabled={optionsDisabled || eliminatedOptions.includes(2)}
                         selected={selectedAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
-                        {gameState === 'playing' && visibleOptions >= 3 && `C: ${questions[currentQuestionIndex!].options[2]}`}
+                        {gameState === 'playing' && visibleOptions >= 3 && !eliminatedOptions.includes(2) && `C: ${questions[currentQuestionIndex!].options[2]}`}
                     </Button>
                     <Button
-                        disabled={optionsDisabled}
+                        disabled={optionsDisabled || eliminatedOptions.includes(3)}
                         selected={selectedAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
-                        {gameState === 'playing' && visibleOptions >= 4 && `D: ${questions[currentQuestionIndex!].options[3]}`}
+                        {gameState === 'playing' && visibleOptions >= 4 && !eliminatedOptions.includes(3) && `D: ${questions[currentQuestionIndex!].options[3]}`}
                     </Button>
                 </div>
 
@@ -393,7 +442,7 @@ export default function SinglePlayer() {
                 <div className="flex justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
                     <Button
                         className="flex-1 sm:w-32 md:w-36 mb-2"
-                        disabled={optionsDisabled || usedLifelines.fiftyFifty || lifelineUsedThisQuestion}
+                        disabled={optionsDisabled || usedLifelines.fiftyFifty}
                         onClick={handleFiftyFifty}
                         centered
                     >
@@ -402,7 +451,7 @@ export default function SinglePlayer() {
                     <Button
                         className="flex-1 sm:w-36 md:w-40 mb-2"
                         icon={<User size={16}/>}
-                        disabled={optionsDisabled || usedLifelines.askHost || lifelineUsedThisQuestion}
+                        disabled={optionsDisabled || usedLifelines.askHost}
                         onClick={handleAskHost}
                         centered
                     >
