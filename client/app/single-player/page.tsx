@@ -35,6 +35,8 @@ export default function SinglePlayer() {
     })
     const [optionsDisabled, setOptionsDisabled] = useState(true)
     const [eliminatedOptions, setEliminatedOptions] = useState<number[]>([])
+    const [revealedAnswer, setRevealedAnswer] = useState(false)
+    const [correctAnswerIndex, setCorrectAnswerIndex] = useState<number | null>(null)
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
 
@@ -69,6 +71,13 @@ export default function SinglePlayer() {
         setIsLoading(false)
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
+        setSelectedAnswerIndex(null)
+        setFinalAnswerBtnSelected(false)
+        setRevealedAnswer(false)
+        setCorrectAnswerIndex(null)
+        setOptionsDisabled(true)
+        setVisibleOptions(0)
+        optionCuesDetectedRef.current = false
 
         await welcomePlayer(data.questions)
     }
@@ -301,8 +310,62 @@ export default function SinglePlayer() {
     }
 
     function revealAnswer() {
-        // TODO: Implement answer reveal logic
-        console.log('Revealing answer...')
+        const currentQuestion = questions[currentQuestionIndex!]
+        const correctIdx = currentQuestion.options.indexOf(currentQuestion.correctAnswer)
+
+        setRevealedAnswer(true)
+        setCorrectAnswerIndex(correctIdx)
+    }
+
+    async function handleNextQuestion() {
+        const nextIndex = currentQuestionIndex! + 1
+
+        if (nextIndex >= questions.length) {
+            // Game over - we'll implement this next
+            console.log('Game over!')
+            return
+        }
+
+        // Reset state for next question
+        setCurrentQuestionIndex(nextIndex)
+        setSelectedAnswerIndex(null)
+        setFinalAnswerBtnSelected(false)
+        setRevealedAnswer(false)
+        setCorrectAnswerIndex(null)
+        setOptionsDisabled(true)
+        setVisibleOptions(0)
+        optionCuesDetectedRef.current = false
+
+        if (timerRef.current) clearInterval(timerRef.current)
+        if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
+        if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
+
+        const hostResponse = await sendAction({
+            actionType: 'BEGIN_QUESTION',
+            action: `Presenting question ${nextIndex + 1}`,
+            currentQuestion: questions[nextIndex],
+            currentQuestionIndex: nextIndex,
+            remainingTime: 30
+        })
+
+        if (hostResponse) {
+            setHostMessage(hostResponse)
+            setHostMessageOnComplete(() => () => {
+                if (visibleOptions >= 4) {
+                    setOptionsDisabled(false)
+                    countdown(GAME_LENGTH, () => console.log('countdown done'))
+                }
+            })
+
+            fallbackTimeoutRef.current = setTimeout(() => {
+                if (!optionCuesDetectedRef.current) {
+                    console.log('[SinglePlayer] No option cues detected, falling back to automatic reveal')
+                    revealOptionsFallback()
+                }
+            }, OPTION_CUE_FALLBACK_TIMEOUT)
+        } else {
+            revealOptionsFallback()
+        }
     }
 
     function startLoadingSequence() {
@@ -402,40 +465,54 @@ export default function SinglePlayer() {
                 <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(0)}
-                        selected={selectedAnswerIndex === 0}
+                        selected={!finalAnswerBtnSelected && selectedAnswerIndex === 0}
+                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 0}
+                        correct={revealedAnswer && correctAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
                         {gameState === 'playing' && visibleOptions >= 1 && !eliminatedOptions.includes(0) && `A: ${questions[currentQuestionIndex!].options[0]}`}
                     </Button>
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(1)}
-                        selected={selectedAnswerIndex === 1}
+                        selected={!finalAnswerBtnSelected && selectedAnswerIndex === 1}
+                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 1}
+                        correct={revealedAnswer && correctAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
                         {gameState === 'playing' && visibleOptions >= 2 && !eliminatedOptions.includes(1) && `B: ${questions[currentQuestionIndex!].options[1]}`}
                     </Button>
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(2)}
-                        selected={selectedAnswerIndex === 2}
+                        selected={!finalAnswerBtnSelected && selectedAnswerIndex === 2}
+                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 2}
+                        correct={revealedAnswer && correctAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
                         {gameState === 'playing' && visibleOptions >= 3 && !eliminatedOptions.includes(2) && `C: ${questions[currentQuestionIndex!].options[2]}`}
                     </Button>
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(3)}
-                        selected={selectedAnswerIndex === 3}
+                        selected={!finalAnswerBtnSelected && selectedAnswerIndex === 3}
+                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 3}
+                        correct={revealedAnswer && correctAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
                         {gameState === 'playing' && visibleOptions >= 4 && !eliminatedOptions.includes(3) && `D: ${questions[currentQuestionIndex!].options[3]}`}
                     </Button>
                 </div>
 
-                {selectedAnswerIndex != null && <div className="flex items-center justify-between mb-4 sm:mb-6">
+                {selectedAnswerIndex != null && !revealedAnswer && <div className="flex items-center justify-between mb-4 sm:mb-6">
                     <div className={`px-3 py-2 text-sm font-medium ${finalAnswerBtnSelected ? 'opacity-50' : ''}`}>
                         Is this your final answer?
                     </div>
                     <CircularButton disabled={finalAnswerBtnSelected} onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
                         YES
+                    </CircularButton>
+                </div>}
+
+                {revealedAnswer && <div className="flex items-center justify-center mb-4 sm:mb-6">
+                    <CircularButton onClick={handleNextQuestion}>
+                        Continue
                     </CircularButton>
                 </div>}
 

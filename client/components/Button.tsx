@@ -6,11 +6,23 @@ interface ButtonProps {
     icon?: React.ReactNode
     centered?: boolean
     disabled?: boolean
+    orange?: boolean
+    correct?: boolean
 }
 
-export default function Button({ className = "", onClick, children, selected = false, icon, centered = false, disabled = false }: ButtonProps) {
+export default function Button({ className = "", onClick, children, selected = false, icon, centered = false, disabled = false, orange = false, correct = false }: ButtonProps) {
     const baseClasses = `h-12 px-4 text-sm ${centered ? 'justify-center' : 'text-left'} flex items-center gap-2`
-    const bgClass = selected ? "bg-muted-foreground text-white" : "bg-secondary"
+
+    // Priority: correct (green) > orange (final answer) > selected (gray) > default
+    let bgClass = "bg-secondary"
+    if (correct) {
+        bgClass = "bg-green-600 text-white"
+    } else if (orange) {
+        bgClass = "bg-orange-500 text-white"
+    } else if (selected) {
+        bgClass = "bg-muted-foreground text-white"
+    }
+
     const disabledClass = disabled ? "cursor-not-allowed" : "" // opacity-50
 
     return (
