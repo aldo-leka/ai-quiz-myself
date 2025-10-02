@@ -69,7 +69,7 @@ export default function SinglePlayer() {
     }, [])
 
     async function startGame() {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/gemini`)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz`)
         const data = await response.json()
         if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
         setIsLoading(false)
