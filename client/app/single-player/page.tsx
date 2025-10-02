@@ -49,6 +49,8 @@ export default function SinglePlayer() {
 
     // Game state
     const [gameState, setGameState] = useState<'welcome' | 'playing' | 'finished'>('welcome')
+    const [gameOver, setGameOver] = useState(false)
+    const [wonAmount, setWonAmount] = useState(0)
 
     useEffect(() => {
         startGame()
@@ -322,8 +324,9 @@ export default function SinglePlayer() {
         const nextIndex = currentQuestionIndex! + 1
 
         if (nextIndex >= questions.length) {
-            // Game over - we'll implement this next
-            console.log('Game over!')
+            // Game completed - player won the final amount
+            setWonAmount(MONEY_LADDER[currentQuestionIndex!])
+            setGameOver(true)
             return
         }
 
@@ -398,8 +401,51 @@ export default function SinglePlayer() {
         }, 500)
     }
 
+    function handlePlayAgain() {
+        setGameOver(false)
+        setWonAmount(0)
+        setUsedLifelines({ fiftyFifty: false, askHost: false })
+        setEliminatedOptions([])
+        setGameState('welcome')
+        setIsLoading(true)
+        startLoadingSequence()
+        startGame()
+    }
+
+    function handleQuit() {
+        console.log("quit...")
+    }
+
     if (!state.isRegistered) {
         return <NicknamePrompt/>
+    }
+
+    if (gameOver) {
+        return (
+            <div className="min-h-screen grid grid-cols-3 grid-rows-3">
+                <div className="col-start-2 row-start-1 flex flex-col items-center justify-end">
+                    <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-center">
+                        {wonAmount > 0 ? 'Congratulations!' : 'Game Over'}
+                    </h2>
+                    <div className="text-sm text-center min-h-[60px] flex items-center">
+                        {wonAmount > 0 ? (
+                            <span>You won <span className="text-green-600 font-semibold">${wonAmount.toLocaleString()}</span></span>
+                        ) : (
+                            <span>Try again...</span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="col-start-2 row-start-2 flex items-center justify-center gap-4">
+                    <CircularButton onClick={handlePlayAgain}>
+                        Play Again
+                    </CircularButton>
+                    <CircularButton onClick={handleQuit}>
+                        Quit
+                    </CircularButton>
+                </div>
+            </div>
+        )
     }
 
     if (isLoading) {
@@ -508,6 +554,21 @@ export default function SinglePlayer() {
                     </div>
                     <CircularButton disabled={finalAnswerBtnSelected} onClick={confirmFinalAnswer} selected={finalAnswerBtnSelected}>
                         YES
+                    </CircularButton>
+                </div>}
+
+                {selectedAnswerIndex == null && !revealedAnswer && currentQuestionIndex! > 0 && <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <div className="px-3 py-2 text-sm font-medium opacity-0">
+                        Placeholder
+                    </div>
+                    <CircularButton onClick={() => {
+                        setWonAmount(MONEY_LADDER[currentQuestionIndex! - 1])
+                        setGameOver(true)
+                    }}>
+                        <div className="flex flex-col items-center">
+                            <span className="text-green-600 font-semibold">${MONEY_LADDER[currentQuestionIndex! - 1].toLocaleString()}</span>
+                            <span>CASH OUT</span>
+                        </div>
                     </CircularButton>
                 </div>}
 
