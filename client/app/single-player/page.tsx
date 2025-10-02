@@ -434,7 +434,7 @@ export default function SinglePlayer() {
                             key={amount}
                             className={`
                             h-8 sm:h-10 md:h-12 flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-medium px-1
-                            ${index < 2 ? 'bg-muted-foreground text-white' : 'bg-secondary text-foreground'}
+                            ${index <= currentQuestionIndex! ? 'bg-muted-foreground text-white' : 'bg-secondary text-foreground'}
                         `}
                         >
                             {amount.toLocaleString()}
