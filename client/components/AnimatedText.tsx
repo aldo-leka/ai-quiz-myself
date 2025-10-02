@@ -15,6 +15,7 @@ interface AnimatedTextProps {
     chunkParts: ChunkPart[]
     onComplete?: () => void
     isWaitingForTap: boolean
+    onCharProgress?: (charCount: number) => void
 }
 
 const SPEEDS = {
@@ -26,7 +27,8 @@ const SPEEDS = {
 export default function AnimatedText({
     chunkParts,
     onComplete,
-    isWaitingForTap
+    isWaitingForTap,
+    onCharProgress
 }: AnimatedTextProps) {
     const [displayedText, setDisplayedText] = useState("")
     const [currentPartIndex, setCurrentPartIndex] = useState(0)
@@ -38,11 +40,13 @@ export default function AnimatedText({
     const currentIndexRef = useRef(0)
     const baseTextRef = useRef("")
     const onCompleteRef = useRef(onComplete)
+    const onCharProgressRef = useRef(onCharProgress)
 
-    // Keep onComplete ref up to date
+    // Keep refs up to date
     useEffect(() => {
         onCompleteRef.current = onComplete
-    }, [onComplete])
+        onCharProgressRef.current = onCharProgress
+    }, [onComplete, onCharProgress])
 
     // Reset when chunk parts change
     useEffect(() => {
@@ -122,7 +126,12 @@ export default function AnimatedText({
         intervalRef.current = setInterval(() => {
             if (currentIndexRef.current < text.length) {
                 currentIndexRef.current++
-                setDisplayedText(startBase + text.slice(0, currentIndexRef.current))
+                const newDisplayText = startBase + text.slice(0, currentIndexRef.current)
+                setDisplayedText(newDisplayText)
+                // Report character progress
+                if (onCharProgressRef.current) {
+                    onCharProgressRef.current(newDisplayText.length)
+                }
             } else {
                 clearInterval(intervalRef.current!)
                 baseTextRef.current += text

@@ -24,16 +24,29 @@ interface Chunk {
 interface HostMessageProps {
     message: string
     onComplete?: () => void
+    onOptionCue?: (option: 'A' | 'B' | 'C' | 'D') => void
+    onSkip?: () => void
 }
 
 // Parse message with speed delimiters like "text|||fast|||more text|||slow|||end"
-function parseMessage(message: string): Segment[] {
+// Also extracts option cues like |||option:A|||
+function parseMessage(message: string): { segments: Segment[], optionCues: Map<number, 'A' | 'B' | 'C' | 'D'> } {
     const parts = message.split('|||')
     const segments: Segment[] = []
+    const optionCues = new Map<number, 'A' | 'B' | 'C' | 'D'>()
+    let characterCount = 0
 
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i].trim()
         if (!part) continue
+
+        // Check if this part is an option cue
+        const optionMatch = part.match(/^option:([A-D])$/i)
+        if (optionMatch) {
+            const option = optionMatch[1].toUpperCase() as 'A' | 'B' | 'C' | 'D'
+            optionCues.set(characterCount, option)
+            continue
+        }
 
         // Check if this part is a speed indicator
         if (part === 'fast' || part === 'medium' || part === 'slow') {
@@ -48,9 +61,10 @@ function parseMessage(message: string): Segment[] {
                 : 'medium'
 
         segments.push({ text: part, speed })
+        characterCount += part.length
     }
 
-    return segments
+    return { segments, optionCues }
 }
 
 function getSuspenseDelay(speed: SuspenseSpeed): number {
@@ -133,24 +147,45 @@ function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[
     return chunks.length > 0 ? chunks : [{ parts: [] }]
 }
 
-export default function HostMessage({ message, onComplete }: HostMessageProps) {
+export default function HostMessage({ message, onComplete, onOptionCue, onSkip }: HostMessageProps) {
     const [currentChunkIndex, setCurrentChunkIndex] = useState(0)
     const [waitingForTap, setWaitingForTap] = useState(false)
+    const [currentCharCount, setCurrentCharCount] = useState(0)
 
     const chunksRef = useRef<Chunk[]>([])
+    const optionCuesRef = useRef<Map<number, 'A' | 'B' | 'C' | 'D'>>(new Map())
+    const firedCuesRef = useRef<Set<'A' | 'B' | 'C' | 'D'>>(new Set())
 
     useEffect(() => {
         console.log('[HostMessage] New message received')
-        const segments = parseMessage(message)
+        const { segments, optionCues } = parseMessage(message)
         const chunks = chunkSegmentsWithPauses(segments)
 
         console.log('[HostMessage] Total chunks:', chunks.length)
+        console.log('[HostMessage] Option cues detected:', Array.from(optionCues.entries()))
         console.log('[HostMessage] Chunks:', chunks)
 
         chunksRef.current = chunks
+        optionCuesRef.current = optionCues
+        firedCuesRef.current = new Set()
         setCurrentChunkIndex(0)
         setWaitingForTap(false)
+        setCurrentCharCount(0)
     }, [message])
+
+    // Check for option cues as character count increases
+    useEffect(() => {
+        if (!onOptionCue) return
+
+        // Check all cues at or before current character count
+        for (const [charPosition, option] of optionCuesRef.current.entries()) {
+            if (charPosition <= currentCharCount && !firedCuesRef.current.has(option)) {
+                console.log('[HostMessage] Firing option cue:', option, 'at char', charPosition)
+                firedCuesRef.current.add(option)
+                onOptionCue(option)
+            }
+        }
+    }, [currentCharCount, onOptionCue])
 
     const handleChunkComplete = () => {
         console.log('[HostMessage] Chunk animation complete, waiting for tap')
@@ -161,7 +196,11 @@ export default function HostMessage({ message, onComplete }: HostMessageProps) {
         console.log('[HostMessage] Tap:', { waitingForTap, currentChunkIndex })
 
         if (!waitingForTap) {
-            // Tap during animation - pass it down to AnimatedText
+            // Tap during animation - trigger skip callback immediately
+            if (onSkip) {
+                onSkip()
+            }
+            // Then pass it down to AnimatedText
             return
         }
 
@@ -186,6 +225,10 @@ export default function HostMessage({ message, onComplete }: HostMessageProps) {
         return null
     }
 
+    const handleCharProgress = (charCount: number) => {
+        setCurrentCharCount(charCount)
+    }
+
     return (
         <div
             className="mb-4 sm:mb-6 text-xs sm:text-sm text-foreground relative group cursor-pointer"
@@ -197,6 +240,7 @@ export default function HostMessage({ message, onComplete }: HostMessageProps) {
                 chunkParts={currentChunk.parts}
                 onComplete={handleChunkComplete}
                 isWaitingForTap={waitingForTap}
+                onCharProgress={handleCharProgress}
             />
             <span className="ml-2 text-xs text-muted-foreground">
                 {waitingForTap ? '(tap to continue)' : '(tap to skip)'}

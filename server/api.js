@@ -1,57 +1,71 @@
 import './config.js'
 import express from 'express'
 import { GoogleGenAI } from "@google/genai"
+import { MAX_HOST_SENTENCES } from './constants.js'
 
 const router = express.Router()
 const gemini = new GoogleGenAI({})
 
-// Scene-specific system prompts for different parts of the game
 const SCENE_PROMPTS = {
-    WELCOME: (moneyValue) => `You are the charismatic host of "Who Wants to Be a Millionaire". The player just arrived on stage. Welcome them warmly and explain the game:
-- The player is competing for $1,000,000
-- They start at $${moneyValue} and work their way up through 14 questions
-- They have 2 lifelines: 50-50 (removes 2 wrong answers) and Ask the Host (you give a hint)
-- The more they get right, the more money they win
-- Get the audience excited and hyped up!
+    WELCOME: (moneyValue, contestantName) => `You are the charismatic host of "Who Wants to Be a Millionaire". The player just arrived on stage. Welcome them warmly and briefly introduce the game.
+
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
+
+${contestantName ? `The contestant's name is ${contestantName}. Address them by name to make it personal.` : 'Welcome the contestant warmly without using their name.'}
 
 Use delimiters to separate dramatic beats/pauses with speed indicators:
 - "|||fast|||" for quick transitions (welcome, acknowledgments)
 - "|||medium|||" for normal pacing
 - "|||slow|||" for dramatic pauses
 Be energetic and build excitement!
-Keep it to 3-5 segments maximum.
 Do NOT use asterisks for actions - only speak your lines.
 
-Example: "Welcome to Who Wants to Be a Millionaire!|||fast|||You are 14 questions away from one million dollars.|||fast|||The rules are simple: the more you get right, the more money you win.|||medium|||You have 2 lifelines to help along the way: 50-50, and ask the host.|||medium|||Are you ready to play?|||fast|||Audience, are you ready to play?|||slow|||Okay, we are ready to play. Let's play Who Wants to Be a Millionaire!"`,
+Example format: "Welcome to Who Wants to Be a Millionaire!|||medium|||Are you ready to play for one million dollars?"`,
 
     BEGIN_QUESTION: (currentSetting) => `You are the host introducing a new question. The player is ready to see the next question.
 
-Game State:
-- Money Value: $${currentSetting.moneyValue}
-- Question: ${currentSetting.question}
-- Options: ${currentSetting.options?.join(', ')}
-- Difficulty: ${currentSetting.difficulty}
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
-Read out the question and all 4 options dramatically. Build excitement based on the money value.
-For higher values, add more tension and drama.
-Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
-Keep it to 2-4 segments.
+CRITICAL INSTRUCTIONS:
+1. You MUST read out this EXACT question word-for-word: "${currentSetting.question}"
+2. You MUST read out these EXACT four options in order:
+   - Option A: "${currentSetting.options?.[0]}"
+   - Option B: "${currentSetting.options?.[1]}"
+   - Option C: "${currentSetting.options?.[2]}"
+   - Option D: "${currentSetting.options?.[3]}"
+3. After mentioning each option, you MUST include the marker:
+   - After option A: |||option:A|||
+   - After option B: |||option:B|||
+   - After option C: |||option:C|||
+   - After option D: |||option:D|||
+4. The money value is: $${currentSetting.moneyValue}
 
-Example: "At your monitor, the first question for $${currentSetting.moneyValue}: ${currentSetting.question}|||fast|||${currentSetting.options?.[0]}...|||fast|||${currentSetting.options?.[1]}...|||fast|||${currentSetting.options?.[2]}...|||medium|||or ${currentSetting.options?.[3]}?"`,
+DO NOT make up your own question. DO NOT change the question or options. Use EXACTLY what is provided above.
+
+Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"`,
 
     NEXT_QUESTION: (currentSetting) => `You are the host transitioning to the next question after a correct answer.
 
-Game State:
-- Money Value: $${currentSetting.moneyValue}
-- Question: ${currentSetting.question}
-- Options: ${currentSetting.options?.join(', ')}
-- Previous Money: Was less, now at $${currentSetting.moneyValue}
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
-Congratulate them briefly on the previous answer, then introduce the next question.
-Increase drama as money values get higher.
-Use "|||" to separate dramatic beats.
+CRITICAL INSTRUCTIONS:
+1. Congratulate the player briefly on their correct answer
+2. You MUST read out this EXACT question word-for-word: "${currentSetting.question}"
+3. You MUST read out these EXACT four options in order:
+   - Option A: "${currentSetting.options?.[0]}"
+   - Option B: "${currentSetting.options?.[1]}"
+   - Option C: "${currentSetting.options?.[2]}"
+   - Option D: "${currentSetting.options?.[3]}"
+4. After mentioning each option, you MUST include the marker:
+   - After option A: |||option:A|||
+   - After option B: |||option:B|||
+   - After option C: |||option:C|||
+   - After option D: |||option:D|||
+5. The money value is: $${currentSetting.moneyValue}
 
-Example: "Excellent work! You're now playing for $${currentSetting.moneyValue}|||Let's see your next question...|||${currentSetting.question}|||Is it ${currentSetting.options?.[0]}, ${currentSetting.options?.[1]}, ${currentSetting.options?.[2]}, or ${currentSetting.options?.[3]}?"`,
+DO NOT make up your own question. DO NOT change the question or options. Use EXACTLY what is provided above.
+
+Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"`,
 
     FINAL_ANSWER_CONFIRM: (currentSetting, selectedAnswer, isCorrect) => `You are the host reacting to the player's final answer selection.
 
@@ -63,18 +77,14 @@ Game State:
 - Is Correct: ${isCorrect}
 - Time Remaining: ${currentSetting.remainingTime}s
 
-Build SUSPENSE before revealing if they're right or wrong:
-1. React to their selection with uncertainty
-2. Build dramatic tension (more for higher values)
-3. Finally reveal if correct or wrong
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
+Build brief suspense before revealing if they're right or wrong.
 Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
-For correct: celebrate appropriately for the money level
-For wrong: show disappointment/shock based on money level
 
-Example (correct): "You've selected ${selectedAnswer}...|||medium|||${currentSetting.moneyValue >= 100000 ? 'For $' + currentSetting.moneyValue + ', ' : ''}Let me see if that's right...|||slow|||And... that is CORRECT!|||fast|||${selectedAnswer} is indeed the right answer!"
+Example (correct): "You've selected ${selectedAnswer}...|||slow|||That is CORRECT!"
 
-Example (wrong): "You've selected ${selectedAnswer}...|||medium|||Oh no...|||slow|||I'm sorry, but that's incorrect.|||fast|||The correct answer was ${currentSetting.correctAnswer}."`,
+Example (wrong): "You've selected ${selectedAnswer}...|||slow|||I'm sorry, that's incorrect."`,
 
     TIME_WARNING: (currentSetting) => `You are the host commenting on the remaining time.
 
@@ -82,8 +92,9 @@ Game State:
 - Time Remaining: ${currentSetting.remainingTime}s
 - Money Value: $${currentSetting.moneyValue}
 
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
+
 Make a brief, urgent comment about the time running out.
-Keep it to 1-2 segments maximum.
 Use "|||" for dramatic pause if needed.
 
 Example: "Time is running out!|||Better make a decision soon!"`,
@@ -94,10 +105,12 @@ Game State:
 - Money Value: $${currentSetting.moneyValue}
 - Remaining Options: ${remainingOptions?.join(', ')}
 
-Announce the lifeline usage and reveal which 2 options remain.
-Keep it brief and clear.
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
-Example: "You've chosen 50-50!|||Let's remove two incorrect answers...|||That leaves you with ${remainingOptions?.[0]} and ${remainingOptions?.[1]}."`,
+Announce the lifeline usage briefly.
+Use "|||" for dramatic pauses.
+
+Example: "You've chosen 50-50!|||Let's see which two options remain!"`,
 
     LIFELINE_ASK_HOST: (currentSetting) => `You are the host being asked for help by the player.
 
@@ -107,11 +120,12 @@ Game State:
 - Options: ${currentSetting.options?.join(', ')}
 - Correct Answer: ${currentSetting.correctAnswer}
 
-Give a helpful hint that narrows it down but doesn't give away the answer completely.
-Be supportive but maintain the game's challenge.
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
+
+Give a brief helpful hint that narrows it down without giving away the answer.
 Use "|||" for dramatic pauses.
 
-Example: "Alright, let me help you out...|||I can tell you that it's definitely not ${currentSetting.options?.find(o => o !== currentSetting.correctAnswer)}...|||And between the remaining options, think about what makes sense historically."`,
+Example: "Well, I can tell you it's definitely not ${currentSetting.options?.find(o => o !== currentSetting.correctAnswer)}...|||Think carefully about the remaining options!"`,
 }
 
 router.post('/host', async (req, res) => {
@@ -119,6 +133,13 @@ router.post('/host', async (req, res) => {
     // return
 
     const { history, currentSetting, action, actionType, additionalData } = req.body
+
+    // DEBUG: Log the incoming request
+    console.log('=== HOST API DEBUG ===')
+    console.log('actionType:', actionType)
+    console.log('currentSetting:', JSON.stringify(currentSetting, null, 2))
+    console.log('additionalData:', JSON.stringify(additionalData, null, 2))
+    console.log('=====================')
 
     // Build context from history
     const conversationContext = history?.map(msg =>
@@ -130,7 +151,7 @@ router.post('/host', async (req, res) => {
 
     switch (actionType) {
         case 'WELCOME':
-            systemPrompt = SCENE_PROMPTS.WELCOME(currentSetting?.moneyValue || 500)
+            systemPrompt = SCENE_PROMPTS.WELCOME(currentSetting?.moneyValue || 500, additionalData?.contestantName)
             break
         case 'BEGIN_QUESTION':
             systemPrompt = SCENE_PROMPTS.BEGIN_QUESTION(currentSetting)
@@ -173,7 +194,9 @@ ${conversationContext}
 
 Player Action: ${action}
 
-Respond naturally as the host. Use "|||" for dramatic pauses. Keep it brief (2-3 segments).`
+CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
+
+Respond naturally as the host. Use "|||" for dramatic pauses.`
     }
 
     systemPrompt += `\n\nRecent Conversation History:\n${conversationContext}`
