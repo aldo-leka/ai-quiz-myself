@@ -246,6 +246,11 @@ export default function SinglePlayer() {
 
         const currentQuestion = questions[currentQuestionIndex!]
         const selectedAnswer = currentQuestion.options[selectedAnswerIndex!]
+        const correctAnswerIndex = currentQuestion.options.indexOf(currentQuestion.correctAnswer)
+
+        // Prepare explanations for the AI
+        const correctAnswerExplanation = currentQuestion.explanations[correctAnswerIndex]
+        const selectedAnswerExplanation = currentQuestion.explanations[selectedAnswerIndex!]
 
         const hostResponse = await sendAction({
             actionType: 'FINAL_ANSWER_CONFIRM',
@@ -254,7 +259,9 @@ export default function SinglePlayer() {
             currentQuestionIndex: currentQuestionIndex!,
             remainingTime,
             additionalData: {
-                selectedAnswer
+                selectedAnswer,
+                correctAnswerExplanation,
+                selectedAnswerExplanation: selectedAnswerIndex !== correctAnswerIndex ? selectedAnswerExplanation : undefined
             }
         })
 

@@ -67,7 +67,7 @@ DO NOT make up your own question. DO NOT change the question or options. Use EXA
 
 Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"`,
 
-    FINAL_ANSWER_CONFIRM: (currentSetting, selectedAnswer, isCorrect) => `You are the host reacting to the player's final answer selection.
+    FINAL_ANSWER_CONFIRM: (currentSetting, selectedAnswer, isCorrect, correctAnswerExplanation, selectedAnswerExplanation) => `You are the host reacting to the player's final answer selection.
 
 Game State:
 - Money Value: $${currentSetting.moneyValue}
@@ -77,14 +77,22 @@ Game State:
 - Is Correct: ${isCorrect}
 - Time Remaining: ${currentSetting.remainingTime}s
 
+Educational Context:
+- Correct Answer Explanation: ${correctAnswerExplanation}
+${selectedAnswerExplanation ? `- Selected Answer Explanation: ${selectedAnswerExplanation}` : ''}
+
 CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
 
-Build brief suspense before revealing if they're right or wrong.
-Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
+CRITICAL INSTRUCTIONS:
+1. Build brief suspense before revealing if they're right or wrong
+2. If CORRECT: Use the Correct Answer Explanation to explain why it's right, leaving the player smarter
+3. If WRONG: First acknowledge their choice briefly, then explain why the Selected Answer is incorrect using its explanation, THEN explain why the Correct Answer is right using its explanation - educate like a "Who Wants to Be a Millionaire" host
+4. Keep the tone warm and educational, never condescending
+5. Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
 
-Example (correct): "You've selected ${selectedAnswer}...|||slow|||That is CORRECT!"
+Example (correct): "You've selected ${selectedAnswer}...|||slow|||That is CORRECT!|||medium|||${correctAnswerExplanation}"
 
-Example (wrong): "You've selected ${selectedAnswer}...|||slow|||I'm sorry, that's incorrect."`,
+Example (wrong): "You've selected ${selectedAnswer}...|||slow|||I'm sorry, that's incorrect.|||medium|||${selectedAnswerExplanation ? `${selectedAnswerExplanation}` : ''} The correct answer is ${currentSetting.correctAnswer}.|||medium|||${correctAnswerExplanation}"`,
 
     TIME_WARNING: (currentSetting) => `You are the host commenting on the remaining time.
 
@@ -164,7 +172,9 @@ router.post('/host', async (req, res) => {
             systemPrompt = SCENE_PROMPTS.FINAL_ANSWER_CONFIRM(
                 currentSetting,
                 additionalData?.selectedAnswer,
-                isCorrect
+                isCorrect,
+                additionalData?.correctAnswerExplanation,
+                additionalData?.selectedAnswerExplanation
             )
             break
         case 'TIME_WARNING':

@@ -30,6 +30,8 @@ interface SendActionParams {
         selectedAnswer?: string
         remainingOptions?: string[]
         contestantName?: string
+        correctAnswerExplanation?: string
+        selectedAnswerExplanation?: string
     }
 }
 
