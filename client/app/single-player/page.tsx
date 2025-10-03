@@ -71,7 +71,7 @@ export default function SinglePlayer() {
     async function startGame() {
         // Get completed quiz IDs from localStorage
         const completedQuizIds = JSON.parse(localStorage.getItem('completedQuizIds') || '[]')
-        const excludeParam = completedQuizIds.length > 0 ? `?exclude=${completedQuizIds.join(',)}` : ''
+        const excludeParam = completedQuizIds.length > 0 ? `?exclude=${completedQuizIds.join(',')}` : ''
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz${excludeParam}`)
         const data = await response.json()
