@@ -69,7 +69,7 @@ export default function SinglePlayer() {
     }, [])
 
     async function startGame() {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz`)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/gemini`)
         const data = await response.json()
         if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
         setIsLoading(false)
@@ -371,6 +371,7 @@ export default function SinglePlayer() {
         setCorrectAnswerIndex(null)
         setOptionsDisabled(true)
         setVisibleOptions(0)
+        setEliminatedOptions([])
         optionCuesDetectedRef.current = false
 
         if (timerRef.current) clearInterval(timerRef.current)

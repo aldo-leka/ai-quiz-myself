@@ -75,7 +75,7 @@ function getSuspenseDelay(speed: SuspenseSpeed): number {
     }
 }
 
-// Chunk segments into 2-line blocks while preserving speed info and pauses
+// Chunk segments into 4-line blocks while preserving speed info and pauses
 function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[] {
     const chunks: Chunk[] = []
     let currentChunkParts: ChunkPart[] = []
@@ -95,8 +95,8 @@ function chunkSegmentsWithPauses(segments: Segment[], charsPerLine = 90): Chunk[
                 linesInChunk++
                 currentLineLength = wordLength
 
-                if (linesInChunk >= 2) {
-                    // We've filled 2 lines, save current chunk
+                if (linesInChunk >= 4) {
+                    // We've filled 4 lines, save current chunk
                     if (currentTextPart.trim()) {
                         currentChunkParts.push({
                             type: 'text',
