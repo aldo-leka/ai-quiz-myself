@@ -354,6 +354,16 @@ export default function SinglePlayer() {
     }
 
     async function handleNextQuestion() {
+        if (selectedAnswerIndex !== correctAnswerIndex) {
+            // Player got it wrong - game over
+            // Find the last checkpoint they reached
+            const lastCheckpoint = CHECKPOINTS.filter(cp => cp < currentQuestionIndex!).pop()
+            const wonAmount = lastCheckpoint !== undefined ? MONEY_LADDER[lastCheckpoint] : 0
+            setWonAmount(wonAmount)
+            setGameOver(true)
+            return
+        }
+
         const nextIndex = currentQuestionIndex! + 1
 
         if (nextIndex >= questions.length) {
