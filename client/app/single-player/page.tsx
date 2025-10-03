@@ -548,7 +548,7 @@ export default function SinglePlayer() {
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(0)}
                         selected={!finalAnswerBtnSelected && selectedAnswerIndex === 0}
-                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 0}
+                        orange={(finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 0) || (revealedAnswer && selectedAnswerIndex === 0 && correctAnswerIndex !== 0)}
                         correct={revealedAnswer && correctAnswerIndex === 0}
                         onClick={() => handleAnswerSelect(0)}
                     >
@@ -557,7 +557,7 @@ export default function SinglePlayer() {
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(1)}
                         selected={!finalAnswerBtnSelected && selectedAnswerIndex === 1}
-                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 1}
+                        orange={(finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 1) || (revealedAnswer && selectedAnswerIndex === 1 && correctAnswerIndex !== 1)}
                         correct={revealedAnswer && correctAnswerIndex === 1}
                         onClick={() => handleAnswerSelect(1)}
                     >
@@ -566,7 +566,7 @@ export default function SinglePlayer() {
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(2)}
                         selected={!finalAnswerBtnSelected && selectedAnswerIndex === 2}
-                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 2}
+                        orange={(finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 2) || (revealedAnswer && selectedAnswerIndex === 2 && correctAnswerIndex !== 2)}
                         correct={revealedAnswer && correctAnswerIndex === 2}
                         onClick={() => handleAnswerSelect(2)}
                     >
@@ -575,7 +575,7 @@ export default function SinglePlayer() {
                     <Button
                         disabled={optionsDisabled || eliminatedOptions.includes(3)}
                         selected={!finalAnswerBtnSelected && selectedAnswerIndex === 3}
-                        orange={finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 3}
+                        orange={(finalAnswerBtnSelected && !revealedAnswer && selectedAnswerIndex === 3) || (revealedAnswer && selectedAnswerIndex === 3 && correctAnswerIndex !== 3)}
                         correct={revealedAnswer && correctAnswerIndex === 3}
                         onClick={() => handleAnswerSelect(3)}
                     >
