@@ -148,13 +148,6 @@ router.post('/host', async (req, res) => {
 
     const { history, currentSetting, action, actionType, additionalData } = req.body
 
-    // DEBUG: Log the incoming request
-    console.log('=== HOST API DEBUG ===')
-    console.log('actionType:', actionType)
-    console.log('currentSetting:', JSON.stringify(currentSetting, null, 2))
-    console.log('additionalData:', JSON.stringify(additionalData, null, 2))
-    console.log('=====================')
-
     // Build context from history
     const conversationContext = history?.map(msg =>
         `${msg.role === 'player' ? 'Player' : 'Host'}: ${msg.content}`
@@ -376,7 +369,7 @@ async function generateSingleQuiz() {
 }
 
 router.get('/gemini', async (req, res) => {
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise(resolve => setTimeout(resolve, 5000))
     res.json({
         "questions": [
             {

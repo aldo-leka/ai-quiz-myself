@@ -60,41 +60,7 @@ export interface SingleGameQuestion {
     subject?: string
 }
 
-export type SinglePlayerGamePhase = "waiting" | "intro" | "question" | "explanation" | "completed";
-
-export interface SinglePlayerGameState {
-    // Game session metadata
-    gameId: string
-    startTime: number
-    lastUpdated: number
-
-    // Game configuration
-    theme: string
-    difficulty: string
-    questions: SingleGameQuestion[]
-
-    // Current progress
-    phase: SinglePlayerGamePhase
-    currentQuestionIndex: number
-    score: number
-
-    // Current question state
-    selectedAnswer?: string
-    isAnswerLocked: boolean
-    showingExplanation: boolean
-
-    // Timer state
-    remainingTime?: number
-
-    // User answers history
-    userAnswers: Array<{
-        questionIndex: number
-        selectedAnswer: string
-        isCorrect: boolean
-        timeSpent: number
-    }>
-
-    // Intro state
-    showIntro: boolean
-    introAnimationComplete: boolean
+export type Country = {
+    flag: string;
+    name: string;
 }

@@ -60,18 +60,13 @@ export default function AnimatedText({
     // Handle skip during animation
     const handleSkip = () => {
         if (!isComplete && !isWaitingForTap) {
-            console.log('[AnimatedText] Skip requested')
             setSkipRequested(true)
         }
     }
 
     // Main animation effect
     useEffect(() => {
-        console.log('[AnimatedText] Starting animation for part', currentPartIndex, '/', chunkParts.length)
-
         if (currentPartIndex >= chunkParts.length) {
-            // All parts done
-            console.log('[AnimatedText] All parts complete')
             setIsComplete(true)
             if (onCompleteRef.current) {
                 onCompleteRef.current()
@@ -82,11 +77,7 @@ export default function AnimatedText({
         const currentPart = chunkParts[currentPartIndex]
 
         if (currentPart.type === 'pause') {
-            console.log('[AnimatedText] Pausing for', currentPart.duration, 'ms')
-
             if (skipRequested) {
-                // Skip pause immediately
-                console.log('[AnimatedText] Skipping pause')
                 setCurrentPartIndex(currentPartIndex + 1)
                 setSkipRequested(false)
                 return
@@ -110,8 +101,6 @@ export default function AnimatedText({
         const delay = SPEEDS[speed]
 
         if (skipRequested) {
-            // Skip to end of current text immediately
-            console.log('[AnimatedText] Skipping to end of text')
             baseTextRef.current += text
             setDisplayedText(baseTextRef.current)
             setCurrentPartIndex(currentPartIndex + 1)

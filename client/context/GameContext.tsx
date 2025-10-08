@@ -35,21 +35,18 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
     if (storedNickname) {
       setState(prev => ({ ...prev, nickname: storedNickname }));
       // Re-register with the server
-      console.log("emitting register nickname with nickname: ", storedNickname)
       socket.emit("register nickname", storedNickname)
     }
 
     const handleConnect = () => {
       const nickname = localStorage.getItem("nickname");
       if (nickname) {
-        console.log("on connect: emitting register nickname with nickname: ", nickname)
         socket.emit("register nickname", nickname);
       }
     }
 
     // Set up socket event listeners
     const handleNicknameAccepted = () => {
-      console.log("on nickname accepted")
       setState(prev => ({ ...prev, isRegistered: true }));
     }
 

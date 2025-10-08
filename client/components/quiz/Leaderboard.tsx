@@ -1,5 +1,4 @@
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
-import {getCountryInfo} from "@/lib/countryFlags";
 import {GlobalGameLeaderboardPlayer} from "@/lib/types";
 
 export interface LeaderboardProps {
@@ -23,11 +22,9 @@ export default function Leaderboard({ leaderBoard, remainingTime }: LeaderboardP
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="ml-2 cursor-pointer">
-                                            {getCountryInfo(player.country).flag}
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="bg-black/90 text-white px-3 py-1.5 rounded-md text-xs">
-                                        {getCountryInfo(player.country).name}
                                     </TooltipContent>
                                 </Tooltip>
                             </div>

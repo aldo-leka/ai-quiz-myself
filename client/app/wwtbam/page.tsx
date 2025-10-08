@@ -1,19 +1,17 @@
 "use client"
 
-import {useGame} from "@/context/GameContext";
 import {useEffect, useRef, useState} from "react";
-import NicknamePrompt from "@/components/NicknamePrompt";
 import Button from "@/components/Button";
 import CircularButton from "@/components/CircularButton";
 import {User} from "lucide-react";
 import {SingleGameQuestion} from "@/lib/types";
-import {GAME_LENGTH, LOADING_ACTIONS, MONEY_LADDER, OPTION_REVEAL_DELAY, OPTION_CUE_FALLBACK_TIMEOUT, CHECKPOINTS} from "@/lib/constants";
-import confetti from "canvas-confetti";
+import {GAME_LENGTH, MONEY_LADDER, OPTION_REVEAL_DELAY, OPTION_CUE_FALLBACK_TIMEOUT, CHECKPOINTS} from "@/lib/constants";
 import {useHostCommunication} from "@/hooks/useHostCommunication";
 import HostMessage from "@/components/HostMessage";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function SinglePlayer() {
-    const {state} = useGame()
+    const [isLoading, setIsLoading] = useState(true)
     const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null)
     const [questions, setQuestions] = useState<SingleGameQuestion[]>([])
     const [totalTime, setTotalTime] = useState<number | null>(null)
@@ -41,26 +39,15 @@ export default function SinglePlayer() {
 
     const { sendAction } = useHostCommunication({ conversationHistory, setConversationHistory })
 
-    // Loading state
-    const [isLoading, setIsLoading] = useState(true)
-    const [loadingAction, setLoadingAction] = useState("")
-    const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null)
-    const [confettiBtnSelected, setConfettiBtnSelected] = useState(false)
-    const confettiBtnTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-    // Game state
     const [gameState, setGameState] = useState<'welcome' | 'playing' | 'finished'>('welcome')
     const [gameOver, setGameOver] = useState(false)
     const [wonAmount, setWonAmount] = useState(0)
 
     useEffect(() => {
         startGame()
-        startLoadingSequence()
 
         return () => {
             if (timerRef.current) clearInterval(timerRef.current)
-            if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
-            if (confettiBtnTimeoutRef.current) clearTimeout(confettiBtnTimeoutRef.current)
             if (hostMessageTimeoutRef.current) clearTimeout(hostMessageTimeoutRef.current)
             if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
             if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
@@ -82,7 +69,6 @@ export default function SinglePlayer() {
             localStorage.setItem('completedQuizIds', JSON.stringify(updatedIds))
         }
 
-        if (loadingIntervalRef.current) clearInterval(loadingIntervalRef.current)
         setIsLoading(false)
         setQuestions(data.questions)
         setCurrentQuestionIndex(0)
@@ -147,7 +133,6 @@ export default function SinglePlayer() {
             // Start fallback timer - if no option cues detected within timeout, reveal automatically
             fallbackTimeoutRef.current = setTimeout(() => {
                 if (!optionCuesDetectedRef.current) {
-                    console.log('[SinglePlayer] No option cues detected, falling back to automatic reveal')
                     revealOptionsFallback()
                 }
             }, OPTION_CUE_FALLBACK_TIMEOUT)
@@ -159,7 +144,6 @@ export default function SinglePlayer() {
 
     // Fallback: reveal options on a timer
     function revealOptionsFallback() {
-        console.log('[SinglePlayer] Using fallback option reveal')
         setVisibleOptions(0)
         setOptionsDisabled(true)
         let currentOption = 0
@@ -181,7 +165,6 @@ export default function SinglePlayer() {
 
     // Handle option cue from host narration
     function handleOptionCue(option: 'A' | 'B' | 'C' | 'D') {
-        console.log('[SinglePlayer] Option cue received:', option)
         optionCuesDetectedRef.current = true
 
         // Clear fallback timer since we detected a cue
@@ -428,34 +411,6 @@ export default function SinglePlayer() {
         }
     }
 
-    function startLoadingSequence() {
-        const getRandomAction = () => {
-            const randomIndex = Math.floor(Math.random() * LOADING_ACTIONS.length)
-            return LOADING_ACTIONS[randomIndex]
-        }
-
-        setLoadingAction(getRandomAction())
-
-        loadingIntervalRef.current = setInterval(() => {
-            setLoadingAction(getRandomAction())
-        }, Math.random() * 2000 + 3000)
-    }
-
-    function triggerConfetti() {
-        if (confettiBtnTimeoutRef.current)
-            clearInterval(confettiBtnTimeoutRef.current)
-
-        setConfettiBtnSelected(true)
-        confetti({
-            particleCount: 100,
-            spread: 70
-        })
-        confettiBtnTimeoutRef.current = setTimeout(() => {
-            if (confettiBtnTimeoutRef.current)
-                clearInterval(confettiBtnTimeoutRef.current)
-            setConfettiBtnSelected(false)
-        }, 500)
-    }
 
     function handlePlayAgain() {
         setGameOver(false)
@@ -464,16 +419,11 @@ export default function SinglePlayer() {
         setEliminatedOptions([])
         setGameState('welcome')
         setIsLoading(true)
-        startLoadingSequence()
         startGame()
     }
 
     function handleQuit() {
         console.log("quit...")
-    }
-
-    if (!state.isRegistered) {
-        return <NicknamePrompt/>
     }
 
     if (gameOver) {
@@ -505,24 +455,7 @@ export default function SinglePlayer() {
     }
 
     if (isLoading) {
-        return (
-            <div className="min-h-screen grid grid-cols-3 grid-rows-3">
-                <div className="col-start-2 row-start-1 flex flex-col items-center justify-end">
-                    <h2 className=" text-lg sm:text-xl md:text-2xl font-semibold text-center">
-                        Loading...
-                    </h2>
-                    <div className="text-sm text-center min-h-[60px] flex items-center">
-                        {loadingAction}
-                    </div>
-                </div>
-
-                <div className="col-start-2 row-start-2 flex items-center justify-center">
-                    <CircularButton onClick={triggerConfetti} selected={confettiBtnSelected}>
-                        Confetti!
-                    </CircularButton>
-                </div>
-            </div>
-        )
+        return <LoadingScreen />
     }
 
     const timerPercentage = remainingTime !== null && totalTime !== null ? (remainingTime / totalTime) * 100 : 100

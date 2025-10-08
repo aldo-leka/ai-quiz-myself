@@ -157,13 +157,8 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
     const firedCuesRef = useRef<Set<'A' | 'B' | 'C' | 'D'>>(new Set())
 
     useEffect(() => {
-        console.log('[HostMessage] New message received')
         const { segments, optionCues } = parseMessage(message)
         const chunks = chunkSegmentsWithPauses(segments)
-
-        console.log('[HostMessage] Total chunks:', chunks.length)
-        console.log('[HostMessage] Option cues detected:', Array.from(optionCues.entries()))
-        console.log('[HostMessage] Chunks:', chunks)
 
         chunksRef.current = chunks
         optionCuesRef.current = optionCues
@@ -181,7 +176,6 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
         // Check all cues at or before current character count
         for (const [charPosition, option] of optionCuesRef.current.entries()) {
             if (charPosition <= currentCharCount && !firedCuesRef.current.has(option)) {
-                console.log('[HostMessage] Firing option cue:', option, 'at char', charPosition)
                 firedCuesRef.current.add(option)
                 onOptionCue(option)
             }
@@ -189,13 +183,10 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
     }, [currentCharCount, onOptionCue])
 
     const handleChunkComplete = () => {
-        console.log('[HostMessage] Chunk animation complete, waiting for tap')
         setWaitingForTap(true)
     }
 
     const handleTap = () => {
-        console.log('[HostMessage] Tap:', { waitingForTap, currentChunkIndex })
-
         if (!waitingForTap) {
             // Tap during animation - let it bubble to AnimatedText for skip handling
             return
@@ -214,10 +205,8 @@ export default function HostMessage({ message, onComplete, onOptionCue }: HostMe
         const nextIndex = currentChunkIndex + 1
 
         if (nextIndex < chunksRef.current.length) {
-            console.log('[HostMessage] Starting next chunk immediately')
             setCurrentChunkIndex(nextIndex)
         } else {
-            console.log('[HostMessage] All chunks done')
             if (onComplete) {
                 onComplete()
             }

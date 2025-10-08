@@ -53,13 +53,6 @@ export function useHostCommunication({ conversationHistory, setConversationHisto
     }: SendActionParams): Promise<string | null> => {
         setState({ isLoading: true, error: false })
 
-        // DEBUG: Log what we're about to send
-        console.log('=== CLIENT SENDING ===')
-        console.log('actionType:', actionType)
-        console.log('currentQuestion:', currentQuestion)
-        console.log('currentQuestionIndex:', currentQuestionIndex)
-        console.log('=====================')
-
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/host`, {
                 method: 'POST',

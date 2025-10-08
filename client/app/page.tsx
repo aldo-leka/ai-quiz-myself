@@ -1,61 +1,189 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Label } from "@/components/ui/label";
-import { CountryStrips } from "@/components/CountryStrips";
-import NicknamePrompt from "@/components/NicknamePrompt";
-import { useGame } from "@/context/GameContext";
+import Button from "@/components/Button";
+import {countries} from "@/lib/constants";
+import CountryBlock from "@/components/CountryBlock";
+import {useState, useEffect} from "react";
+
+interface CountryData {
+    code: string
+    visitorCount: number
+    lastActivity: number
+}
+
+interface PlayerActivity {
+    username: string
+    status: 'online' | 'played'
+    timestamp: number
+}
 
 export default function Home() {
-  const { state } = useGame()
-  const router = useRouter()
+    const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
+    const [countriesData, setCountriesData] = useState<CountryData[]>([])
+    const [countryPlayers, setCountryPlayers] = useState<Record<string, PlayerActivity[]>>({})
 
-  if (!state.isRegistered) {
-    return <NicknamePrompt />
-  }
+    useEffect(() => {
+        // TODO: Fetch real data from backend
+        // For now, initialize with mock data sorted by activity
+        const mockData: CountryData[] = Object.keys(countries).map(code => ({
+            code,
+            visitorCount: Math.floor(Math.random() * 1000),
+            lastActivity: Date.now() - Math.random() * 10000000000
+        }))
 
-  return (
-    <div className="p-4 sm:p-6 md:p-8 min-h-screen bg-slate-50">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <CountryStrips countryData={state.players} maxStrips={3} />
-        </div>
-        <div className="mt-6 p-6 sm:p-8 border rounded-lg shadow-sm bg-white max-w-lg mx-auto game-container">
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex flex-col sm:flex-row items-center justify-between">
-              <p className="text-blue-800 font-medium text-xl mb-3 sm:mb-0">
-                👥 {(() => {
-                  const totalPlayers = Object.values(state.players).reduce((sum, count) => sum + count, 0);
-                  return `${totalPlayers} ${totalPlayers === 1 ? 'Player' : 'Players'} Online`;
-                })()}
-              </p>
-              <Button 
-                className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md w-full sm:w-auto"
-                onClick={() => router.push('/global-game')}
-              >
-                <span className="mr-2">▶</span> Play Global Game
-              </Button>
+        // Sort by most recent activity
+        mockData.sort((a, b) => b.lastActivity - a.lastActivity)
+        setCountriesData(mockData)
+
+        // Mock player data
+        const mockPlayers: Record<string, PlayerActivity[]> = {}
+        mockData.slice(0, 10).forEach(country => {
+            mockPlayers[country.code] = [
+                { username: 'lel', status: 'online', timestamp: Date.now() },
+                { username: 'lol', status: 'played', timestamp: Date.now() - 600000 },
+                { username: 'Santa', status: 'played', timestamp: Date.now() - 864000000 },
+            ]
+        })
+        setCountryPlayers(mockPlayers)
+    }, [])
+
+    const handleCountryClick = (countryCode: string) => {
+        setSelectedCountry(selectedCountry === countryCode ? null : countryCode)
+    }
+
+    const formatTimeAgo = (timestamp: number) => {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000)
+
+        if (seconds < 60) return 'just now'
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`
+        if (seconds < 2592000) return `${Math.floor(seconds / 86400)} days ago`
+        if (seconds < 31536000) return `${Math.floor(seconds / 2592000)} months ago`
+        return '> 1 year ago'
+    }
+
+    const renderCountryGrid = () => {
+        if (selectedCountry === null) {
+            // Normal grid layout
+            return countriesData.map(countryData => (
+                <CountryBlock
+                    key={countryData.code}
+                    country={countries[countryData.code]}
+                    visitorCount={countryData.visitorCount}
+                    isSelected={false}
+                    onClick={() => handleCountryClick(countryData.code)}
+                />
+            ))
+        }
+
+        // Selected country layout
+        const selectedIndex = countriesData.findIndex(c => c.code === selectedCountry)
+        const selectedCountryData = countriesData[selectedIndex]
+        const players = countryPlayers[selectedCountry] || []
+
+        // Calculate how many empty cells we need to push selected country to new row
+        // Grid cols: 3 (base), 4 (sm), 5 (md), 6 (lg), 7 (xl)
+        const gridCols = [3, 4, 5, 6, 7]
+        const emptyCells = gridCols.map(cols => {
+            const remainder = selectedIndex % cols
+            return remainder === 0 ? 0 : cols - remainder
+        })
+
+        return (
+            <>
+                {countriesData.slice(0, selectedIndex).map(countryData => (
+                    <CountryBlock
+                        key={countryData.code}
+                        country={countries[countryData.code]}
+                        visitorCount={countryData.visitorCount}
+                        isSelected={false}
+                        onClick={() => handleCountryClick(countryData.code)}
+                    />
+                ))}
+
+                {/* Empty cells to push selected country to new row */}
+                {emptyCells[0] > 0 && Array.from({length: emptyCells[0]}).map((_, i) => (
+                    <div key={`empty-base-${i}`} className="sm:hidden" />
+                ))}
+                {emptyCells[1] > 0 && Array.from({length: emptyCells[1]}).map((_, i) => (
+                    <div key={`empty-sm-${i}`} className="hidden sm:block md:hidden" />
+                ))}
+                {emptyCells[2] > 0 && Array.from({length: emptyCells[2]}).map((_, i) => (
+                    <div key={`empty-md-${i}`} className="hidden md:block lg:hidden" />
+                ))}
+                {emptyCells[3] > 0 && Array.from({length: emptyCells[3]}).map((_, i) => (
+                    <div key={`empty-lg-${i}`} className="hidden lg:block xl:hidden" />
+                ))}
+                {emptyCells[4] > 0 && Array.from({length: emptyCells[4]}).map((_, i) => (
+                    <div key={`empty-xl-${i}`} className="hidden xl:block" />
+                ))}
+
+                <CountryBlock
+                    key={selectedCountryData.code}
+                    country={countries[selectedCountryData.code]}
+                    visitorCount={selectedCountryData.visitorCount}
+                    isSelected={true}
+                    onClick={() => handleCountryClick(selectedCountryData.code)}
+                />
+
+                <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 xl:col-span-6 bg-secondary/50 p-4 flex flex-col gap-2">
+                    {players.length > 0 ? (
+                        <div className="space-y-1">
+                            {players.map((player, idx) => (
+                                <div key={idx} className="text-xs">
+                                    <span className="font-medium">{player.username}</span> {player.status} {formatTimeAgo(player.timestamp)}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-xs text-muted-foreground">No recent activity</div>
+                    )}
+                </div>
+
+                {countriesData.slice(selectedIndex + 1).map(countryData => (
+                    <CountryBlock
+                        key={countryData.code}
+                        country={countries[countryData.code]}
+                        visitorCount={countryData.visitorCount}
+                        isSelected={false}
+                        onClick={() => handleCountryClick(countryData.code)}
+                    />
+                ))}
+            </>
+        )
+    }
+
+    return (
+        <div className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl select-none">
+            <h2 className="sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
+                Which game would you like to play?
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
+                <Button
+
+                >
+                    A: Who Wants to Be a Millionaire?
+                </Button>
+                <Button
+
+                >
+                    B: Global Game
+                </Button>
+                <Button
+
+                >
+                    C: Single Player
+                </Button>
+                <Button
+
+                >
+                    D: Multi Player
+                </Button>
             </div>
-          </div>
-          <div className="grid w-full items-center gap-2 mb-6">
-            <Label htmlFor="gameCode" className="text-base font-medium">Game Code</Label>
-            <Input id="gameCode" type="text" placeholder="ABCD" className="text-lg h-12" />
-          </div>
-          <Button type="submit" className="mb-6 w-full py-6 text-lg font-medium">Join Game</Button>
-          <Separator className="mb-6" />
-          <div className="flex justify-between">
-            <Button onClick={() => router.push('/single-player')} type="submit" className="w-2/5" variant="outline">
-              New Single Game
-            </Button>
-            <Button onClick={() => router.push('/multi-player')} type="submit" className="w-2/5" variant="outline">
-              New Multi Game
-            </Button>
-          </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
+                <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">All-time unique visitors:</div>
+                {renderCountryGrid()}
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

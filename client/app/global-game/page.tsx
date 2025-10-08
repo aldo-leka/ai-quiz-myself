@@ -1,12 +1,10 @@
 "use client";
 
-import {CountryStrips} from "@/components/CountryStrips";
-import {useGame} from "@/context/GameContext";
-import NicknamePrompt from "@/components/NicknamePrompt";
-import {useEffect} from "react";
-import {socket} from "@/socket";
-import {useQuizGame} from "@/hooks/useQuizGame";
-import {useGameIntro} from "@/hooks/useGameIntro";
+import {useGame} from "@/context/GameContext"
+import {useEffect} from "react"
+import {socket} from "@/socket"
+import {useQuizGame} from "@/hooks/useQuizGame"
+import {useGameIntro} from "@/hooks/useGameIntro"
 import {
     GlobalGameStarted,
     GlobalGameOverMessage,
@@ -16,17 +14,17 @@ import {
     UpdateGlobalGameScoreMessage,
     RevealGlobalGameAnswerMessage
 } from "@/lib/types";
-import Question from "@/components/quiz/Question";
-import Explanation from "@/components/quiz/Explanation";
-import Intro from "@/components/quiz/Intro";
-import Leaderboard from "@/components/quiz/Leaderboard";
-import Header from "@/components/quiz/Header";
-import WaitingScreen from "@/components/quiz/WaitingScreen";
+import Question from "@/components/quiz/Question"
+import Explanation from "@/components/quiz/Explanation"
+import Intro from "@/components/quiz/Intro"
+import Leaderboard from "@/components/quiz/Leaderboard"
+import Header from "@/components/quiz/Header"
+import WaitingScreen from "@/components/quiz/WaitingScreen"
 
 export default function GamePage(){
     const { state, setGameCode } = useGame()
-    const game = useQuizGame();
-    const intro = useGameIntro();
+    const game = useQuizGame()
+    const intro = useGameIntro()
 
     useEffect(() => {
         if (!state.isRegistered) return
@@ -36,7 +34,6 @@ export default function GamePage(){
         socket.emit("join global game")
 
         const handleConnect = () => {
-            console.log("on connect: emitting join global game")
             if (state.isRegistered) socket.emit("join global game")
         }
 
@@ -109,10 +106,6 @@ export default function GamePage(){
         }
     }, [state.isRegistered])
 
-    if (!state.isRegistered) {
-        return <NicknamePrompt />
-    }
-
     const handleAnswerSelect = (selectedIndex: number) => {
         if (game.lockAnswer) return; // Already answered or locked
         game.setAnswer(game.options[selectedIndex]);
@@ -123,7 +116,6 @@ export default function GamePage(){
         <div className="p-4 sm:p-6 md:p-8 min-h-screen bg-slate-50">
             <div className="max-w-3xl mx-auto p-4">
                 <div className="mb-6">
-                    <CountryStrips countryData={state.players} maxStrips={3} />
                 </div>
 
                 {intro.showIntro && <Intro animationComplete={intro.introAnimationComplete} theme={intro.introTheme} difficulty={intro.introDifficulty} />}
