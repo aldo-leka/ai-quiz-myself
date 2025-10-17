@@ -22,8 +22,8 @@ export default function LoadingScreen() {
 
     function startLoadingSequence() {
         const getRandomAction = () => {
-            const randomIndex = Math.floor(Math.random() * LOADING_ACTIONS.length);
-            return LOADING_ACTIONS[randomIndex];
+            const randomIndex = Math.floor(Math.random() * LOADING_ACTIONS.length)
+            return LOADING_ACTIONS[randomIndex]
         };
 
         setLoadingAction(getRandomAction());

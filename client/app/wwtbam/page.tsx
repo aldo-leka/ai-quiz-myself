@@ -1,14 +1,22 @@
 "use client"
 
-import {useEffect, useRef, useState} from "react";
-import Button from "@/components/Button";
-import CircularButton from "@/components/CircularButton";
-import {User} from "lucide-react";
-import {SingleGameQuestion} from "@/lib/types";
-import {GAME_LENGTH, MONEY_LADDER, OPTION_REVEAL_DELAY, OPTION_CUE_FALLBACK_TIMEOUT, CHECKPOINTS} from "@/lib/constants";
-import {useHostCommunication} from "@/hooks/useHostCommunication";
-import HostMessage from "@/components/HostMessage";
-import LoadingScreen from "@/components/LoadingScreen";
+import {useEffect, useRef, useState} from "react"
+import Button from "@/components/Button"
+import CircularButton from "@/components/CircularButton"
+import {User} from "lucide-react"
+import {SingleGameQuestion} from "@/lib/types"
+import {
+    QUESTION_LENGTH,
+    MONEY_LADDER,
+    CHECKPOINTS,
+    WELCOME_MESSAGES,
+    NEXT_QUESTION_MESSAGES,
+    LIFELINE_5050_MESSAGES
+} from "@/lib/constants"
+import {useHostCommunication} from "@/hooks/useHostCommunication"
+import LoadingScreen from "@/components/LoadingScreen"
+import {useRouter} from "next/navigation"
+import AnimatedText from "@/components/AnimatedText"
 
 export default function SinglePlayer() {
     const [isLoading, setIsLoading] = useState(true)
@@ -22,12 +30,7 @@ export default function SinglePlayer() {
     const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([])
     const [hostMessage, setHostMessage] = useState<string>("")
     const [hostMessageOnComplete, setHostMessageOnComplete] = useState<(() => void) | undefined>(undefined)
-    const hostMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const [visibleOptions, setVisibleOptions] = useState<number>(0)
-    const optionsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-    const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-    const optionCuesDetectedRef = useRef<boolean>(false)
-    const partialRevealTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const [usedLifelines, setUsedLifelines] = useState({
         fiftyFifty: false,
         askHost: false
@@ -43,15 +46,13 @@ export default function SinglePlayer() {
     const [gameOver, setGameOver] = useState(false)
     const [wonAmount, setWonAmount] = useState(0)
 
+    const router = useRouter()
+
     useEffect(() => {
         startGame()
 
         return () => {
             if (timerRef.current) clearInterval(timerRef.current)
-            if (hostMessageTimeoutRef.current) clearTimeout(hostMessageTimeoutRef.current)
-            if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
-            if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
-            if (partialRevealTimeoutRef.current) clearTimeout(partialRevealTimeoutRef.current)
         }
     }, [])
 
@@ -60,13 +61,19 @@ export default function SinglePlayer() {
         const completedQuizIds = JSON.parse(localStorage.getItem('completedQuizIds') || '[]')
         const excludeParam = completedQuizIds.length > 0 ? `?exclude=${completedQuizIds.join(',')}` : ''
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz${excludeParam}`)
-        const data = await response.json()
+        let response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz${excludeParam}`)
+        let data = await response.json()
 
         // Store the quiz ID in localStorage for future exclusion
         if (data.id) {
             const updatedIds = [...completedQuizIds, data.id]
             localStorage.setItem('completedQuizIds', JSON.stringify(updatedIds))
+        }
+        // No data means we exhausted the quizzes, reset local storage and make the call again
+        else {
+            localStorage.removeItem('completedQuizIds')
+            response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/generate-quiz`)
+            data = await response.json()
         }
 
         setIsLoading(false)
@@ -78,7 +85,6 @@ export default function SinglePlayer() {
         setCorrectAnswerIndex(null)
         setOptionsDisabled(true)
         setVisibleOptions(0)
-        optionCuesDetectedRef.current = false
         setConversationHistory([])
 
         await welcomePlayer(data.questions)
@@ -86,7 +92,7 @@ export default function SinglePlayer() {
 
     async function welcomePlayer(gameQuestions: SingleGameQuestion[]) {
         const nickname = localStorage.getItem("nickname") || ""
-        const hostResponse = await sendAction({
+        let hostResponse = await sendAction({
             actionType: 'WELCOME',
             action: 'Player has entered the game',
             currentQuestionIndex: 0,
@@ -95,13 +101,13 @@ export default function SinglePlayer() {
             }
         })
 
-        if (hostResponse) {
-            setHostMessage(hostResponse)
-            setHostMessageOnComplete(() => () => beginFirstQuestion(gameQuestions))
-        } else {
-            // Host unresponsive, proceed without welcome
-            beginFirstQuestion(gameQuestions)
+        if (hostResponse == null) {
+            const randomIndex = Math.floor(Math.random() * WELCOME_MESSAGES.length)
+            hostResponse = WELCOME_MESSAGES[randomIndex].replace("{{name}}", nickname)
         }
+
+        setHostMessage(hostResponse)
+        setHostMessageOnComplete(() => () => beginFirstQuestion(gameQuestions))
     }
 
     async function beginFirstQuestion(gameQuestions: SingleGameQuestion[]) {
@@ -110,9 +116,8 @@ export default function SinglePlayer() {
         setSelectedAnswerIndex(null)
         setEliminatedOptions([])
         setVisibleOptions(0)
-        optionCuesDetectedRef.current = false
 
-        const hostResponse = await sendAction({
+        let hostResponse = await sendAction({
             actionType: 'BEGIN_QUESTION',
             action: 'Presenting the first question',
             currentQuestion: gameQuestions[0],
@@ -120,102 +125,45 @@ export default function SinglePlayer() {
             remainingTime: 30
         })
 
-        if (hostResponse) {
-            setHostMessage(hostResponse)
-            setHostMessageOnComplete(() => () => {
-                // After host finishes narrating, enable options if all revealed
-                if (visibleOptions >= 4) {
-                    setOptionsDisabled(false)
-                    countdown(GAME_LENGTH, () => console.log('countdown done'))
-                }
-            })
-
-            // Start fallback timer - if no option cues detected within timeout, reveal automatically
-            fallbackTimeoutRef.current = setTimeout(() => {
-                if (!optionCuesDetectedRef.current) {
-                    revealOptionsFallback()
-                }
-            }, OPTION_CUE_FALLBACK_TIMEOUT)
-        } else {
-            // Host unresponsive, proceed with fallback
-            revealOptionsFallback()
+        if (hostResponse == null) {
+            const randomIndex = Math.floor(Math.random() * NEXT_QUESTION_MESSAGES.length)
+            hostResponse = NEXT_QUESTION_MESSAGES[randomIndex]
+                .replace("{{moneyValue}}", MONEY_LADDER[0].toString())
+                .replace("{{question}}", gameQuestions[0].question)
+                .replace("{{optionA}}", gameQuestions[0].options[0])
+                .replace("{{optionB}}", gameQuestions[0].options[1])
+                .replace("{{optionC}}", gameQuestions[0].options[2])
+                .replace("{{optionD}}", gameQuestions[0].options[3])
         }
+
+        setHostMessage(hostResponse)
+        setHostMessageOnComplete(() => () => {
+            revealAllOptions()
+        })
     }
 
-    // Fallback: reveal options on a timer
-    function revealOptionsFallback() {
-        setVisibleOptions(0)
-        setOptionsDisabled(true)
-        let currentOption = 0
+    function revealAllOptions() {
+        setVisibleOptions(4)
+        setOptionsDisabled(false)
+        countdown(QUESTION_LENGTH, () => console.log('countdown done'))
+    }
 
-        const revealNext = () => {
-            currentOption++
-            setVisibleOptions(currentOption)
-            if (currentOption < 4) {
-                optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
-            } else {
-                // All options revealed, enable buttons and start countdown
+    function hostMessageOnCue(type: string, value?: string) {
+        if (type === "option") {
+            const optionIndex = value!.charCodeAt(0) - 'A'.charCodeAt(0) + 1
+            setVisibleOptions(prev => Math.max(prev, optionIndex))
+
+            if (optionIndex >= 4) {
                 setOptionsDisabled(false)
-                countdown(GAME_LENGTH, () => console.log('countdown done'))
+                countdown(QUESTION_LENGTH, () => console.log('countdown done'))
             }
+
+            return
         }
 
-        optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
+        // if not option cue, it must be reveal cue
+        revealAnswer()
     }
-
-    // Handle option cue from host narration
-    function handleOptionCue(option: 'A' | 'B' | 'C' | 'D') {
-        optionCuesDetectedRef.current = true
-
-        // Clear fallback timer since we detected a cue
-        if (fallbackTimeoutRef.current) {
-            clearTimeout(fallbackTimeoutRef.current)
-            fallbackTimeoutRef.current = null
-        }
-
-        const optionIndex = option.charCodeAt(0) - 'A'.charCodeAt(0) + 1
-        setVisibleOptions(prev => Math.max(prev, optionIndex))
-
-        // Clear any existing partial reveal timeout
-        if (partialRevealTimeoutRef.current) {
-            clearTimeout(partialRevealTimeoutRef.current)
-        }
-
-        // If all options revealed, enable buttons and start countdown
-        if (optionIndex >= 4) {
-            setOptionsDisabled(false)
-            if (timerRef.current === null) {
-                countdown(GAME_LENGTH, () => console.log('countdown done'))
-            }
-        } else {
-            // Some options detected but not all - start timeout to complete reveal if needed
-            partialRevealTimeoutRef.current = setTimeout(() => {
-                setVisibleOptions(current => {
-                    if (current < 4) {
-                        console.log('[SinglePlayer] Partial reveal timeout - completing option reveal')
-                        // Reveal remaining options sequentially
-                        let nextOption = current
-                        const revealNext = () => {
-                            nextOption++
-                            setVisibleOptions(nextOption)
-                            if (nextOption < 4) {
-                                optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
-                            } else {
-                                // All options revealed, enable buttons and start countdown
-                                setOptionsDisabled(false)
-                                if (timerRef.current === null) {
-                                    countdown(GAME_LENGTH, () => console.log('countdown done'))
-                                }
-                            }
-                        }
-                        optionsTimeoutRef.current = setTimeout(revealNext, OPTION_REVEAL_DELAY)
-                    }
-                    return current
-                })
-            }, OPTION_CUE_FALLBACK_TIMEOUT)
-        }
-    }
-
 
     function countdown(seconds: number, callback: () => void){
         if (timerRef.current) {
@@ -260,7 +208,7 @@ export default function SinglePlayer() {
         const remainingIndices = [0, 1, 2, 3].filter(i => !toEliminate.includes(i))
         const remainingOptions = remainingIndices.map(i => `${String.fromCharCode(65 + i)}: ${currentQuestion.options[i]}`)
 
-        const hostResponse = await sendAction({
+        let hostResponse = await sendAction({
             actionType: 'LIFELINE_5050',
             action: 'Player used 50:50 lifeline',
             currentQuestion,
@@ -271,9 +219,14 @@ export default function SinglePlayer() {
             }
         })
 
-        if (hostResponse) {
-            setHostMessage(hostResponse)
+        if (hostResponse == null) {
+            const randomIndex = Math.floor(Math.random() * LIFELINE_5050_MESSAGES.length)
+            hostResponse = LIFELINE_5050_MESSAGES[randomIndex]
+                .replace("{{option1}}", remainingOptions[0])
+                .replace("{{option2}}", remainingOptions[1])
         }
+
+        setHostMessage(hostResponse)
     }
 
     async function handleAskHost() {
@@ -332,9 +285,9 @@ export default function SinglePlayer() {
 
         if (hostResponse) {
             setHostMessage(hostResponse)
-            setHostMessageOnComplete(() => revealAnswer)
-        } else {
-            // Skip host talk on error, reveal answer immediately
+            // answer will be revealed by cue
+        }
+        else {
             revealAnswer()
         }
     }
@@ -367,7 +320,6 @@ export default function SinglePlayer() {
             return
         }
 
-        // Reset state for next question
         setCurrentQuestionIndex(nextIndex)
         setSelectedAnswerIndex(null)
         setFinalAnswerBtnSelected(false)
@@ -376,14 +328,10 @@ export default function SinglePlayer() {
         setOptionsDisabled(true)
         setVisibleOptions(0)
         setEliminatedOptions([])
-        optionCuesDetectedRef.current = false
 
         if (timerRef.current) clearInterval(timerRef.current)
-        if (optionsTimeoutRef.current) clearTimeout(optionsTimeoutRef.current)
-        if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
-        if (partialRevealTimeoutRef.current) clearTimeout(partialRevealTimeoutRef.current)
 
-        const hostResponse = await sendAction({
+        let hostResponse = await sendAction({
             actionType: 'BEGIN_QUESTION',
             action: `Presenting question ${nextIndex + 1}`,
             currentQuestion: questions[nextIndex],
@@ -391,24 +339,21 @@ export default function SinglePlayer() {
             remainingTime: 30
         })
 
-        if (hostResponse) {
-            setHostMessage(hostResponse)
-            setHostMessageOnComplete(() => () => {
-                if (visibleOptions >= 4) {
-                    setOptionsDisabled(false)
-                    countdown(GAME_LENGTH, () => console.log('countdown done'))
-                }
-            })
-
-            fallbackTimeoutRef.current = setTimeout(() => {
-                if (!optionCuesDetectedRef.current) {
-                    console.log('[SinglePlayer] No option cues detected, falling back to automatic reveal')
-                    revealOptionsFallback()
-                }
-            }, OPTION_CUE_FALLBACK_TIMEOUT)
-        } else {
-            revealOptionsFallback()
+        if (hostResponse == null) {
+            const randomIndex = Math.floor(Math.random() * NEXT_QUESTION_MESSAGES.length)
+            hostResponse = NEXT_QUESTION_MESSAGES[randomIndex]
+                .replace("{{moneyValue}}", MONEY_LADDER[nextIndex].toString())
+                .replace("{{question}}", questions[nextIndex].question)
+                .replace("{{optionA}}", questions[nextIndex].options[0])
+                .replace("{{optionB}}", questions[nextIndex].options[1])
+                .replace("{{optionC}}", questions[nextIndex].options[2])
+                .replace("{{optionD}}", questions[nextIndex].options[3])
         }
+
+        setHostMessage(hostResponse)
+        setHostMessageOnComplete(() => () => {
+            revealAllOptions()
+        })
     }
 
 
@@ -420,10 +365,6 @@ export default function SinglePlayer() {
         setGameState('welcome')
         setIsLoading(true)
         startGame()
-    }
-
-    function handleQuit() {
-        console.log("quit...")
     }
 
     if (gameOver) {
@@ -446,7 +387,7 @@ export default function SinglePlayer() {
                     <CircularButton onClick={handlePlayAgain}>
                         Play Again
                     </CircularButton>
-                    <CircularButton onClick={handleQuit}>
+                    <CircularButton onClick={() => router.push("/")}>
                         Quit
                     </CircularButton>
                 </div>
@@ -587,7 +528,7 @@ export default function SinglePlayer() {
                     </Button>
                 </div>
 
-                {hostMessage && <HostMessage message={hostMessage} onComplete={hostMessageOnComplete} onOptionCue={handleOptionCue} />}
+                {hostMessage && <AnimatedText text={hostMessage} onComplete={hostMessageOnComplete} onCue={hostMessageOnCue} />}
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
                     {MONEY_LADDER.map((amount, index) => {

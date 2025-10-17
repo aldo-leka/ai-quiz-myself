@@ -1,73 +1,13 @@
 import './config.js'
 import express from 'express'
-import { GoogleGenAI } from "@google/genai"
-import { MAX_HOST_SENTENCES, DAILY_QUIZ_GENERATION_COUNT } from './constants.js'
+import {GoogleGenAI} from "@google/genai"
+import {MAX_HOST_SENTENCES, DAILY_QUIZ_GENERATION_COUNT} from './constants.js'
 import pool from './db/client.js'
 
 const router = express.Router()
 const gemini = new GoogleGenAI({})
 
 const SCENE_PROMPTS = {
-    WELCOME: (moneyValue, contestantName) => `You are the charismatic host of "Who Wants to Be a Millionaire". The player just arrived on stage. Welcome them warmly and briefly introduce the game.
-
-CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
-
-${contestantName ? `The contestant's name is ${contestantName}. Address them by name to make it personal.` : 'Welcome the contestant warmly without using their name.'}
-
-Use delimiters to separate dramatic beats/pauses with speed indicators:
-- "|||fast|||" for quick transitions (welcome, acknowledgments)
-- "|||medium|||" for normal pacing
-- "|||slow|||" for dramatic pauses
-Be energetic and build excitement!
-Do NOT use asterisks for actions - only speak your lines.
-
-Example format: "Welcome to Who Wants to Be a Millionaire!|||medium|||Are you ready to play for one million dollars?"`,
-
-    BEGIN_QUESTION: (currentSetting) => `You are the host introducing a new question. The player is ready to see the next question.
-
-CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
-
-CRITICAL INSTRUCTIONS:
-1. You MUST read out this EXACT question word-for-word: "${currentSetting.question}"
-2. You MUST read out these EXACT four options in order:
-   - Option A: "${currentSetting.options?.[0]}"
-   - Option B: "${currentSetting.options?.[1]}"
-   - Option C: "${currentSetting.options?.[2]}"
-   - Option D: "${currentSetting.options?.[3]}"
-3. After mentioning each option, you MUST include the marker:
-   - After option A: |||option:A|||
-   - After option B: |||option:B|||
-   - After option C: |||option:C|||
-   - After option D: |||option:D|||
-4. The money value is: $${currentSetting.moneyValue}
-
-DO NOT make up your own question. DO NOT change the question or options. Use EXACTLY what is provided above.
-
-Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"`,
-
-    NEXT_QUESTION: (currentSetting) => `You are the host transitioning to the next question after a correct answer.
-
-CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
-
-CRITICAL INSTRUCTIONS:
-1. Congratulate the player briefly on their correct answer
-2. You MUST read out this EXACT question word-for-word: "${currentSetting.question}"
-3. You MUST read out these EXACT four options in order:
-   - Option A: "${currentSetting.options?.[0]}"
-   - Option B: "${currentSetting.options?.[1]}"
-   - Option C: "${currentSetting.options?.[2]}"
-   - Option D: "${currentSetting.options?.[3]}"
-4. After mentioning each option, you MUST include the marker:
-   - After option A: |||option:A|||
-   - After option B: |||option:B|||
-   - After option C: |||option:C|||
-   - After option D: |||option:D|||
-5. The money value is: $${currentSetting.moneyValue}
-
-DO NOT make up your own question. DO NOT change the question or options. Use EXACTLY what is provided above.
-
-Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"`,
-
     FINAL_ANSWER_CONFIRM: (currentSetting, selectedAnswer, isCorrect, correctAnswerExplanation, selectedAnswerExplanation) => `You are the host reacting to the player's final answer selection.
 
 Game State:
@@ -90,36 +30,11 @@ CRITICAL INSTRUCTIONS:
 3. If WRONG: First acknowledge their choice briefly, then explain why the Selected Answer is incorrect using its explanation, THEN explain why the Correct Answer is right using its explanation - educate like a "Who Wants to Be a Millionaire" host
 4. Keep the tone warm and educational, never condescending
 5. Use delimiters with speed indicators: "|||fast|||", "|||medium|||", "|||slow|||"
+6. Use the "|||reveal|||" delimiter to indicate that the correct answer should be revealed
 
-Example (correct): "You've selected ${selectedAnswer}...|||slow|||That is CORRECT!|||medium|||${correctAnswerExplanation}"
+Example (correct): "You've selected ${selectedAnswer}...|||slow|||That is CORRECT!|||reveal||||||medium|||${correctAnswerExplanation}"
 
-Example (wrong): "You've selected ${selectedAnswer}...|||slow|||I'm sorry, that's incorrect.|||medium|||${selectedAnswerExplanation ? `${selectedAnswerExplanation}` : ''} The correct answer is ${currentSetting.correctAnswer}.|||medium|||${correctAnswerExplanation}"`,
-
-    TIME_WARNING: (currentSetting) => `You are the host commenting on the remaining time.
-
-Game State:
-- Time Remaining: ${currentSetting.remainingTime}s
-- Money Value: $${currentSetting.moneyValue}
-
-CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
-
-Make a brief, urgent comment about the time running out.
-Use "|||" for dramatic pause if needed.
-
-Example: "Time is running out!|||Better make a decision soon!"`,
-
-    LIFELINE_5050: (currentSetting, remainingOptions) => `You are the host acknowledging the player used the 50-50 lifeline.
-
-Game State:
-- Money Value: $${currentSetting.moneyValue}
-- Remaining Options: ${remainingOptions?.join(', ')}
-
-CRITICAL CONSTRAINT: Your response must be EXACTLY ${MAX_HOST_SENTENCES} sentences or less. No more than ${MAX_HOST_SENTENCES} sentences allowed.
-
-Announce the lifeline usage briefly.
-Use "|||" for dramatic pauses.
-
-Example: "You've chosen 50-50!|||Let's see which two options remain!"`,
+Example (wrong): "You've selected ${selectedAnswer}...|||slow|||I'm sorry, that's incorrect.|||reveal||||||medium|||${selectedAnswerExplanation ? `${selectedAnswerExplanation}` : ''} The correct answer is ${currentSetting.correctAnswer}.|||medium|||${correctAnswerExplanation}"`,
 
     LIFELINE_ASK_HOST: (currentSetting, remainingOptions) => `You are the host being asked for help by the player.
 
@@ -143,10 +58,12 @@ Example: "Here's what I think...|||Based on what I know about this topic, I'm fa
 }
 
 router.post('/host', async (req, res) => {
-    // res.status(500).json({ error: 'Failed to communicate with host' })
-    // return
+    const {history, currentSetting, action, actionType, additionalData} = req.body
 
-    const { history, currentSetting, action, actionType, additionalData } = req.body
+    if (actionType !== "LIFELINE_ASK_HOST" && actionType !== "FINAL_ANSWER_CONFIRM") {
+        res.status(400).json({error: 'Failed to communicate with host'})
+        return
+    }
 
     // Build context from history
     const conversationContext = history?.map(msg =>
@@ -157,15 +74,6 @@ router.post('/host', async (req, res) => {
     let systemPrompt = ''
 
     switch (actionType) {
-        case 'WELCOME':
-            systemPrompt = SCENE_PROMPTS.WELCOME(currentSetting?.moneyValue || 500, additionalData?.contestantName)
-            break
-        case 'BEGIN_QUESTION':
-            systemPrompt = SCENE_PROMPTS.BEGIN_QUESTION(currentSetting)
-            break
-        case 'NEXT_QUESTION':
-            systemPrompt = SCENE_PROMPTS.NEXT_QUESTION(currentSetting)
-            break
         case 'FINAL_ANSWER_CONFIRM':
             const isCorrect = additionalData?.selectedAnswer === currentSetting?.correctAnswer
             systemPrompt = SCENE_PROMPTS.FINAL_ANSWER_CONFIRM(
@@ -175,12 +83,6 @@ router.post('/host', async (req, res) => {
                 additionalData?.correctAnswerExplanation,
                 additionalData?.selectedAnswerExplanation
             )
-            break
-        case 'TIME_WARNING':
-            systemPrompt = SCENE_PROMPTS.TIME_WARNING(currentSetting)
-            break
-        case 'LIFELINE_5050':
-            systemPrompt = SCENE_PROMPTS.LIFELINE_5050(currentSetting, additionalData?.remainingOptions)
             break
         case 'LIFELINE_ASK_HOST':
             systemPrompt = SCENE_PROMPTS.LIFELINE_ASK_HOST(currentSetting, additionalData?.remainingOptions || currentSetting?.options)
@@ -224,7 +126,7 @@ Respond naturally as the host. Use "|||" for dramatic pauses.`
 
     } catch (error) {
         console.error('Host communication error:', error)
-        res.status(500).json({ error: 'Failed to communicate with host' })
+        res.status(500).json({error: 'Failed to communicate with host'})
     }
 })
 
@@ -253,7 +155,7 @@ router.get('/batch-generate-quizzes', async (req, res) => {
         })
     } catch (error) {
         console.error('Batch quiz generation error:', error)
-        res.status(500).json({ error: 'Failed to generate quizzes' })
+        res.status(500).json({error: 'Failed to generate quizzes'})
     }
 })
 
@@ -274,7 +176,7 @@ router.get('/cleanup-old-quizzes', async (req, res) => {
         })
     } catch (error) {
         console.error('Cleanup error:', error)
-        res.status(500).json({ error: 'Failed to cleanup old quizzes' })
+        res.status(500).json({error: 'Failed to cleanup old quizzes'})
     }
 })
 
@@ -313,7 +215,7 @@ router.get('/generate-quiz', async (req, res) => {
         })
     } catch (error) {
         console.error('Quiz fetch error:', error)
-        res.status(500).json({ error: 'Failed to fetch quiz' })
+        res.status(500).json({error: 'Failed to fetch quiz'})
     }
 })
 

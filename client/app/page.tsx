@@ -4,6 +4,7 @@ import Button from "@/components/Button";
 import {countries} from "@/lib/constants";
 import CountryBlock from "@/components/CountryBlock";
 import {useState, useEffect} from "react";
+import {useRouter} from "next/navigation";
 
 interface CountryData {
     code: string
@@ -21,6 +22,7 @@ export default function Home() {
     const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
     const [countriesData, setCountriesData] = useState<CountryData[]>([])
     const [countryPlayers, setCountryPlayers] = useState<Record<string, PlayerActivity[]>>({})
+    const router = useRouter()
 
     useEffect(() => {
         // TODO: Fetch real data from backend
@@ -160,7 +162,7 @@ export default function Home() {
             </h2>
             <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                 <Button
-
+                    onClick={() => router.push("/wwtbam")}
                 >
                     A: Who Wants to Be a Millionaire?
                 </Button>

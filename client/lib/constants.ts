@@ -2,9 +2,7 @@ import {Country} from "@/lib/types";
 
 export const MONEY_LADDER = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
 export const CHECKPOINTS = [4, 9, 13]
-export const OPTION_REVEAL_DELAY = 2000
-export const GAME_LENGTH = 1 * 60
-export const OPTION_CUE_FALLBACK_TIMEOUT = 5000 // 5 seconds to detect option cues, then fallback
+export const QUESTION_LENGTH = 60 // seconds
 
 export const LOADING_ACTIONS = [
     "Warming up the spotlight",
@@ -284,3 +282,27 @@ export const countries: Record<string, Country> = {
     'ZW': { flag: '🇿🇼', name: 'Zimbabwe' },
     'GLOBAL': { flag: '🌐', name: 'Global' }
 }
+
+export const WELCOME_MESSAGES = [
+    "Welcome, {{name}}, to the most thrilling game on television!|||fast|||Tonight, you have the chance to walk away with one million dollars, so let's see what you've got!|||medium|||Are you ready to play?",
+    "Welcome to Who Wants to Be a Millionaire, {{name}}!|||medium|||Tonight, you could walk away with a million dollars, are you ready to play for it?",
+    "Welcome to Who Wants to Be a Millionaire, {{name}}!|||medium|||Tonight, you could be our next millionaire, so let's see if you can win it all!",
+    "Welcome, {{name}}, to the hottest quiz show on television!|||fast|||Tonight, you're one lucky contestant with a shot at becoming a millionaire, so buckle up and let's play!",
+    "Welcome back, {{name}}, to the most thrilling game in town!|||medium|||Tonight, it's your turn to reach for that million-dollar dream!"
+]
+
+export const NEXT_QUESTION_MESSAGES = [
+    "|||slow|||Alright, for ${{moneyValue}}, here is your next question: \"{{question}}\" |||fast||| Option A: \"{{optionA}}\" |||option:A||||||fast||| Option B: \"{{optionB}}\" |||option:B||||||fast||| Option C: \"{{optionC}}\" |||option:C||||||fast||| or Option D: \"{{optionD}}\" |||option:D|||?",
+    "|||fast|||Here is your next question, worth ${{moneyValue}}: \"{{question}}\" Is it: Option A: \"{{optionA}}\" |||option:A||||||fast|||, Option B: \"{{optionB}}\" |||option:B||||||fast|||, Option C: \"{{optionC}}\" |||option:C||||||fast|||, or Option D: \"{{optionD}}\" |||option:D|||?"
+]
+
+export const LIFELINE_5050_MESSAGES = [
+    "You've used the 50-50 lifeline!|||medium|||Now your options are down to {{option1}} and {{option2}}.",
+    "You've used the 50-50 lifeline!|||medium|||Let's see the two options left.",
+    "You've used the 50-50 lifeline!|||medium|||We've eliminated two incorrect answers."
+]
+
+export const ANIMATED_TEXT_SPEED = 50
+export const ANIMATED_TEXT_SLOW_PAUSE = 3000
+export const ANIMATED_TEXT_MEDIUM_PAUSE = 1500
+export const ANIMATED_TEXT_FAST_PAUSE = 500

@@ -11,7 +11,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 function UsernameForm() {
     const {setNickname} = useGame();
     const [inputValue, setInputValue] = useState("")
-    const [message, setMessage] = useState("test")
+    const [message, setMessage] = useState("")
     const router = useRouter();
     const searchParams = useSearchParams();
 

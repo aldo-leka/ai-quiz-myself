@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SingleGameQuestion } from '@/lib/types'
+import {MONEY_LADDER} from "@/lib/constants";
 
 interface HostCommunicationState {
     isLoading: boolean
@@ -41,8 +42,6 @@ export function useHostCommunication({ conversationHistory, setConversationHisto
         error: false
     })
 
-    const moneyLadder = [500, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000, 50000, 100000, 250000, 500000, 1000000]
-
     const sendAction = async ({
         actionType,
         action,
@@ -60,13 +59,13 @@ export function useHostCommunication({ conversationHistory, setConversationHisto
                 body: JSON.stringify({
                     history: conversationHistory,
                     currentSetting: currentQuestion ? {
-                        moneyValue: moneyLadder[currentQuestionIndex],
+                        moneyValue: MONEY_LADDER[currentQuestionIndex],
                         remainingTime: remainingTime,
                         difficulty: currentQuestion.difficulty,
                         question: currentQuestion.question,
                         correctAnswer: currentQuestion.correctAnswer,
                         options: currentQuestion.options
-                    } : { moneyValue: moneyLadder[currentQuestionIndex] },
+                    } : { moneyValue: MONEY_LADDER[currentQuestionIndex] },
                     action,
                     actionType,
                     additionalData
