@@ -227,6 +227,7 @@ export default function SinglePlayer() {
         }
 
         setHostMessage(hostResponse)
+        setHostMessageOnComplete(undefined)
     }
 
     async function handleAskHost() {
@@ -254,6 +255,7 @@ export default function SinglePlayer() {
 
         if (hostResponse) {
             setHostMessage(hostResponse)
+            setHostMessageOnComplete(undefined)
         }
     }
 
@@ -285,6 +287,7 @@ export default function SinglePlayer() {
 
         if (hostResponse) {
             setHostMessage(hostResponse)
+            setHostMessageOnComplete(undefined)
             // answer will be revealed by cue
         }
         else {

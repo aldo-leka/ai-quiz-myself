@@ -12,7 +12,7 @@ type Block =
     | { type: 'reveal-cue' }
     | { type: 'option-cue'; value: string }
 
-interface AnimatedText2Props {
+interface AnimatedTextProps {
     text: string
     onComplete?: () => void
     onCue?: (type: string, value?: string) => void
@@ -24,7 +24,7 @@ interface AnimatedText2Props {
 * 1) It will start animating the moment it notices a changed text prop.
 * 2) If it's animating (not complete), you can tap to skip.
 * 3) Even if animation is complete, you need to tap to continue (the game). */
-export default function AnimatedText({text, onComplete, onCue}: AnimatedText2Props) {
+export default function AnimatedText({text, onComplete, onCue}: AnimatedTextProps) {
     const [displayedText, setDisplayedText] = useState("")
     const [isComplete, setIsComplete] = useState(false)
     const intervalRef = useRef<NodeJS.Timeout | null>(null)

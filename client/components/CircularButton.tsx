@@ -7,7 +7,7 @@ interface CircularButtonProps {
 }
 
 export default function CircularButton({ children, onClick, selected = false, className = "", disabled = false }: CircularButtonProps) {
-    const disabledClass = disabled ? "cursor-not-allowed" : "" // opacity-50
+    const disabledClass = disabled ? "cursor-not-allowed opacity-50" : ""
 
     return (
         <button

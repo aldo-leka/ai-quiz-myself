@@ -166,19 +166,13 @@ export default function Home() {
                 >
                     A: Who Wants to Be a Millionaire?
                 </Button>
-                <Button
-
-                >
+                <Button disabled>
                     B: Global Game
                 </Button>
-                <Button
-
-                >
+                <Button disabled>
                     C: Single Player
                 </Button>
-                <Button
-
-                >
+                <Button disabled>
                     D: Multi Player
                 </Button>
             </div>

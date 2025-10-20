@@ -23,7 +23,7 @@ export default function Button({ className = "", onClick, children, selected = f
         bgClass = "bg-muted-foreground text-white"
     }
 
-    const disabledClass = disabled ? "cursor-not-allowed" : "" // opacity-50
+    const disabledClass = disabled ? `cursor-not-allowed ${!(correct || orange) ? "opacity-50" : ""}` : ""
 
     return (
         <button
