@@ -2,7 +2,15 @@
 CREATE TABLE IF NOT EXISTS quizzes (
     id SERIAL PRIMARY KEY,
     questions JSONB NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS stats (
+    id SERIAL PRIMARY KEY,
+    nickname TEXT UNIQUE NOT NULL,
+    country_code TEXT,
+    last_seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Index for faster random selection

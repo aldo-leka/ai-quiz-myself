@@ -6,6 +6,12 @@ import CountryBlock from "@/components/CountryBlock";
 import {useState, useEffect} from "react";
 import {useRouter} from "next/navigation";
 
+interface Stat {
+    nickname: string
+    countryCode: string
+    lastSeenAt: string
+}
+
 interface CountryData {
     code: string
     visitorCount: number
@@ -14,7 +20,6 @@ interface CountryData {
 
 interface PlayerActivity {
     username: string
-    status: 'online' | 'played'
     timestamp: number
 }
 
@@ -25,29 +30,54 @@ export default function Home() {
     const router = useRouter()
 
     useEffect(() => {
-        // TODO: Fetch real data from backend
-        // For now, initialize with mock data sorted by activity
-        const mockData: CountryData[] = Object.keys(countries).map(code => ({
-            code,
-            visitorCount: Math.floor(Math.random() * 1000),
-            lastActivity: Date.now() - Math.random() * 10000000000
-        }))
-
-        // Sort by most recent activity
-        mockData.sort((a, b) => b.lastActivity - a.lastActivity)
-        setCountriesData(mockData)
-
-        // Mock player data
-        const mockPlayers: Record<string, PlayerActivity[]> = {}
-        mockData.slice(0, 10).forEach(country => {
-            mockPlayers[country.code] = [
-                { username: 'lel', status: 'online', timestamp: Date.now() },
-                { username: 'lol', status: 'played', timestamp: Date.now() - 600000 },
-                { username: 'Santa', status: 'played', timestamp: Date.now() - 864000000 },
-            ]
-        })
-        setCountryPlayers(mockPlayers)
+        showStats()
     }, [])
+
+    async function showStats() {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/stats`)
+        const stats: Stat[] = await response.json()
+        const grouped = Object.groupBy(stats, stat => stat.countryCode);
+
+        const playersData: Record<string, PlayerActivity[]> = {};
+
+        Object.entries(grouped).forEach(([code, statsForCountry]) => {
+            if (statsForCountry) {
+                playersData[code] = statsForCountry.map(stat => ({
+                    username: stat.nickname,
+                    timestamp: new Date(stat.lastSeenAt).getTime()
+                }));
+            }
+        });
+
+        Object.keys(countries).forEach(code => {
+            if (!playersData[code]) {
+                playersData[code] = [];
+            }
+        });
+
+        setCountryPlayers(playersData);
+
+        const countryData: CountryData[] = Object.keys(countries).map(code => {
+            const statsForCountry = grouped[code]
+
+            if (!statsForCountry || statsForCountry.length === 0) {
+                return {
+                    code,
+                    visitorCount: 0,
+                    lastActivity: 0
+                }
+            }
+
+            return {
+                code,
+                visitorCount: statsForCountry.length,
+                lastActivity: Math.max(...statsForCountry.map(s => new Date(s.lastSeenAt).getTime()))
+            }
+        })
+            .sort((a, b) => b.lastActivity - a.lastActivity)
+
+        setCountriesData(countryData)
+    }
 
     const handleCountryClick = (countryCode: string) => {
         setSelectedCountry(selectedCountry === countryCode ? null : countryCode)
@@ -105,19 +135,19 @@ export default function Home() {
 
                 {/* Empty cells to push selected country to new row */}
                 {emptyCells[0] > 0 && Array.from({length: emptyCells[0]}).map((_, i) => (
-                    <div key={`empty-base-${i}`} className="sm:hidden" />
+                    <div key={`empty-base-${i}`} className="sm:hidden"/>
                 ))}
                 {emptyCells[1] > 0 && Array.from({length: emptyCells[1]}).map((_, i) => (
-                    <div key={`empty-sm-${i}`} className="hidden sm:block md:hidden" />
+                    <div key={`empty-sm-${i}`} className="hidden sm:block md:hidden"/>
                 ))}
                 {emptyCells[2] > 0 && Array.from({length: emptyCells[2]}).map((_, i) => (
-                    <div key={`empty-md-${i}`} className="hidden md:block lg:hidden" />
+                    <div key={`empty-md-${i}`} className="hidden md:block lg:hidden"/>
                 ))}
                 {emptyCells[3] > 0 && Array.from({length: emptyCells[3]}).map((_, i) => (
-                    <div key={`empty-lg-${i}`} className="hidden lg:block xl:hidden" />
+                    <div key={`empty-lg-${i}`} className="hidden lg:block xl:hidden"/>
                 ))}
                 {emptyCells[4] > 0 && Array.from({length: emptyCells[4]}).map((_, i) => (
-                    <div key={`empty-xl-${i}`} className="hidden xl:block" />
+                    <div key={`empty-xl-${i}`} className="hidden xl:block"/>
                 ))}
 
                 <CountryBlock
@@ -128,12 +158,14 @@ export default function Home() {
                     onClick={() => handleCountryClick(selectedCountryData.code)}
                 />
 
-                <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 xl:col-span-6 bg-secondary/50 p-4 flex flex-col gap-2">
+                <div
+                    className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 xl:col-span-6 bg-secondary/50 p-4 flex flex-col gap-2">
                     {players.length > 0 ? (
                         <div className="space-y-1">
                             {players.map((player, idx) => (
                                 <div key={idx} className="text-xs">
-                                    <span className="font-medium">{player.username}</span> {player.status} {formatTimeAgo(player.timestamp)}
+                                    <span
+                                        className="font-medium">{player.username}</span> last seen {formatTimeAgo(player.timestamp)}
                                 </div>
                             ))}
                         </div>
@@ -156,7 +188,8 @@ export default function Home() {
     }
 
     return (
-        <div className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl select-none">
+        <div
+            className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl select-none">
             <h2 className="sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
                 Which game would you like to play?
             </h2>
@@ -176,8 +209,11 @@ export default function Home() {
                     D: Multi Player
                 </Button>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
-                <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">All-time unique visitors:</div>
+            <div
+                className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
+                <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">All-time unique
+                    visitors:
+                </div>
                 {renderCountryGrid()}
             </div>
         </div>

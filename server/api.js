@@ -1,7 +1,7 @@
 import './config.js'
 import express from 'express'
 import {GoogleGenAI} from "@google/genai"
-import {MAX_HOST_SENTENCES, DAILY_QUIZ_GENERATION_COUNT} from './constants.js'
+import {MAX_HOST_SENTENCES, DAILY_QUIZ_GENERATION_COUNT, GLOBAL_COUNTRY_CODE} from './constants.js'
 import pool from './db/client.js'
 
 const router = express.Router()
@@ -918,5 +918,16 @@ function sample1() {
         ]
     }
 }
+
+router.get('/stats',  async (req, res) => {
+    const result = await pool.query('SELECT * FROM stats')
+    const stats = result.rows.map(row => ({
+        nickname: row.nickname,
+        countryCode: row.country_code ? row.country_code : GLOBAL_COUNTRY_CODE,
+        lastSeenAt: row.last_seen_at
+    }))
+
+    res.json(stats)
+})
 
 export default router;

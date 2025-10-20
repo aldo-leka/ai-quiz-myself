@@ -1,10 +1,12 @@
 import './config.js'
-import express from 'express';
-import cors from 'cors';
-import { Server } from 'socket.io';
-import { createServer } from 'node:http';
+import express from 'express'
+import cors from 'cors'
+import { Server } from 'socket.io'
+import { createServer } from 'node:http'
 import log from './log.js'
-import api from './api.js';
+import api from './api.js'
+import pool from "./db/client.js";
+import {GLOBAL_COUNTRY_CODE} from "./constants.js";
 
 const PORT = process.env.PORT
 const CORS_ORIGIN = process.env.CORS_ORIGIN
@@ -23,7 +25,7 @@ const io = new Server(server, {
     }
 })
 
-let users = new Map() // key: nickname, value: { socketId, country, room, score, etc. }
+let users = new Map() // key: nickname, value: { socketId, countryCode, room, score, etc. }
 let disconnects = new Map() // key: nickname, value: timer id
 
 const quizQuestions = [
@@ -74,8 +76,8 @@ app.get('/api/users-by-country', (req, res) => {
             continue;
         }
 
-        const country = player.country || 'GLOBAL';
-        countryCounts[country] = (countryCounts[country] || 0) + 1;
+        const countryCode = player.countryCode || GLOBAL_COUNTRY_CODE;
+        countryCounts[countryCode] = (countryCounts[countryCode] || 0) + 1;
     }
 
     res.json(countryCounts);
@@ -242,7 +244,7 @@ function generateLeaderboard() {
         if (player.room === 'global game') {
             leaderboard.push({
                 nickname,
-                country: player.country,
+                countryCode: player.countryCode,
                 score: player.score || 0
             })
         }
@@ -266,7 +268,7 @@ io.on('connection', (socket) => {
             clearTimeout(disconnects.get(nickname))
             disconnects.delete(nickname)
 
-            log(`${nickname} from ${existing.country} reconnected before timeout`);
+            log(`${nickname} from ${existing.countryCode} reconnected before timeout`);
         }
 
         socket.nickname = nickname
@@ -275,15 +277,30 @@ io.on('connection', (socket) => {
             socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() ||
             socket.handshake.address
 
-        const country = existing?.country || await getCountryFromIP(ip)
+        const countryCode = existing?.countryCode || await getCountryCodeFromIP(ip)
 
         users.set(nickname, {
             ...(existing || {}),
             socketId: socket.id,
-            country
+            countryCode: countryCode
         })
 
-        log(`on register nickname: ${nickname} connected from ${country} (ip: ${ip})`)
+        log(`on register nickname: ${nickname} connected from ${countryCode} (ip: ${ip})`)
+
+        try {
+            // upsert a stat
+            await pool.query(
+                `INSERT INTO stats (nickname, country_code, last_seen_at)
+                 VALUES ($1, $2, NOW())
+                 ON CONFLICT (nickname)
+                 DO UPDATE SET
+                    country_code = EXCLUDED.country_code,
+                    last_seen_at = EXCLUDED.last_seen_at`,
+                [nickname, countryCode]
+            )
+        } catch (error) {
+            log(`Error adding stat: ${error}`)
+        }
 
         socket.emit('nickname accepted')
     })
@@ -385,17 +402,17 @@ io.on('connection', (socket) => {
         }
 
         const timeoutId = setTimeout(() => {
-            const country = users.get(nickname).country
+            const countryCode = users.get(nickname).countryCode
             users.delete(nickname)
             disconnects.delete(nickname)
-            log(`${nickname} from ${country} (ip: ${socket.handshake.address}) removed after timeout`)
+            log(`${nickname} from ${countryCode} (ip: ${socket.handshake.address}) removed after timeout`)
         }, 30_000)
 
         disconnects.set(nickname, timeoutId)
     })
 })
 
-async function getCountryFromIP(ip) {
+async function getCountryCodeFromIP(ip) {
     try {
         const res = await fetch(`http://ip-api.com/json/${ip}`)
         const data = await res.json()
