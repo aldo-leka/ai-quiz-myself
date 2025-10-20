@@ -27,9 +27,11 @@ export default function Home() {
     const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
     const [countriesData, setCountriesData] = useState<CountryData[]>([])
     const [countryPlayers, setCountryPlayers] = useState<Record<string, PlayerActivity[]>>({})
+    const [username, setUsername] = useState<string | null>("")
     const router = useRouter()
 
     useEffect(() => {
+        setUsername(localStorage.getItem("nickname"))
         showStats()
     }, [])
 
@@ -191,7 +193,7 @@ export default function Home() {
         <div
             className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl select-none">
             <h2 className="sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
-                Which game would you like to play?
+                Which game would you like to play, {username}?
             </h2>
             <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
                 <Button
