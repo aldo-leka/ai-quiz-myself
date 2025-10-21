@@ -9,11 +9,12 @@ import Button from "@/components/Button";
 import LoadingScreen from "@/components/LoadingScreen";
 
 function UsernameForm() {
-    const {setNickname} = useGame();
+    const {setNickname} = useGame()
     const [inputValue, setInputValue] = useState("")
     const [message, setMessage] = useState("")
-    const router = useRouter();
-    const searchParams = useSearchParams();
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const [canCollectCountry, setCanCollectCountry] = useState<boolean>(true)
 
     useEffect(() => {
         const handleNicknameUnavailable = () => {
@@ -32,13 +33,13 @@ function UsernameForm() {
             socket.off("nickname unavailable", handleNicknameUnavailable);
             socket.off("nickname accepted", handleNicknameAccepted);
         };
-    }, [router, searchParams]);
+    }, [router, searchParams])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && inputValue.trim()) {
-            setNickname(inputValue);
+            setNickname(inputValue, canCollectCountry)
         }
-    };
+    }
 
     return (
         <div
@@ -49,7 +50,7 @@ function UsernameForm() {
             <Input
                 id="nickname"
                 type="text"
-                placeholder=""
+                placeholder="Enter username"
                 className="w-full mb-2"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -57,7 +58,7 @@ function UsernameForm() {
                 autoFocus
             />
             <Button
-                onClick={() => setNickname(inputValue)}
+                onClick={() => setNickname(inputValue, canCollectCountry)}
                 disabled={!inputValue.trim()}
                 centered
                 className="w-full"
@@ -67,6 +68,25 @@ function UsernameForm() {
             {message && (
                 <p className="text-sm text-red-500 mt-2">Sorry, that username is taken!</p>
             )}
+            <h3 className="mt-4">
+                This game automatically collects country data from the players. Is that <b>ok</b> <i>by you</i>?
+            </h3>
+            <div className="flex justify-around mt-2">
+                <Button
+                    className="w-full mr-2"
+                    selected={!canCollectCountry}
+                    onClick={() => setCanCollectCountry(false)}
+                >
+                    NO
+                </Button>
+                <Button
+                    className="w-full ml-2"
+                    selected={canCollectCountry}
+                    onClick={() => setCanCollectCountry(true)}
+                >
+                    YES
+                </Button>
+            </div>
         </div>
     )
 }

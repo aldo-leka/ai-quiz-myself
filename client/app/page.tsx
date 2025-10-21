@@ -38,7 +38,7 @@ export default function Home() {
     async function showStats() {
         const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/stats`)
         const stats: Stat[] = await response.json()
-        const grouped = Object.groupBy(stats, stat => stat.countryCode);
+        const grouped = Object.groupBy(stats, stat => stat.countryCode)
 
         const playersData: Record<string, PlayerActivity[]> = {};
 
@@ -49,13 +49,13 @@ export default function Home() {
                     timestamp: new Date(stat.lastSeenAt).getTime()
                 }))
                     .sort((a, b) => b.timestamp - a.timestamp)
-                    .slice(0, 3);
+                    .slice(0, 3)
             }
         });
 
         Object.keys(countries).forEach(code => {
             if (!playersData[code]) {
-                playersData[code] = [];
+                playersData[code] = []
             }
         });
 
@@ -215,8 +215,8 @@ export default function Home() {
             </div>
             <div
                 className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
-                <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">All-time unique
-                    visitors:
+                <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">
+                    All-time unique visitors:
                 </div>
                 {renderCountryGrid()}
             </div>

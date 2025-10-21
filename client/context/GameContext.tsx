@@ -12,7 +12,7 @@ type GameState = {
 
 type GameContextType = {
   state: GameState
-  setNickname: (nickname: string) => void
+  setNickname: (nickname: string, canCollectCountry: boolean) => void
   setGameCode: (code: string | undefined) => void
 }
 
@@ -30,18 +30,20 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Effect for socket setup and nickname initialization - runs once
   useEffect(() => {
-    const storedNickname = localStorage.getItem("nickname");
+    const storedNickname = localStorage.getItem("nickname")
+    const canCollectCountry = localStorage.getItem("collectCountry") === "1"
 
     if (storedNickname) {
-      setState(prev => ({ ...prev, nickname: storedNickname }));
+      setState(prev => ({ ...prev, nickname: storedNickname }))
       // Re-register with the server
-      socket.emit("register nickname", storedNickname)
+      socket.emit("register nickname", storedNickname, canCollectCountry)
     }
 
     const handleConnect = () => {
-      const nickname = localStorage.getItem("nickname");
+      const nickname = localStorage.getItem("nickname")
+      const canCollectCountry = localStorage.getItem("collectCountry") === "1"
       if (nickname) {
-        socket.emit("register nickname", nickname);
+        socket.emit("register nickname", nickname, canCollectCountry)
       }
     }
 
@@ -76,10 +78,11 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [state.gameCode])
 
-  const setNickname = (newNickname: string) => {
+  const setNickname = (newNickname: string, canCollectCountry: boolean) => {
     setState(prev => ({ ...prev, nickname: newNickname }))
     localStorage.setItem("nickname", newNickname)
-    socket.emit("register nickname", newNickname)
+    localStorage.setItem("collectCountry", canCollectCountry ? "1" : "0")
+    socket.emit("register nickname", newNickname, canCollectCountry)
   }
 
   const setGameCode = (code: string | undefined) => {

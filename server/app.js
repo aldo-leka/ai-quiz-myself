@@ -256,7 +256,7 @@ function generateLeaderboard() {
 }
 
 io.on('connection', (socket) => {
-    socket.on('register nickname', async (nickname) => {
+    socket.on('register nickname', async (nickname, canCollectCountry) => {
         const existing = users.get(nickname)
 
         if (existing && existing.socketId !== socket.id) {
@@ -273,11 +273,14 @@ io.on('connection', (socket) => {
 
         socket.nickname = nickname
 
-        let ip =
-            socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() ||
-            socket.handshake.address
+        let countryCode = "", ip = ""
+        if (canCollectCountry) {
+            ip =
+                socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() ||
+                socket.handshake.address
 
-        const countryCode = existing?.countryCode || await getCountryCodeFromIP(ip)
+            countryCode = existing?.countryCode || await getCountryCodeFromIP(ip)
+        }
 
         users.set(nickname, {
             ...(existing || {}),
