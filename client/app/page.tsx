@@ -47,7 +47,9 @@ export default function Home() {
                 playersData[code] = statsForCountry.map(stat => ({
                     username: stat.nickname,
                     timestamp: new Date(stat.lastSeenAt).getTime()
-                }));
+                }))
+                    .sort((a, b) => b.timestamp - a.timestamp)
+                    .slice(0, 3);
             }
         });
 
