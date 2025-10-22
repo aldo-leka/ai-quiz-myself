@@ -1,18 +1,12 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import { GameProvider } from "@/context/GameContext";
-import RequireUsername from "@/components/RequireUsername";
+import type { Metadata } from "next"
+import "./globals.css"
+import localFont from "next/font/local"
+import { GameProvider } from "@/context/GameContext"
+import RequireUsername from "@/components/RequireUsername"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const bitCountGridSingle = localFont({
+  src: './BitcountGridSingle.ttf',
+})
 
 export const metadata: Metadata = {
   title: "QuizPlus",
@@ -27,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-radial from-teal-50 from-40% to-green-200`}
+        className={`${bitCountGridSingle.className} antialiased bg-radial from-teal-50 from-40% to-green-200`}
       >
         <GameProvider>
           <RequireUsername>

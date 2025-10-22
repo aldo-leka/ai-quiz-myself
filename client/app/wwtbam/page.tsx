@@ -403,7 +403,7 @@ export default function SinglePlayer() {
     }
 
     const timerPercentage = remainingTime !== null && totalTime !== null ? (remainingTime / totalTime) * 100 : 100
-    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isDevelopment = false ; // process.env.NODE_ENV === 'development';
 
     return (
         <div className="min-h-screen flex select-none"
