@@ -203,14 +203,10 @@ export default function Home() {
                 >
                     A: Who Wants to Be a Millionaire?
                 </Button>
-                <Button disabled>
+                <Button
+                    onClick={() => router.push("/gg")}
+                >
                     B: Global Game
-                </Button>
-                <Button disabled>
-                    C: Single Player
-                </Button>
-                <Button disabled>
-                    D: Multi Player
                 </Button>
             </div>
             <div
