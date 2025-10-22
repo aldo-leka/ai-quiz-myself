@@ -197,20 +197,25 @@ export default function Home() {
             <h2 className="sm:py-4 text-lg sm:text-xl md:text-2xl font-semibold">
                 Which game would you like to play, {username}?
             </h2>
-            <div className="grid grid-cols-2 gap-3 mb-4 sm:mb-6">
+            <div className="flex justify-around">
                 <Button
+                    className="mr-2 w-1/2"
+                    centered
                     onClick={() => router.push("/wwtbam")}
                 >
-                    A: Who Wants to Be a Millionaire?
+                    Who Wants to Be a Millionaire?
                 </Button>
                 <Button
+                    className="ml-2 w-1/2"
+                    centered
                     onClick={() => router.push("/gg")}
                 >
-                    B: Global Game
+                    Global Game
                 </Button>
             </div>
             <div
-                className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2">
+                className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1 sm:gap-2"
+            >
                 <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">
                     All-time unique visitors:
                 </div>
