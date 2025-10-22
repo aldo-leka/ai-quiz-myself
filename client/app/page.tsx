@@ -91,10 +91,10 @@ export default function Home() {
         const seconds = Math.floor((Date.now() - timestamp) / 1000)
 
         if (seconds < 60) return 'just now'
-        if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`
-        if (seconds < 2592000) return `${Math.floor(seconds / 86400)} days ago`
-        if (seconds < 31536000) return `${Math.floor(seconds / 2592000)} months ago`
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} minute${Math.floor(seconds / 60) > 1 ? "s" : ""} ago`
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hour${Math.floor(seconds / 3600) > 1 ? "s" : ""} ago`
+        if (seconds < 2592000) return `${Math.floor(seconds / 86400)} day${Math.floor(seconds / 86400) > 1 ? "s" : ""} ago`
+        if (seconds < 31536000) return `${Math.floor(seconds / 2592000)} month${Math.floor(seconds / 2592000) > 1 ? "s" : ""} ago`
         return '> 1 year ago'
     }
 
