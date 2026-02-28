@@ -8,6 +8,13 @@
       "when": 1772282259771,
       "tag": "0000_handy_grim_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772301791371,
+      "tag": "0001_stormy_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

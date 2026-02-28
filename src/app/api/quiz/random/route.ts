@@ -1,0 +1,75 @@
+import { and, asc, eq, notInArray, sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { questions, quizGameModeEnum, quizzes } from "@/db/schema";
+
+const validModes = new Set(quizGameModeEnum.enumValues);
+
+function normalizeOptions(
+  options: unknown,
+): Array<{ text: string; explanation: string }> {
+  if (!Array.isArray(options)) return [];
+
+  return options
+    .map((option) => {
+      if (!option || typeof option !== "object") return null;
+      const text = "text" in option && typeof option.text === "string" ? option.text : null;
+      const explanation =
+        "explanation" in option && typeof option.explanation === "string"
+          ? option.explanation
+          : "";
+
+      if (!text) return null;
+      return { text, explanation };
+    })
+    .filter((option): option is { text: string; explanation: string } => option !== null);
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const mode = searchParams.get("mode");
+  const exclude = searchParams
+    .get("exclude")
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const filters = [eq(quizzes.isHub, true)];
+
+  if (mode && validModes.has(mode as (typeof quizGameModeEnum.enumValues)[number])) {
+    filters.push(eq(quizzes.gameMode, mode as (typeof quizGameModeEnum.enumValues)[number]));
+  }
+
+  if (exclude && exclude.length > 0) {
+    filters.push(notInArray(quizzes.id, exclude));
+  }
+
+  const [quiz] = await db
+    .select()
+    .from(quizzes)
+    .where(and(...filters))
+    .orderBy(sql`random()`)
+    .limit(1);
+
+  if (!quiz) {
+    return NextResponse.json({ error: "No matching quiz found" }, { status: 404 });
+  }
+
+  const rawQuestions = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.quizId, quiz.id))
+    .orderBy(asc(questions.position));
+
+  const normalizedQuestions = rawQuestions.map((question) => ({
+    ...question,
+    options: normalizeOptions(question.options),
+  }));
+
+  return NextResponse.json({
+    quiz: {
+      ...quiz,
+      questions: normalizedQuestions,
+    },
+  });
+}
