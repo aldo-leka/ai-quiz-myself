@@ -1,171 +1,143 @@
-# Task: Port WWTBAM Game to Monorepo
+# Task: Port WWTBAM to Monorepo (Phase 1)
 
-Port the "Who Wants to Be a Millionaire" quiz game from the old `client/` + `server/` directories into the new Next.js App Router monorepo at `src/`. The monorepo already has: Drizzle ORM + Neon, better-auth, shadcn/ui components, Trigger.dev, Sentry, PostHog.
+## Context
 
-## What exists now
+This is a quiz game platform (quizplus.io). We're porting the "Who Wants to Be a Millionaire" mode from the old `client/` + `server/` directories into the new Next.js App Router monorepo at `src/`.
 
-**Old code to port FROM (read-only reference, do NOT modify):**
-- `client/app/wwtbam/page.tsx` — main WWTBAM game page (single player)
-- `client/hooks/useQuizGame.ts` — game state management hook
-- `client/hooks/useHostCommunication.ts` — AI host API communication
-- `client/hooks/useGameIntro.ts` — intro animation hook
-- `client/components/AnimatedText.tsx` — typewriter text with cue system (|||slow|||, |||fast|||, |||reveal|||, etc.)
-- `client/components/Button.tsx` — custom button with selected/correct/orange states
-- `client/components/CircularButton.tsx` — circular action button
-- `client/components/LoadingScreen.tsx` — loading with random quiz messages
-- `client/components/quiz/*` — Question, Explanation, Header, Intro, Leaderboard, WaitingScreen, Timer
-- `client/lib/constants.ts` — MONEY_LADDER, CHECKPOINTS, messages, country data, timing constants
+The monorepo already has: Drizzle ORM + Neon, better-auth (with user/session/account/verification tables in `src/db/schema/auth.ts`), shadcn/ui, Trigger.dev, Sentry, PostHog.
+
+**Old code in `client/` and `server/` is reference only. Do NOT modify it. Read it to understand the game flow.**
+
+Key old files to study:
+- `client/app/wwtbam/page.tsx` — full WWTBAM game page
+- `client/hooks/useHostCommunication.ts` — AI host API calls
+- `client/components/AnimatedText.tsx` — typewriter text with cue system (|||slow|||, |||medium|||, etc.)
+- `client/components/Button.tsx` — answer buttons with selected/correct/orange states
+- `client/lib/constants.ts` — money ladder, checkpoints, host messages, timing
 - `client/lib/types.ts` — TypeScript interfaces
-- `client/context/GameContext.tsx` — game context provider
-- `server/api.js` — Express routes: `/host` (AI host via Gemini), `/generate-quiz` (fetch from DB), `/batch-generate-quizzes` (AI generation)
+- `server/api.js` — Express routes for AI host + quiz generation (Gemini prompts)
 
-**New monorepo (where to port TO):**
-- `src/app/` — Next.js App Router pages
-- `src/components/ui/` — full shadcn/ui component library already installed
-- `src/db/schema/auth.ts` — better-auth schema (user, session, account, verification tables)
-- `src/db/schema/index.ts` — exports auth schema
-- `src/db/index.ts` — Drizzle client with Neon
-- `src/lib/auth.ts` — better-auth config
-- `src/lib/auth-client.ts` — auth client
-- `src/trigger/example.ts` — example Trigger.dev job
-- DB: Neon Postgres via `@neondatabase/serverless` + `drizzle-orm`
-- UI: shadcn/ui + Tailwind + Radix + lucide-icons (all installed)
+## Step 1: Database Schema
 
-## What to build
+Add quiz tables to `src/db/schema/quiz.ts`. Export from `src/db/schema/index.ts`.
 
-### 1. Database Schema (`src/db/schema/quiz.ts`)
+**Important:** The `user` table already exists from better-auth at `src/db/schema/auth.ts`. All FKs to users should reference that table's `id` (text type, not uuid).
 
-Add quiz-related tables to Drizzle schema. Export from `src/db/schema/index.ts`.
+Tables needed for WWTBAM (keep it lean, we'll add more tables later):
 
-```typescript
-// Tables needed:
-quizzes {
-  id: uuid PK
-  creatorId: text, nullable, FK -> user.id
-  title: text
-  theme: text
-  language: text, default 'en'
-  difficulty: enum('easy', 'medium', 'hard', 'mixed', 'escalating')
-  gameMode: enum('single', 'wwtbam', 'couch_coop')
-  questionCount: integer
-  sourceType: enum('ai_generated', 'pdf', 'url', 'manual')
-  isHub: boolean, default false
-  playCount: integer, default 0
-  likes: integer, default 0
-  dislikes: integer, default 0
-  createdAt, updatedAt
-}
+**quizzes** — id (uuid), creatorId (text, nullable, FK -> user.id), title, theme, language (default 'en'), difficulty (enum: easy/medium/hard/mixed/escalating), gameMode (enum: single/wwtbam/couch_coop), questionCount (int), sourceType (enum: ai_generated/pdf/url/manual), isHub (boolean), playCount (int, default 0), likes (int, default 0), dislikes (int, default 0), createdAt, updatedAt
 
-questions {
-  id: uuid PK
-  quizId: uuid FK -> quizzes.id (cascade delete)
-  position: integer
-  questionText: text
-  imageUrl: text, nullable
-  options: jsonb  // [{text: string, explanation: string}]
-  correctOptionIndex: integer
-  difficulty: enum('easy', 'medium', 'hard')
-  subject: text, nullable
-  createdAt
-}
+**questions** — id (uuid), quizId (FK -> quizzes, cascade), position (int), questionText (text), imageUrl (text, nullable), options (jsonb: [{text, explanation}]), correctOptionIndex (int), difficulty (enum), subject (text, nullable), createdAt
 
-quizSessions {
-  id: uuid PK
-  quizId: uuid FK -> quizzes.id
-  userId: text, nullable, FK -> user.id
-  gameMode: enum('single', 'wwtbam', 'couch_coop')
-  players: jsonb, nullable  // [{name, isOwner}]
-  score: integer, default 0
-  startedAt: timestamp
-  finishedAt: timestamp, nullable
-}
+**apiKeys** — id (uuid), userId (FK -> user.id, cascade), provider (enum: openai/anthropic/google), encryptedKey (text), label (text, nullable), createdAt. Unique index on userId + provider.
 
-quizSessionAnswers {
-  id: uuid PK
-  sessionId: uuid FK -> quizSessions.id (cascade delete)
-  questionId: uuid FK -> questions.id
-  playerName: text, nullable  // for couch coop
-  selectedOptionIndex: integer, nullable  // null = timeout
-  isCorrect: boolean
-  timeTakenMs: integer
-  createdAt
-}
-```
+**quizSessions** — id (uuid), quizId (FK -> quizzes), userId (text, nullable, FK -> user.id), gameMode (enum), score (int, default 0), startedAt, finishedAt (nullable)
 
-Add proper indexes and relations. Run `drizzle-kit generate` after.
+**quizSessionAnswers** — id (uuid), sessionId (FK -> quizSessions, cascade), questionId (FK -> questions), selectedOptionIndex (int, nullable for timeout), isCorrect (boolean), timeTakenMs (int), createdAt
 
-### 2. API Routes
+Add relations and sensible indexes. Run `drizzle-kit generate` after.
 
-**`src/app/api/quiz/[quizId]/route.ts`** — GET: fetch a quiz with its questions by ID. Public (no auth required).
+## Step 2: Port WWTBAM Game
 
-**`src/app/api/quiz/random/route.ts`** — GET: fetch a random hub quiz. Accepts query params: `?mode=wwtbam&exclude=id1,id2`. Public.
+### AI Host — Use Vercel AI SDK with streaming
 
-**`src/app/api/quiz/host/route.ts`** — POST: AI host communication. Port the logic from `server/api.js` `/host` endpoint. For now, keep Gemini (use `@google/genai`). Accept `actionType`, `currentSetting`, `action`, `additionalData`, `history` in the body. Keep the existing SCENE_PROMPTS (FINAL_ANSWER_CONFIRM, LIFELINE_ASK_HOST). Add `GOOGLE_AI_API_KEY` to env. Return `{ response: string }`.
+Use `ai` package (https://ai-sdk.dev) for the AI host. This is critical for the game show feel.
 
-### 3. Game Components (port to `src/`)
+**Install:** `ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google`
 
-Port these components, adapting them to use shadcn/ui where appropriate:
+**How it works:**
+- When a logged-in user has saved an API key, use THEIR key + provider for the AI host
+- For hub quizzes played by anonymous users (or users without a key): skip AI host, use the fallback static messages (already exist in old code: WELCOME_MESSAGES, NEXT_QUESTION_MESSAGES, etc.)
+- The AI host response should be STREAMED to the client so the AnimatedText component can start rendering immediately
 
-**`src/lib/quiz-constants.ts`** — Port MONEY_LADDER, CHECKPOINTS, QUESTION_LENGTH, LOADING_ACTIONS, WELCOME_MESSAGES, NEXT_QUESTION_MESSAGES, LIFELINE_5050_MESSAGES, ANIMATED_TEXT_SPEED/PAUSE constants from `client/lib/constants.ts`. Do NOT port the countries record (not needed for WWTBAM).
+**API route: `src/app/api/quiz/host/route.ts`**
+- POST endpoint
+- Accept: actionType, currentSetting, action, additionalData, history, provider, apiKey (encrypted, decrypt server-side)
+- Use `streamText()` from the AI SDK
+- Return a streaming response
 
-**`src/lib/quiz-types.ts`** — Port SingleGameQuestion and other relevant types. Adapt to match the new DB schema (options are now `{text, explanation}` objects instead of separate arrays).
+**System prompts:**
+- Study the existing prompts in `server/api.js` (SCENE_PROMPTS) as examples of the tone and structure
+- But write NEW, improved prompts. The host should be dramatic, educational, entertaining — a proper game show host.
+- Action types: WELCOME, BEGIN_QUESTION, FINAL_ANSWER_CONFIRM, LIFELINE_ASK_HOST, LIFELINE_5050
+- Include the cue markers in the prompt instructions so the AI outputs them: |||slow|||, |||medium|||, |||fast|||, |||reveal|||, |||option:A/B/C/D|||
 
-**`src/components/quiz/AnimatedText.tsx`** — Port directly from `client/components/AnimatedText.tsx`. This is custom and does not map to a shadcn component. Keep the cue system (|||slow|||, |||medium|||, |||reveal|||, |||option:X|||).
+**Client hook: `src/hooks/useHostCommunication.ts`**
+- Use `useChat` or manual fetch with streaming from the AI SDK client helpers
+- Feed streamed text into the AnimatedText component
 
-**`src/components/quiz/GameButton.tsx`** — Port from `client/components/Button.tsx`. This needs the selected/correct/orange/disabled states for answer buttons. Use `cva` (class-variance-authority) for variants.
+### Game Components
 
-**`src/components/quiz/CircularButton.tsx`** — Port from `client/components/CircularButton.tsx`.
+Port to `src/components/quiz/`, using shadcn/ui where it makes sense:
 
-**`src/components/quiz/LoadingScreen.tsx`** — Port from `client/components/LoadingScreen.tsx`. Use LOADING_ACTIONS for random messages.
+- **AnimatedText.tsx** — Port from `client/components/AnimatedText.tsx`. Keep the cue parsing system (|||slow|||, |||medium|||, |||reveal|||, |||option:X|||). This is custom, doesn't map to shadcn.
+- **GameButton.tsx** — Port from `client/components/Button.tsx`. Needs selected/correct/orange/disabled states. Use `cva` for variants.
+- **CircularButton.tsx** — Port from `client/components/CircularButton.tsx`.
+- **LoadingScreen.tsx** — Port from `client/components/LoadingScreen.tsx`.
 
-**`src/hooks/useHostCommunication.ts`** — Port from `client/hooks/useHostCommunication.ts`. Change the fetch URL from `${process.env.NEXT_PUBLIC_SERVER_URL}/api/host` to `/api/quiz/host`.
+### Game Constants
 
-**`src/hooks/useGameIntro.ts`** — Port from `client/hooks/useGameIntro.ts`.
+**`src/lib/quiz-constants.ts`** — Port from `client/lib/constants.ts`:
+- MONEY_LADDER, CHECKPOINTS, QUESTION_LENGTH
+- LOADING_ACTIONS
+- WELCOME_MESSAGES, NEXT_QUESTION_MESSAGES, LIFELINE_5050_MESSAGES (used as fallback when no AI host)
+- ANIMATED_TEXT_SPEED and pause constants
 
-### 4. Game Page (`src/app/play/[quizId]/page.tsx`)
+Do NOT port the countries record.
 
-Create the WWTBAM game page. Port the game logic from `client/app/wwtbam/page.tsx` but with these changes:
+### Game Page: `src/app/play/[quizId]/page.tsx`
 
-- **Data fetching:** Instead of fetching from Express server, fetch from `/api/quiz/[quizId]` to get the quiz and its questions.
-- **Question format:** Adapt to new schema. Options are `{text, explanation}` objects. `correctOptionIndex` is an integer (not matching text).
-- **No localStorage for quiz tracking.** If user is logged in (check via better-auth client), save the session to DB on completion via a POST to a new endpoint `src/app/api/quiz/session/route.ts`.
-- **Anonymous play works fine.** Just don't persist the session.
-- **Keep all existing gameplay:** money ladder, checkpoints, timer, lifelines (50:50, Ask the Host), AI host commentary via AnimatedText, cash out, game over screen.
+Port the game logic from `client/app/wwtbam/page.tsx` with these changes:
 
-Also create a simple entry page:
+- Fetch quiz data from a server action or API route (not Express)
+- Questions use new schema format: options are `{text, explanation}` objects, correct answer is `correctOptionIndex`
+- AI host uses streaming via AI SDK (see above). Falls back to static messages if no API key.
+- If user is logged in: save quiz session + answers to DB on completion
+- If anonymous: game works fine, just don't persist
+- Keep ALL gameplay: money ladder, checkpoints, timer (60s), lifelines (50:50, Ask the Host), cash out, game over
 
-**`src/app/page.tsx`** — Replace the current boilerplate. Show:
+### API Routes
+
+**`src/app/api/quiz/[quizId]/route.ts`** — GET: fetch quiz with questions. Public.
+
+**`src/app/api/quiz/random/route.ts`** — GET: random hub quiz. Accepts `?mode=wwtbam&exclude=id1,id2`. Public.
+
+**`src/app/api/quiz/host/route.ts`** — POST: streaming AI host (see above).
+
+**`src/app/api/quiz/session/route.ts`** — POST: save completed quiz session. Auth required.
+
+### Landing Page: `src/app/page.tsx`
+
+Replace the boilerplate. Simple and TV-friendly:
 - "QuizPlus" title
-- "Play a random quiz" button -> fetches `/api/quiz/random?mode=wwtbam` then redirects to `/play/[quizId]`
-- Simple, TV-friendly (large text, large buttons, dark theme)
+- "Play a Random Quiz" button → fetch random WWTBAM quiz → redirect to `/play/[quizId]`
+- Dark theme, large text, large buttons
 
-### 5. Seed Script (`src/db/seed.ts`)
+## Step 3: Seed Script
 
-Create a seed script that generates 3 sample WWTBAM quizzes using the Gemini AI (same prompt from `server/api.js` `generateSingleQuiz()`). Store them with `isHub: true`, `gameMode: 'wwtbam'`, `difficulty: 'escalating'`. Map the generated JSON to the new schema format (options as `{text, explanation}` objects).
+**`src/db/seed.ts`** — Generate 3 WWTBAM quizzes using Google Gemini (`@ai-sdk/google`).
 
-Add script to package.json: `"db:seed": "npx tsx src/db/seed.ts"`
+Use a generation prompt similar to the one in `server/api.js` `generateSingleQuiz()` but improved. 14 questions, escalating difficulty, varied subjects, educational explanations.
 
-### 6. Install missing dependency
+Store with `isHub: true`, `gameMode: 'wwtbam'`, `difficulty: 'escalating'`. Map to new schema format.
 
-Add `@google/genai` to dependencies (for the AI host and seed script).
+Add to package.json: `"db:seed": "npx tsx src/db/seed.ts"`
 
-## TV-Friendly Design Principles (apply throughout)
+## TV-Friendly Design (apply everywhere)
 
-- All interactive elements navigable with arrow keys + Enter
-- Minimum touch target: 64px
-- Large text: min 18px body, 24px+ headings
-- High contrast
+- Arrow key + Enter navigation (TV remote compatible)
+- Min touch target: 64px
+- Large text: 18px+ body, 24px+ headings
+- High contrast, dark theme
 - No hover-dependent interactions
-- Visible focus states (thick ring/border)
-- Dark theme preferred (easier on TV in living room)
+- Visible focus states (thick ring/outline)
 
-## Important constraints
+## Constraints
 
-- Do NOT delete or modify anything in `client/` or `server/` directories
-- Do NOT touch `src/db/schema/auth.ts` (better-auth manages this)
-- Use existing shadcn/ui components from `src/components/ui/` where they fit
-- All new quiz components go in `src/components/quiz/`
-- All new hooks go in `src/hooks/`
-- All new API routes go in `src/app/api/quiz/`
-- Use the existing Drizzle client from `src/db/index.ts`
-- Keep the same gameplay feel and flow as the original WWTBAM
+- Do NOT modify `client/` or `server/` directories
+- Do NOT touch `src/db/schema/auth.ts`
+- Use existing shadcn/ui components from `src/components/ui/`
+- New quiz components in `src/components/quiz/`
+- New hooks in `src/hooks/`
+- New API routes in `src/app/api/quiz/`
+- Use existing Drizzle client from `src/db/index.ts`
