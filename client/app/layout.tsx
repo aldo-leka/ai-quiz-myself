@@ -5,7 +5,7 @@ import { GameProvider } from "@/context/GameContext"
 import RequireUsername from "@/components/RequireUsername"
 
 const bitCountGridSingle = localFont({
-  src: './BitcountGridSingle.ttf',
+  src: './fonts/BitcountGridSingle.ttf',
 })
 
 export const metadata: Metadata = {
