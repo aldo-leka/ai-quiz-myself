@@ -10,11 +10,20 @@ const payloadSchema = z.object({
   quizId: z.string().uuid(),
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   score: z.number().int().nonnegative(),
+  players: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        isOwner: z.boolean(),
+      }),
+    )
+    .optional(),
   startedAt: z.string(),
   finishedAt: z.string(),
   answers: z.array(
     z.object({
       questionId: z.string().uuid(),
+      playerName: z.string().min(1).optional(),
       selectedOptionIndex: z.number().int().min(0).max(3).nullable(),
       isCorrect: z.boolean(),
       timeTakenMs: z.number().int().nonnegative(),
@@ -63,17 +72,21 @@ export async function POST(request: Request) {
       quizId: payload.quizId,
       userId: session.user.id,
       gameMode: payload.gameMode,
-      score: payload.score,
+      players: payload.players ?? [{ name: session.user.name, isOwner: true }],
+      totalScore: payload.score,
       startedAt: new Date(payload.startedAt),
       finishedAt: new Date(payload.finishedAt),
     })
     .returning({ id: quizSessions.id });
+
+  const fallbackPlayerName = payload.players?.[0]?.name ?? session.user.name;
 
   if (payload.answers.length > 0) {
     await db.insert(quizSessionAnswers).values(
       payload.answers.map((answer) => ({
         sessionId: createdSession.id,
         questionId: answer.questionId,
+        playerName: answer.playerName ?? fallbackPlayerName,
         selectedOptionIndex: answer.selectedOptionIndex,
         isCorrect: answer.isCorrect,
         timeTakenMs: answer.timeTakenMs,

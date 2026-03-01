@@ -15,6 +15,13 @@
       "when": 1772301791371,
       "tag": "0001_stormy_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772366275877,
+      "tag": "0002_typical_rafael_vega",
+      "breakpoints": true
     }
   ]
 }

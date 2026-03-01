@@ -51,10 +51,15 @@ export type SaveQuizSessionPayload = {
   quizId: string;
   gameMode: "wwtbam" | "single" | "couch_coop";
   score: number;
+  players?: Array<{
+    name: string;
+    isOwner: boolean;
+  }>;
   startedAt: string;
   finishedAt: string;
   answers: Array<{
     questionId: string;
+    playerName?: string;
     selectedOptionIndex: number | null;
     isCorrect: boolean;
     timeTakenMs: number;
