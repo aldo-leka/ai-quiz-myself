@@ -105,14 +105,12 @@ export const auth = betterAuth({
       avatarUrl: {
         type: "string",
         required: false,
-        fieldName: "avatar_url",
       },
       isAdmin: {
         type: "boolean",
         required: false,
         defaultValue: false,
         input: false,
-        fieldName: "is_admin",
       },
       locale: {
         type: "string",
