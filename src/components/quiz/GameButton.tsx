@@ -12,6 +12,7 @@ const gameButtonVariants = cva(
         selected: "border-slate-400 bg-slate-700 text-white",
         orange: "border-orange-300 bg-orange-500 text-white",
         correct: "border-emerald-300 bg-emerald-600 text-white",
+        wrong: "border-rose-300 bg-rose-600 text-white",
       },
       focused: {
         true: "ring-4 ring-amber-300",

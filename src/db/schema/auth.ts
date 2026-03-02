@@ -13,8 +13,8 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   avatarUrl: text("avatar_url"),
-  isAdmin: boolean("is_admin").default(false),
-  locale: text("locale").default("en-US"),
+  isAdmin: boolean("is_admin").default(false).notNull(),
+  locale: text("locale").default("en").notNull(),
 });
 
 export const session = pgTable(

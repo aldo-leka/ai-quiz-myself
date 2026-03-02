@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -70,6 +71,8 @@ export const creditTransactionTypeEnum = pgEnum("credit_transaction_type", [
   "purchase",
   "generation",
 ]);
+
+export const quizVoteEnum = pgEnum("quiz_vote", ["like", "dislike"]);
 
 export const quizzes = pgTable(
   "quizzes",
@@ -288,6 +291,39 @@ export const creditTransactions = pgTable(
   ],
 );
 
+export const quizVotes = pgTable(
+  "quiz_votes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    anonId: text("anon_id"),
+    vote: quizVoteEnum("vote").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("quiz_votes_quiz_id_idx").on(table.quizId),
+    index("quiz_votes_user_id_idx").on(table.userId),
+    index("quiz_votes_anon_id_idx").on(table.anonId),
+    uniqueIndex("quiz_votes_quiz_user_uq")
+      .on(table.quizId, table.userId)
+      .where(sql`${table.userId} is not null`),
+    uniqueIndex("quiz_votes_quiz_anon_uq")
+      .on(table.quizId, table.anonId)
+      .where(sql`${table.anonId} is not null`),
+    check(
+      "quiz_votes_actor_check",
+      sql`(("user_id" is not null and "anon_id" is null) or ("user_id" is null and "anon_id" is not null))`,
+    ),
+  ],
+);
+
 export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   creator: one(user, {
     fields: [quizzes.creatorId],
@@ -297,6 +333,7 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   sessions: many(quizSessions),
   generationJobs: many(quizGenerationJobs),
   embeddings: many(quizEmbeddings),
+  votes: many(quizVotes),
 }));
 
 export const questionsRelations = relations(questions, ({ one, many }) => ({
@@ -382,3 +419,14 @@ export const creditTransactionsRelations = relations(
     }),
   }),
 );
+
+export const quizVotesRelations = relations(quizVotes, ({ one }) => ({
+  quiz: one(quizzes, {
+    fields: [quizVotes.quizId],
+    references: [quizzes.id],
+  }),
+  user: one(user, {
+    fields: [quizVotes.userId],
+    references: [user.id],
+  }),
+}));
