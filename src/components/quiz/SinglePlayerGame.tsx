@@ -60,7 +60,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
   const [phase, setPhase] = useState<GamePhase>("start");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [focusedAnswerIndex, setFocusedAnswerIndex] = useState(0);
+  const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
   const [score, setScore] = useState(0);
@@ -81,6 +81,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const scoreRef = useRef(0);
   const resultsRef = useRef<QuestionResult[]>([]);
   const hasPersistedRef = useRef(false);
+  const finalizedQuestionKeyRef = useRef<string | null>(null);
 
   const totalQuestions = quiz.questions.length;
   const currentQuestion = quiz.questions[currentQuestionIndex];
@@ -129,14 +130,19 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     }
 
     setCurrentQuestionIndex(nextQuestionIndex);
+    finalizedQuestionKeyRef.current = null;
     setSelectedAnswerIndex(null);
-    setFocusedAnswerIndex(0);
+    setFocusedAnswerIndex(null);
     setPhase("question");
   }, [currentQuestionIndex, totalQuestions]);
 
   const finalizeAnswer = useCallback(
     (selectedIndex: number | null) => {
       if (phase !== "question" || !currentQuestion) return;
+
+      const questionKey = `${currentQuestionIndex}:${currentQuestion.id}`;
+      if (finalizedQuestionKeyRef.current === questionKey) return;
+      finalizedQuestionKeyRef.current = questionKey;
 
       stopCountdown();
 
@@ -172,7 +178,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         moveToNextQuestion();
       }, AUTO_ADVANCE_MS);
     },
-    [currentQuestion, moveToNextQuestion, phase],
+    [currentQuestion, currentQuestionIndex, moveToNextQuestion, phase],
   );
 
   useEffect(() => {
@@ -216,11 +222,18 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       event.preventDefault();
 
       if (event.key === "Enter") {
+        if (focusedAnswerIndex === null) return;
         finalizeAnswer(focusedAnswerIndex);
         return;
       }
 
       setFocusedAnswerIndex((previous) => {
+        if (previous === null) {
+          if (event.key === "ArrowRight") return 1;
+          if (event.key === "ArrowDown") return 2;
+          return 0;
+        }
+
         const row = Math.floor(previous / 2);
         const col = previous % 2;
 
@@ -301,12 +314,13 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     scoreRef.current = 0;
     resultsRef.current = [];
     hasPersistedRef.current = false;
+    finalizedQuestionKeyRef.current = null;
 
     setScore(0);
     setResults([]);
     setCompletedDurationMs(0);
     setCurrentQuestionIndex(0);
-    setFocusedAnswerIndex(0);
+    setFocusedAnswerIndex(null);
     setSelectedAnswerIndex(null);
     setRemainingSeconds(QUESTION_TIME_SECONDS);
     setSaveStatus("idle");
@@ -318,11 +332,12 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     stopCountdown();
 
     setCurrentQuestionIndex(0);
-    setFocusedAnswerIndex(0);
+    setFocusedAnswerIndex(null);
     setSelectedAnswerIndex(null);
     setRemainingSeconds(QUESTION_TIME_SECONDS);
     setScore(0);
     setResults([]);
+    finalizedQuestionKeyRef.current = null;
     setCompletedDurationMs(0);
     setSaveStatus("idle");
     setPhase("start");
@@ -516,7 +531,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
               <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                 {results.map((result, index) => (
                   <div
-                    key={result.questionId}
+                    key={`${result.questionId}-${index}`}
                     className="flex items-start justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900/80 p-3"
                   >
                     <div className="space-y-1">

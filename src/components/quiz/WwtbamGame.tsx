@@ -175,8 +175,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
-    if (!focusedControl || !focusOrder.includes(focusedControl)) {
-      setFocusedControl(focusOrder[0]);
+    if (focusedControl && !focusOrder.includes(focusedControl)) {
+      setFocusedControl(null);
     }
   }, [focusOrder, focusedControl]);
 
@@ -199,7 +199,16 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       }
 
       const currentIndex = focusOrder.findIndex((id) => id === focusedControl);
-      const baseIndex = currentIndex === -1 ? 0 : currentIndex;
+      if (currentIndex === -1) {
+        setFocusedControl(
+          key === "ArrowLeft" || key === "ArrowUp"
+            ? focusOrder[focusOrder.length - 1]
+            : focusOrder[0],
+        );
+        return;
+      }
+
+      const baseIndex = currentIndex;
       const delta = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
       const nextIndex = (baseIndex + delta + focusOrder.length) % focusOrder.length;
 
