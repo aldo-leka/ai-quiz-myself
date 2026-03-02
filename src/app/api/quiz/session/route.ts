@@ -68,43 +68,39 @@ export async function POST(request: Request) {
 
   const fallbackPlayerName = payload.players?.[0]?.name ?? session.user.name;
 
-  const createdSession = await db.transaction(async (tx) => {
-    const [insertedSession] = await tx
-      .insert(quizSessions)
-      .values({
-        quizId: payload.quizId,
-        userId: session.user.id,
-        gameMode: payload.gameMode,
-        players: payload.players ?? [{ name: session.user.name, isOwner: true }],
-        totalScore: payload.score,
-        startedAt: new Date(payload.startedAt),
-        finishedAt: new Date(payload.finishedAt),
-      })
-      .returning({ id: quizSessions.id });
+  const [createdSession] = await db
+    .insert(quizSessions)
+    .values({
+      quizId: payload.quizId,
+      userId: session.user.id,
+      gameMode: payload.gameMode,
+      players: payload.players ?? [{ name: session.user.name, isOwner: true }],
+      totalScore: payload.score,
+      startedAt: new Date(payload.startedAt),
+      finishedAt: new Date(payload.finishedAt),
+    })
+    .returning({ id: quizSessions.id });
 
-    if (payload.answers.length > 0) {
-      await tx.insert(quizSessionAnswers).values(
-        payload.answers.map((answer) => ({
-          sessionId: insertedSession.id,
-          questionId: answer.questionId,
-          playerName: answer.playerName ?? fallbackPlayerName,
-          selectedOptionIndex: answer.selectedOptionIndex,
-          isCorrect: answer.isCorrect,
-          timeTakenMs: answer.timeTakenMs,
-          createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
-        })),
-      );
-    }
+  if (payload.answers.length > 0) {
+    await db.insert(quizSessionAnswers).values(
+      payload.answers.map((answer) => ({
+        sessionId: createdSession.id,
+        questionId: answer.questionId,
+        playerName: answer.playerName ?? fallbackPlayerName,
+        selectedOptionIndex: answer.selectedOptionIndex,
+        isCorrect: answer.isCorrect,
+        timeTakenMs: answer.timeTakenMs,
+        createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
+      })),
+    );
+  }
 
-    await tx
-      .update(quizzes)
-      .set({
-        playCount: sql`${quizzes.playCount} + 1`,
-      })
-      .where(eq(quizzes.id, payload.quizId));
-
-    return insertedSession;
-  });
+  await db
+    .update(quizzes)
+    .set({
+      playCount: sql`${quizzes.playCount} + 1`,
+    })
+    .where(eq(quizzes.id, payload.quizId));
 
   return NextResponse.json({ success: true, sessionId: createdSession.id });
 }
