@@ -1,5 +1,8 @@
 import { generateObject, type LanguageModel } from "ai";
+import { eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/db";
+import { questions, quizzes } from "@/db/schema";
 
 export const QUIZ_QUESTION_COUNT = {
   single: 14,
@@ -61,7 +64,7 @@ function buildDifficultyPolicy(
   }
 
   if (difficulty === "mixed") {
-    return `Balance difficulty across the quiz with about 1/3 easy, 1/3 medium, and 1/3 hard.`;
+    return "Balance difficulty across the quiz with about 1/3 easy, 1/3 medium, and 1/3 hard.";
   }
 
   const easyCount = Math.max(1, Math.floor(questionCount / 3));
@@ -79,8 +82,13 @@ export function createQuizGenerationPrompt(input: {
   gameMode: QuizGenerationGameMode;
   difficulty: QuizGenerationDifficulty;
   questionCount?: number;
+  existingQuestions?: string[];
 }): string {
   const questionCount = input.questionCount ?? QUIZ_QUESTION_COUNT[input.gameMode];
+  const existingQuestions = (input.existingQuestions ?? [])
+    .map((question) => question.trim())
+    .filter((question) => question.length > 0)
+    .slice(0, 80);
   const lines = [
     modePromptLeads[input.gameMode],
     "",
@@ -96,6 +104,17 @@ export function createQuizGenerationPrompt(input: {
     "- Avoid repetitive phrasing and avoid trick wording.",
     ...modeExtraRequirements[input.gameMode].map((requirement) => `- ${requirement}`),
     `- ${buildDifficultyPolicy(input.difficulty, questionCount)}`,
+  ];
+
+  if (existingQuestions.length > 0) {
+    lines.push(
+      "",
+      "The following questions already exist for this topic. Do NOT repeat, rephrase, or create variations of any of them:",
+      ...existingQuestions.map((question, index) => `${index + 1}. ${question}`),
+    );
+  }
+
+  lines.push(
     "",
     "Return ONLY valid JSON matching this shape:",
     "{",
@@ -116,9 +135,40 @@ export function createQuizGenerationPrompt(input: {
     "    }",
     "  ]",
     "}",
-  ];
+  );
 
   return lines.join("\n");
+}
+
+export async function getExistingQuestionsForTheme(theme: string): Promise<string[]> {
+  const normalizedTheme = theme.trim();
+  if (!normalizedTheme) {
+    return [];
+  }
+
+  const pattern = `%${normalizedTheme}%`;
+  const rows = await db
+    .select({
+      questionText: questions.questionText,
+    })
+    .from(questions)
+    .innerJoin(quizzes, eq(questions.quizId, quizzes.id))
+    .where(or(eq(quizzes.theme, normalizedTheme), ilike(quizzes.theme, pattern)))
+    .limit(200);
+
+  const seen = new Set<string>();
+  const existingQuestions: string[] = [];
+
+  for (const row of rows) {
+    const questionText = row.questionText.trim();
+    if (!questionText) continue;
+    const key = questionText.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    existingQuestions.push(questionText);
+  }
+
+  return existingQuestions;
 }
 
 function normalizedDifficultyForPosition(
@@ -171,6 +221,7 @@ export async function generateQuizFromPrompt(input: {
   difficulty: QuizGenerationDifficulty;
   model: LanguageModel;
   temperature?: number;
+  existingQuestions?: string[];
 }): Promise<GeneratedQuiz> {
   const questionCount = QUIZ_QUESTION_COUNT[input.gameMode];
   const generatedQuizSchema = z.object({
@@ -187,6 +238,7 @@ export async function generateQuizFromPrompt(input: {
       gameMode: input.gameMode,
       difficulty: input.difficulty,
       questionCount,
+      existingQuestions: input.existingQuestions,
     }),
     temperature: input.temperature ?? 0.6,
   });

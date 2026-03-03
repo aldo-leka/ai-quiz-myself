@@ -1,17 +1,20 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
-import { apiKeys, questions, quizGenerationJobs, quizzes } from "@/db/schema";
-import { decryptApiKey } from "@/lib/api-key-crypto";
+import { questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import {
+  checkHubUniqueness,
+  generateEmbedding,
+  storeQuizEmbedding,
+} from "@/lib/quiz-embeddings";
 import {
   generateQuizFromPrompt,
+  getExistingQuestionsForTheme,
   type QuizGenerationDifficulty,
   type QuizGenerationGameMode,
 } from "@/lib/quiz-generation";
+import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
 
 const taskPayloadSchema = z.object({
   jobId: z.string().uuid(),
@@ -28,7 +31,6 @@ const jobInputSchema = z.object({
 });
 
 type JobInput = z.infer<typeof jobInputSchema>;
-type ProviderName = "openai" | "anthropic" | "google";
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -77,41 +79,6 @@ function parseInputData(inputData: unknown): JobInput {
   return parsed.data;
 }
 
-async function resolveApiKey(userId: string, apiKeyId: string) {
-  const [savedKey] = await db
-    .select({
-      provider: apiKeys.provider,
-      encryptedKey: apiKeys.encryptedKey,
-    })
-    .from(apiKeys)
-    .where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.userId, userId)))
-    .limit(1);
-
-  if (!savedKey) {
-    throw new Error("Selected API key not found");
-  }
-
-  return {
-    provider: savedKey.provider as ProviderName,
-    apiKey: decryptApiKey(savedKey.encryptedKey),
-  };
-}
-
-function getModel(provider: ProviderName, apiKey: string) {
-  if (provider === "openai") {
-    const openai = createOpenAI({ apiKey });
-    return openai(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
-  }
-
-  if (provider === "anthropic") {
-    const anthropic = createAnthropic({ apiKey });
-    return anthropic(process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest");
-  }
-
-  const google = createGoogleGenerativeAI({ apiKey });
-  return google(process.env.GOOGLE_MODEL ?? "gemini-2.0-flash");
-}
-
 async function persistGeneratedQuiz(params: {
   userId: string;
   input: JobInput;
@@ -149,6 +116,37 @@ async function persistGeneratedQuiz(params: {
   return createdQuiz.id;
 }
 
+async function applyHubUniqueness(quizId: string, questionTexts: string[]) {
+  const embedding = await generateEmbedding(questionTexts);
+  const uniqueness = await checkHubUniqueness(embedding, 0.85);
+
+  if (uniqueness.isDuplicate) {
+    const similarQuizId = uniqueness.mostSimilarQuizId ?? "unknown";
+    const reason = `Too similar to existing hub quiz ${similarQuizId}`;
+
+    await db
+      .update(quizzes)
+      .set({
+        isHub: false,
+        hubStatus: null,
+        isFlagged: true,
+        flagReason: reason,
+      })
+      .where(eq(quizzes.id, quizId));
+
+    return {
+      uniqueness,
+      reason,
+    };
+  }
+
+  await storeQuizEmbedding(quizId, embedding);
+  return {
+    uniqueness,
+    reason: null,
+  };
+}
+
 export const generateQuizTask = task({
   id: "admin-generate-quiz",
   maxDuration: 900,
@@ -179,15 +177,20 @@ export const generateQuizTask = task({
     await setJobStatus(job.id, { status: "processing", errorMessage: null });
 
     try {
-      const credentials = await resolveApiKey(job.userId, effectiveInput.apiKeyId);
-      const model = getModel(credentials.provider, credentials.apiKey);
+      const credentials = await resolveUserApiKey(job.userId, effectiveInput.apiKeyId);
+      if (!credentials) {
+        throw new Error("Selected API key not found");
+      }
 
+      const model = getLanguageModel(credentials.provider, credentials.apiKey);
+      const existingQuestions = await getExistingQuestionsForTheme(effectiveInput.theme);
       const generated = await generateQuizFromPrompt({
         theme: effectiveInput.theme,
         gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
         difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
         model,
         temperature: 0.6,
+        existingQuestions,
       });
 
       const quizId = await persistGeneratedQuiz({
@@ -195,6 +198,11 @@ export const generateQuizTask = task({
         input: effectiveInput,
         generated,
       });
+
+      const uniquenessResult = await applyHubUniqueness(
+        quizId,
+        generated.questions.map((question) => question.questionText),
+      );
 
       await setJobStatus(job.id, {
         status: "completed",
@@ -208,12 +216,16 @@ export const generateQuizTask = task({
         gameMode: effectiveInput.gameMode,
         difficulty: effectiveInput.difficulty,
         provider: credentials.provider,
+        similarity: uniquenessResult.uniqueness.similarity,
+        duplicate: uniquenessResult.uniqueness.isDuplicate,
+        flaggedReason: uniquenessResult.reason,
       });
 
       return {
         ok: true,
         jobId: job.id,
         quizId,
+        duplicate: uniquenessResult.uniqueness.isDuplicate,
       };
     } catch (error) {
       const message = toErrorMessage(error);

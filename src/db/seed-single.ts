@@ -63,7 +63,7 @@ async function saveQuiz(quiz: Awaited<ReturnType<typeof generateQuiz>>) {
 }
 
 async function main() {
-  const modelName = process.env.GOOGLE_MODEL ?? "gemini-2.0-flash";
+  const modelName = process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview";
   console.log(`Seeding ${THEMES.length} single-player hub quizzes with model: ${modelName}`);
 
   for (const theme of THEMES) {

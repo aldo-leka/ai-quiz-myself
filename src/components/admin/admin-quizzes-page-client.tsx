@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 
 type QuizListItem = {
   id: string;
@@ -86,6 +87,20 @@ type ApiKeysResponse = {
   error?: string;
 };
 
+type SuggestSubtopicsResponse = {
+  subtopics: string[];
+  existingThemeCount: number;
+  error?: string;
+};
+
+type ActiveBatch = {
+  startedAt: string;
+  themes: string[];
+  gameMode: QuizGenerationInput["gameMode"];
+  difficulty: QuizGenerationInput["difficulty"];
+  startFailures: number;
+};
+
 const defaultGenerationInput: QuizGenerationInput = {
   theme: "",
   gameMode: "single",
@@ -128,6 +143,10 @@ function mapGenerationStatus(status: QuizGenerationJob["status"]) {
   return "Queued";
 }
 
+function normalizeThemeLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 export function AdminQuizzesPageClient() {
   const [rows, setRows] = useState<QuizListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +172,12 @@ export function AdminQuizzesPageClient() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+  const [batchCategory, setBatchCategory] = useState("");
+  const [batchThemesText, setBatchThemesText] = useState("");
+  const [isSuggestingBatch, setIsSuggestingBatch] = useState(false);
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null);
 
   const initializedCompletedJobIds = useRef(new Set<string>());
   const jobsInitialized = useRef(false);
@@ -283,6 +308,69 @@ export function AdminQuizzesPageClient() {
     return () => clearInterval(interval);
   }, [loadJobs]);
 
+  const batchThemes = useMemo(() => {
+    const seen = new Set<string>();
+    const themes: string[] = [];
+
+    for (const line of batchThemesText.split("\n")) {
+      const cleaned = normalizeThemeLine(line);
+      if (!cleaned) continue;
+      const key = cleaned.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      themes.push(cleaned);
+    }
+
+    return themes;
+  }, [batchThemesText]);
+
+  const activeBatchProgress = useMemo(() => {
+    if (!activeBatch) return null;
+
+    const startedAt = Date.parse(activeBatch.startedAt);
+    const statusByTheme = new Map<string, QuizGenerationJob["status"]>();
+
+    for (const theme of activeBatch.themes) {
+      const matchingJobs = jobs.filter((job) => {
+        const createdAt = Date.parse(job.createdAt);
+        if (!Number.isFinite(createdAt) || createdAt < startedAt) return false;
+
+        const details = parseJobInputData(job.inputData);
+        return (
+          details.theme.toLowerCase() === theme.toLowerCase() &&
+          details.gameMode === activeBatch.gameMode &&
+          details.difficulty === activeBatch.difficulty
+        );
+      });
+
+      if (matchingJobs.length > 0) {
+        statusByTheme.set(theme, matchingJobs[0].status);
+      }
+    }
+
+    let queued = 0;
+    let processing = 0;
+    let completed = 0;
+    let failed = 0;
+
+    for (const status of statusByTheme.values()) {
+      if (status === "pending") queued += 1;
+      if (status === "processing") processing += 1;
+      if (status === "completed") completed += 1;
+      if (status === "failed") failed += 1;
+    }
+
+    return {
+      total: activeBatch.themes.length,
+      found: statusByTheme.size,
+      queued,
+      processing,
+      completed,
+      failed,
+      startFailures: activeBatch.startFailures,
+    };
+  }, [activeBatch, jobs]);
+
   async function startGeneration() {
     setIsGenerating(true);
     setGenerationMessage(null);
@@ -362,6 +450,99 @@ export function AdminQuizzesPageClient() {
     } finally {
       setRetryingJobId(null);
     }
+  }
+
+  async function suggestBatchThemes() {
+    const broadCategory = normalizeThemeLine(batchCategory);
+    if (!broadCategory) {
+      setBatchMessage("Enter a broad category first.");
+      return;
+    }
+
+    setIsSuggestingBatch(true);
+    setBatchMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/quizzes/suggest-subtopics", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          broadCategory,
+          count: 10,
+          apiKeyId: selectedApiKeyId || undefined,
+        }),
+      });
+
+      const payload = (await response.json()) as SuggestSubtopicsResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to suggest subtopics");
+      }
+
+      setBatchThemesText(payload.subtopics.join("\n"));
+      setBatchMessage(
+        `Suggested ${payload.subtopics.length} subtopics (${payload.existingThemeCount} existing hub themes checked).`,
+      );
+    } catch (error) {
+      setBatchMessage(error instanceof Error ? error.message : "Failed to suggest subtopics");
+    } finally {
+      setIsSuggestingBatch(false);
+    }
+  }
+
+  async function generateBatch() {
+    if (batchThemes.length === 0) {
+      setBatchMessage("Add at least one subtopic to generate.");
+      return;
+    }
+
+    setIsGeneratingBatch(true);
+    setBatchMessage(null);
+
+    const startedAt = new Date().toISOString();
+    let startFailures = 0;
+
+    for (const theme of batchThemes) {
+      try {
+        const response = await fetch("/api/admin/quizzes/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            theme,
+            gameMode: generationInput.gameMode,
+            difficulty: generationInput.difficulty,
+            language: "en",
+            apiKeyId: selectedApiKeyId || undefined,
+          }),
+        });
+
+        const payload = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          startFailures += 1;
+          setBatchMessage(payload.error ?? `Failed to start generation for ${theme}`);
+        }
+      } catch {
+        startFailures += 1;
+      }
+    }
+
+    setActiveBatch({
+      startedAt,
+      themes: batchThemes,
+      gameMode: generationInput.gameMode,
+      difficulty: generationInput.difficulty,
+      startFailures,
+    });
+
+    setBatchMessage(
+      `Started ${batchThemes.length - startFailures}/${batchThemes.length} generation jobs.`,
+    );
+
+    await loadJobs();
+    setIsGeneratingBatch(false);
   }
 
   return (
@@ -621,6 +802,100 @@ export function AdminQuizzesPageClient() {
           </Button>
 
           {generationMessage ? <p className="text-sm text-slate-600">{generationMessage}</p> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Generate Hub Batch</CardTitle>
+          <CardDescription>
+            Suggest unique hub subtopics by broad category, edit them, then trigger one generation
+            job per subtopic.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">API Key</p>
+            <Select value={selectedApiKeyId} onValueChange={setSelectedApiKeyId}>
+              <SelectTrigger>
+                <SelectValue placeholder={apiKeysLoading ? "Loading keys..." : "Select key"} />
+              </SelectTrigger>
+              <SelectContent>
+                {apiKeys.map((key) => (
+                  <SelectItem key={key.id} value={key.id}>
+                    {key.provider} {key.label ? `• ${key.label}` : ""} • {key.maskedKey}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {apiKeysError ? <p className="text-sm text-rose-600">{apiKeysError}</p> : null}
+            {!apiKeysLoading && apiKeys.length === 0 ? (
+              <p className="text-sm text-rose-600">
+                No API keys found. Add one in Admin &gt; API Keys.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+            <Input
+              placeholder="Broad category (e.g. Science, History)"
+              value={batchCategory}
+              onChange={(event) => setBatchCategory(event.target.value)}
+            />
+            <Button
+              variant="outline"
+              disabled={isSuggestingBatch || apiKeysLoading || !selectedApiKeyId}
+              onClick={() => void suggestBatchThemes()}
+            >
+              {isSuggestingBatch ? "Suggesting..." : "Suggest 10 Themes"}
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Subtopics (one per line)</p>
+            <Textarea
+              value={batchThemesText}
+              onChange={(event) => setBatchThemesText(event.target.value)}
+              className="min-h-40"
+              placeholder="Generated subtopics will appear here"
+            />
+            <p className="text-xs text-slate-500">
+              {batchThemes.length} unique subtopic{batchThemes.length === 1 ? "" : "s"} ready.
+            </p>
+          </div>
+
+          <Button
+            disabled={
+              isGeneratingBatch ||
+              isSuggestingBatch ||
+              apiKeysLoading ||
+              !selectedApiKeyId ||
+              batchThemes.length === 0
+            }
+            onClick={() => void generateBatch()}
+          >
+            {isGeneratingBatch ? "Starting batch..." : "Generate All"}
+          </Button>
+
+          {activeBatchProgress ? (
+            <div className="rounded-md border p-3 text-sm">
+              <p>
+                Batch progress: {activeBatchProgress.completed + activeBatchProgress.failed}/
+                {activeBatchProgress.total} settled
+              </p>
+              <p className="text-slate-600">
+                Queued {activeBatchProgress.queued}, processing {activeBatchProgress.processing},
+                completed {activeBatchProgress.completed}, failed {activeBatchProgress.failed}
+              </p>
+              {activeBatchProgress.startFailures > 0 ? (
+                <p className="text-rose-600">
+                  {activeBatchProgress.startFailures} jobs failed before entering the queue.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {batchMessage ? <p className="text-sm text-slate-600">{batchMessage}</p> : null}
         </CardContent>
       </Card>
 
