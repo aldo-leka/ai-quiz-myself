@@ -92,7 +92,6 @@ async function assessHubFit(quiz: HubCandidate, questionRows: Array<{ questionTe
   const { object } = await generateObject({
     model: openai(process.env.OPENAI_MODEL ?? "gpt-5-nano"),
     schema: hubFitSchema,
-    temperature: 0.1,
     prompt: buildReviewPrompt(quiz, questionRows),
   });
 
