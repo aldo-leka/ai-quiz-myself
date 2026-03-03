@@ -91,6 +91,8 @@ export const quizzes = pgTable(
     isHub: boolean("is_hub").notNull().default(false),
     isPublic: boolean("is_public").notNull().default(true),
     hubStatus: quizHubStatusEnum("hub_status"),
+    isFlagged: boolean("is_flagged").notNull().default(false),
+    flagReason: text("flag_reason"),
     playCount: integer("play_count").notNull().default(0),
     likes: integer("likes").notNull().default(0),
     dislikes: integer("dislikes").notNull().default(0),
@@ -107,6 +109,7 @@ export const quizzes = pgTable(
     index("quizzes_language_idx").on(table.language),
     index("quizzes_theme_idx").on(table.theme),
     index("quizzes_play_count_idx").on(table.playCount),
+    index("quizzes_is_flagged_idx").on(table.isFlagged),
     index("quizzes_hub_mode_idx").on(table.isHub, table.gameMode),
   ],
 );
@@ -321,6 +324,22 @@ export const quizVotes = pgTable(
       "quiz_votes_actor_check",
       sql`(("user_id" is not null and "anon_id" is null) or ("user_id" is null and "anon_id" is not null))`,
     ),
+  ],
+);
+
+export const platformSettings = pgTable(
+  "platform_settings",
+  {
+    key: text("key").primaryKey(),
+    value: text("value").notNull(),
+    description: text("description"),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("platform_settings_key_idx").on(table.key),
   ],
 );
 
