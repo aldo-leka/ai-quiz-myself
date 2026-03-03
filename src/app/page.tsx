@@ -461,7 +461,7 @@ function HomePageContent() {
                   >
                     <Avatar size="lg" className="border border-slate-700">
                       <AvatarImage
-                        src={sessionData.user.avatarUrl ?? sessionData.user.image ?? undefined}
+                        src={sessionData.user.image ?? undefined}
                         alt={sessionData.user.name}
                       />
                       <AvatarFallback className="bg-slate-800 text-cyan-100">
