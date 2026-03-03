@@ -145,11 +145,6 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       snapshotResults: PlayerResult[],
       finishedAt: Date,
     ) => {
-      if (!sessionData?.user) {
-        setSaveStatus("anonymous");
-        return;
-      }
-
       if (hasPersistedRef.current || !startedAtRef.current) return;
 
       hasPersistedRef.current = true;
@@ -185,7 +180,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
           if (!response.ok) {
             throw new Error("Failed to save session");
           }
-          setSaveStatus("saved");
+          setSaveStatus(sessionData?.user ? "saved" : "anonymous");
         })
         .catch(() => {
           setSaveStatus("error");

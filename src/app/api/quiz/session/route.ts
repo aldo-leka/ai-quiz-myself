@@ -39,11 +39,7 @@ export async function POST(request: Request) {
       headers: new Headers(await headers()),
     });
   } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    session = null;
   }
 
   const payloadResult = payloadSchema.safeParse(await request.json());
@@ -59,6 +55,8 @@ export async function POST(request: Request) {
   }
 
   const payload = payloadResult.data;
+  const userId = session?.user?.id ?? null;
+  const userName = session?.user?.name ?? "Guest";
 
   const [quiz] = await db.select({ id: quizzes.id }).from(quizzes).where(eq(quizzes.id, payload.quizId)).limit(1);
 
@@ -66,33 +64,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
   }
 
-  const fallbackPlayerName = payload.players?.[0]?.name ?? session.user.name;
+  let createdSessionId: string | null = null;
 
-  const [createdSession] = await db
-    .insert(quizSessions)
-    .values({
-      quizId: payload.quizId,
-      userId: session.user.id,
-      gameMode: payload.gameMode,
-      players: payload.players ?? [{ name: session.user.name, isOwner: true }],
-      totalScore: payload.score,
-      startedAt: new Date(payload.startedAt),
-      finishedAt: new Date(payload.finishedAt),
-    })
-    .returning({ id: quizSessions.id });
+  if (userId) {
+    const fallbackPlayerName = payload.players?.[0]?.name ?? userName;
 
-  if (payload.answers.length > 0) {
-    await db.insert(quizSessionAnswers).values(
-      payload.answers.map((answer) => ({
-        sessionId: createdSession.id,
-        questionId: answer.questionId,
-        playerName: answer.playerName ?? fallbackPlayerName,
-        selectedOptionIndex: answer.selectedOptionIndex,
-        isCorrect: answer.isCorrect,
-        timeTakenMs: answer.timeTakenMs,
-        createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
-      })),
-    );
+    const [createdSession] = await db
+      .insert(quizSessions)
+      .values({
+        quizId: payload.quizId,
+        userId,
+        gameMode: payload.gameMode,
+        players: payload.players ?? [{ name: fallbackPlayerName, isOwner: true }],
+        totalScore: payload.score,
+        startedAt: new Date(payload.startedAt),
+        finishedAt: new Date(payload.finishedAt),
+      })
+      .returning({ id: quizSessions.id });
+
+    createdSessionId = createdSession.id;
+
+    if (payload.answers.length > 0) {
+      await db.insert(quizSessionAnswers).values(
+        payload.answers.map((answer) => ({
+          sessionId: createdSession.id,
+          questionId: answer.questionId,
+          playerName: answer.playerName ?? fallbackPlayerName,
+          selectedOptionIndex: answer.selectedOptionIndex,
+          isCorrect: answer.isCorrect,
+          timeTakenMs: answer.timeTakenMs,
+          createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
+        })),
+      );
+    }
   }
 
   await db
@@ -102,5 +106,9 @@ export async function POST(request: Request) {
     })
     .where(eq(quizzes.id, payload.quizId));
 
-  return NextResponse.json({ success: true, sessionId: createdSession.id });
+  return NextResponse.json({
+    success: true,
+    sessionId: createdSessionId,
+    sessionPersisted: Boolean(createdSessionId),
+  });
 }

@@ -13,7 +13,7 @@ type SinglePlayerGameProps = {
   quiz: QuizWithQuestions;
 };
 
-type GamePhase = "start" | "question" | "reveal" | "complete";
+type GamePhase = "question" | "reveal" | "complete";
 type VoteType = "like" | "dislike";
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "anonymous";
 
@@ -33,14 +33,6 @@ function formatSecondsFromMs(durationMs: number) {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
-function difficultyBadgeClass(difficulty: QuizWithQuestions["difficulty"]) {
-  if (difficulty === "easy") return "border-emerald-500/50 bg-emerald-500/20 text-emerald-200";
-  if (difficulty === "medium") return "border-amber-500/50 bg-amber-500/20 text-amber-200";
-  if (difficulty === "hard") return "border-rose-500/50 bg-rose-500/20 text-rose-200";
-  if (difficulty === "escalating") return "border-violet-500/50 bg-violet-500/20 text-violet-200";
-  return "border-cyan-500/50 bg-cyan-500/20 text-cyan-200";
-}
-
 function timerBarClass(remainingSeconds: number) {
   const ratio = remainingSeconds / QUESTION_TIME_SECONDS;
   if (ratio > 0.5) return "from-emerald-400 to-emerald-500";
@@ -58,7 +50,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const router = useRouter();
   const { data: sessionData } = authClient.useSession();
 
-  const [phase, setPhase] = useState<GamePhase>("start");
+  const [phase, setPhase] = useState<GamePhase>("question");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
@@ -76,7 +68,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartedAtRef = useRef(0);
-  const quizStartedAtRef = useRef<Date | null>(null);
+  const quizStartedAtRef = useRef<Date | null>(new Date());
   const quizFinishedAtRef = useRef<Date | null>(null);
   const scoreRef = useRef(0);
   const resultsRef = useRef<QuestionResult[]>([]);
@@ -258,11 +250,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   useEffect(() => {
     if (phase !== "complete") return;
 
-    if (!sessionData?.user) {
-      setSaveStatus("anonymous");
-      return;
-    }
-
     if (hasPersistedRef.current) return;
 
     const startedAt = quizStartedAtRef.current;
@@ -298,14 +285,14 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           throw new Error("Failed to save score");
         }
 
-        setSaveStatus("saved");
+        setSaveStatus(sessionData?.user ? "saved" : "anonymous");
       })
       .catch(() => {
         setSaveStatus("error");
       });
   }, [phase, quiz.id, sessionData?.user]);
 
-  function startQuiz() {
+  function playAgain() {
     clearAutoAdvance();
     stopCountdown();
 
@@ -316,31 +303,15 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     hasPersistedRef.current = false;
     finalizedQuestionKeyRef.current = null;
 
-    setScore(0);
-    setResults([]);
-    setCompletedDurationMs(0);
     setCurrentQuestionIndex(0);
     setFocusedAnswerIndex(null);
     setSelectedAnswerIndex(null);
     setRemainingSeconds(QUESTION_TIME_SECONDS);
+    setScore(0);
+    setResults([]);
+    setCompletedDurationMs(0);
     setSaveStatus("idle");
     setPhase("question");
-  }
-
-  function playAgain() {
-    clearAutoAdvance();
-    stopCountdown();
-
-    setCurrentQuestionIndex(0);
-    setFocusedAnswerIndex(null);
-    setSelectedAnswerIndex(null);
-    setRemainingSeconds(QUESTION_TIME_SECONDS);
-    setScore(0);
-    setResults([]);
-    finalizedQuestionKeyRef.current = null;
-    setCompletedDurationMs(0);
-    setSaveStatus("idle");
-    setPhase("start");
   }
 
   async function submitVote(nextVote: VoteType) {
@@ -378,7 +349,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     }
   }
 
-  if (!currentQuestion && phase !== "start" && phase !== "complete") {
+  if (!currentQuestion && phase !== "complete") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
         <div className="max-w-xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
@@ -396,38 +367,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
       <main className="mx-auto w-full max-w-5xl space-y-6">
-        {phase === "start" ? (
-          <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 text-center md:p-8">
-            <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-5xl">{quiz.title}</h1>
-            <p className="text-lg text-slate-300 md:text-xl">{quiz.description || quiz.theme}</p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-base font-semibold text-cyan-100">
-                {quiz.theme}
-              </span>
-              <span
-                className={cn(
-                  "rounded-full border px-4 py-2 text-base font-semibold",
-                  difficultyBadgeClass(quiz.difficulty),
-                )}
-              >
-                {quiz.difficulty === "escalating" ? "Escalating" : quiz.difficulty}
-              </span>
-              <span className="rounded-full border border-slate-600 bg-slate-950 px-4 py-2 text-base font-semibold text-slate-200">
-                {quiz.questionCount} Questions
-              </span>
-            </div>
-            <div className="flex justify-center pt-2">
-              <GameButton
-                centered
-                onClick={startQuiz}
-                className="min-h-16 max-w-xs border-cyan-500/50 bg-cyan-500/20 text-xl text-cyan-100"
-              >
-                Start Quiz
-              </GameButton>
-            </div>
-          </section>
-        ) : null}
-
         {phase === "question" || phase === "reveal" ? (
           <section className="space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:p-7">
             <header className="space-y-4">

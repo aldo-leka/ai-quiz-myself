@@ -512,7 +512,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }
 
   async function persistSession(score: number) {
-    if (!sessionData?.user || hasPersistedSessionRef.current) return;
+    if (hasPersistedSessionRef.current) return;
 
     hasPersistedSessionRef.current = true;
 
