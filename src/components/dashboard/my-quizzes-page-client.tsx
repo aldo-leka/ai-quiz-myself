@@ -382,25 +382,29 @@ export function MyQuizzesPageClient() {
           }
         }}
       >
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Quiz</AlertDialogTitle>
-            <AlertDialogDescription>
+        <AlertDialogContent
+          className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100 shadow-2xl"
+        >
+          <AlertDialogHeader className="place-items-start text-left">
+            <AlertDialogTitle className="text-2xl font-black tracking-tight text-slate-100">
+              Delete Quiz
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base leading-relaxed text-slate-300">
               {quizPendingDelete
                 ? `Delete "${quizPendingDelete.title}" and all related sessions? This cannot be undone.`
                 : "This action cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <AlertDialogCancel
               disabled={Boolean(deletingQuizId)}
-              className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
             >
               Cancel
             </AlertDialogCancel>
             <Button
               variant="outline"
-              className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
+              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonDangerClass}`}
               disabled={Boolean(deletingQuizId)}
               onClick={() => void deleteQuiz(quizPendingDelete)}
             >
