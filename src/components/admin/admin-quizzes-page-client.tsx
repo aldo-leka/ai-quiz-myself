@@ -4,6 +4,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -147,6 +156,11 @@ function normalizeThemeLine(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}…`;
+}
+
 export function AdminQuizzesPageClient() {
   const [rows, setRows] = useState<QuizListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,6 +192,8 @@ export function AdminQuizzesPageClient() {
   const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null);
+  const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
+  const [quizPendingDelete, setQuizPendingDelete] = useState<QuizListItem | null>(null);
 
   const initializedCompletedJobIds = useRef(new Set<string>());
   const jobsInitialized = useRef(false);
@@ -545,6 +561,31 @@ export function AdminQuizzesPageClient() {
     setIsGeneratingBatch(false);
   }
 
+  async function deleteQuiz(quiz: QuizListItem | null) {
+    if (!quiz) return;
+
+    setDeletingQuizId(quiz.id);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/admin/quizzes/${quiz.id}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to delete quiz");
+      }
+
+      setRows((previous) => previous.filter((row) => row.id !== quiz.id));
+      setTotal((previous) => Math.max(0, previous - 1));
+      setQuizPendingDelete(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete quiz");
+    } finally {
+      setDeletingQuizId(null);
+    }
+  }
+
   return (
     <main className="space-y-6">
       <Card>
@@ -660,9 +701,19 @@ export function AdminQuizzesPageClient() {
                     <TableCell>{quiz.playCount}</TableCell>
                     <TableCell>{quiz.creatorName ?? quiz.creatorEmail ?? "—"}</TableCell>
                     <TableCell>
-                      <Button size="sm" asChild>
-                        <Link href={`/admin/quizzes/${quiz.id}`}>Inspect</Link>
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" asChild>
+                          <Link href={`/admin/quizzes/${quiz.id}`}>Inspect</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deletingQuizId === quiz.id}
+                          onClick={() => setQuizPendingDelete(quiz)}
+                        >
+                          {deletingQuizId === quiz.id ? "Deleting..." : "Delete"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -914,7 +965,7 @@ export function AdminQuizzesPageClient() {
             {jobs.map((job) => {
               const details = parseJobInputData(job.inputData);
               return (
-                <div key={job.id} className="aspect-square rounded-lg border p-3">
+                <div key={job.id} className="min-h-44 rounded-lg border p-3">
                   <div className="flex h-full flex-col">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium">{details.theme}</p>
@@ -930,7 +981,9 @@ export function AdminQuizzesPageClient() {
                       {job.status === "completed" && job.quizId ? (
                         <div className="mt-2 flex flex-col gap-2">
                           <p className="text-sm text-emerald-600">
-                            {job.quizTitle ? `Generated: ${job.quizTitle}` : "Quiz generated"}
+                            {job.quizTitle
+                              ? `Generated: ${truncateText(job.quizTitle, 70)}`
+                              : "Quiz generated"}
                           </p>
                           <Button size="sm" asChild>
                             <Link href={`/admin/quizzes/${job.quizId}`}>Inspect</Link>
@@ -980,6 +1033,36 @@ export function AdminQuizzesPageClient() {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={quizPendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingQuizId) {
+            setQuizPendingDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Quiz</AlertDialogTitle>
+            <AlertDialogDescription>
+              {quizPendingDelete
+                ? `Delete "${quizPendingDelete.title}" and all related quiz sessions? This action cannot be undone.`
+                : "This action cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingQuizId)}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={Boolean(deletingQuizId)}
+              onClick={() => void deleteQuiz(quizPendingDelete)}
+            >
+              {deletingQuizId ? "Deleting..." : "Delete Quiz"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

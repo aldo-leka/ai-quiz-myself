@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import { Flag, KeyRound, LayoutDashboard, NotebookPen, Wallet } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,12 +25,12 @@ type AdminShellProps = {
 };
 
 const navItems = [
-  { href: "/admin", label: "📊 Dashboard" },
-  { href: "/admin/quizzes", label: "📝 Quizzes" },
-  { href: "/admin/api-keys", label: "🔑 API Keys" },
-  { href: "/admin/moderation", label: "🚩 Moderation" },
-  { href: "/admin/pricing", label: "💰 Pricing" },
-] as const;
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/quizzes", label: "Quizzes", icon: NotebookPen },
+  { href: "/admin/api-keys", label: "API Keys", icon: KeyRound },
+  { href: "/admin/moderation", label: "Moderation", icon: Flag },
+  { href: "/admin/pricing", label: "Pricing", icon: Wallet },
+] satisfies Array<{ href: string; label: string; icon: LucideIcon }>;
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/admin") return pathname === href;
@@ -57,7 +59,10 @@ export function AdminShell({ children, userLabel }: AdminShellProps) {
                       isActivePath(pathname, item.href) && "font-semibold",
                     )}
                   >
-                    <Link href={item.href}>{item.label}</Link>
+                    <Link href={item.href} className="flex items-center gap-2">
+                      <item.icon className="size-4 shrink-0" aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
