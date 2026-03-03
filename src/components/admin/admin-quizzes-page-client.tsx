@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -27,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 
 type QuizListItem = {
   id: string;
@@ -46,28 +44,21 @@ type QuizListItem = {
   createdAt: string;
 };
 
-type QuestionDraft = {
-  questionText: string;
-  difficulty: "easy" | "medium" | "hard";
-  subject: string;
-  correctOptionIndex: number;
-  options: Array<{
-    text: string;
-    explanation: string;
-  }>;
+type QuizGenerationJob = {
+  id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  inputData: unknown;
+  quizId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  quizTitle: string | null;
 };
 
-type QuizDraft = {
-  title: string;
-  description: string;
+type QuizGenerationInput = {
   theme: string;
-  language: string;
-  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
   gameMode: "single" | "wwtbam" | "couch_coop";
-  sourceType: "manual" | "ai_generated" | "pdf" | "url";
-  isHub: boolean;
-  isPublic: boolean;
-  questions: QuestionDraft[];
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
 };
 
 type ListResponse = {
@@ -78,34 +69,50 @@ type ListResponse = {
   hasMore: boolean;
 };
 
-function createEmptyQuestion(): QuestionDraft {
+type JobsResponse = {
+  jobs: QuizGenerationJob[];
+};
+
+const defaultGenerationInput: QuizGenerationInput = {
+  theme: "",
+  gameMode: "single",
+  difficulty: "mixed",
+};
+
+function parseJobInputData(inputData: unknown): {
+  theme: string;
+  gameMode: "single" | "wwtbam" | "couch_coop";
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
+} {
+  if (!inputData || typeof inputData !== "object") {
+    return { theme: "General Knowledge", gameMode: "single", difficulty: "mixed" };
+  }
+
+  const payload = inputData as { theme?: unknown; gameMode?: unknown; difficulty?: unknown };
+  const gameMode =
+    payload.gameMode === "single" || payload.gameMode === "wwtbam" || payload.gameMode === "couch_coop"
+      ? payload.gameMode
+      : "single";
+  const difficulty =
+    payload.difficulty === "easy" ||
+    payload.difficulty === "medium" ||
+    payload.difficulty === "hard" ||
+    payload.difficulty === "mixed" ||
+    payload.difficulty === "escalating"
+      ? payload.difficulty
+      : "mixed";
   return {
-    questionText: "",
-    difficulty: "medium",
-    subject: "",
-    correctOptionIndex: 0,
-    options: [
-      { text: "", explanation: "" },
-      { text: "", explanation: "" },
-      { text: "", explanation: "" },
-      { text: "", explanation: "" },
-    ],
+    theme: typeof payload.theme === "string" ? payload.theme : "Unknown",
+    gameMode,
+    difficulty,
   };
 }
 
-function createInitialQuizDraft(): QuizDraft {
-  return {
-    title: "",
-    description: "",
-    theme: "",
-    language: "en",
-    difficulty: "mixed",
-    gameMode: "single",
-    sourceType: "manual",
-    isHub: false,
-    isPublic: true,
-    questions: [createEmptyQuestion()],
-  };
+function mapGenerationStatus(status: QuizGenerationJob["status"]) {
+  if (status === "completed") return "Generated";
+  if (status === "failed") return "Error";
+  if (status === "processing") return "Generating";
+  return "Queued";
 }
 
 export function AdminQuizzesPageClient() {
@@ -120,93 +127,214 @@ export function AdminQuizzesPageClient() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
-  const [quizDraft, setQuizDraft] = useState<QuizDraft>(createInitialQuizDraft());
-  const [isCreating, setIsCreating] = useState(false);
-  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<QuizGenerationJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [generationInput, setGenerationInput] = useState<QuizGenerationInput>(defaultGenerationInput);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
+  const [retriedJobIds, setRetriedJobIds] = useState<string[]>([]);
+  const [dismissedJobIds, setDismissedJobIds] = useState<string[]>([]);
+  const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+
+  const initializedCompletedJobIds = useRef(new Set<string>());
+  const jobsInitialized = useRef(false);
 
   const fetchKey = useMemo(
-    () => `${search}|${gameMode}|${sourceType}|${isHub}|${language}|${page}`,
-    [gameMode, isHub, language, page, search, sourceType],
+    () => `${search}|${gameMode}|${sourceType}|${isHub}|${language}|${page}|${reloadNonce}`,
+    [gameMode, isHub, language, page, reloadNonce, search, sourceType],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const params = new URLSearchParams();
-        params.set("page", String(page));
-        params.set("limit", "20");
-        if (search.trim()) params.set("search", search.trim());
-        if (gameMode !== "all") params.set("gameMode", gameMode);
-        if (sourceType !== "all") params.set("sourceType", sourceType);
-        if (isHub !== "all") params.set("isHub", isHub);
-        if (language.trim()) params.set("language", language.trim());
-
-        const response = await fetch(`/api/admin/quizzes?${params.toString()}`, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error("Failed to load quizzes");
-        }
-        const payload = (await response.json()) as ListResponse;
-        if (cancelled) return;
-
-        setRows(payload.quizzes);
-        setHasMore(payload.hasMore);
-        setTotal(payload.total);
-      } catch (fetchError) {
-        if (cancelled) return;
-        setError(fetchError instanceof Error ? fetchError.message : "Could not load quizzes");
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [fetchKey, gameMode, isHub, language, page, search, sourceType]);
-
-  async function createQuiz() {
-    setIsCreating(true);
-    setCreateMessage(null);
+  const loadQuizzes = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch("/api/admin/quizzes", {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", "20");
+      if (search.trim()) params.set("search", search.trim());
+      if (gameMode !== "all") params.set("gameMode", gameMode);
+      if (sourceType !== "all") params.set("sourceType", sourceType);
+      if (isHub !== "all") params.set("isHub", isHub);
+      if (language.trim()) params.set("language", language.trim());
+
+      const response = await fetch(`/api/admin/quizzes?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to load quizzes");
+      }
+
+      const payload = (await response.json()) as ListResponse;
+      setRows(payload.quizzes);
+      setHasMore(payload.hasMore);
+      setTotal(payload.total);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Could not load quizzes");
+    } finally {
+      setLoading(false);
+    }
+  }, [gameMode, isHub, language, page, search, sourceType]);
+
+  const loadJobs = useCallback(async () => {
+    setJobsLoading(true);
+    setJobsError(null);
+
+    try {
+      const response = await fetch("/api/admin/quizzes/generation-jobs", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to load generation jobs");
+      }
+
+      const payload = (await response.json()) as JobsResponse;
+      setJobs(payload.jobs);
+
+      const completed = payload.jobs.filter((job) => job.status === "completed");
+      if (!jobsInitialized.current) {
+        completed.forEach((job) => initializedCompletedJobIds.current.add(job.id));
+        jobsInitialized.current = true;
+        return;
+      }
+
+      const hasNewlyCompleted = completed.some((job) => !initializedCompletedJobIds.current.has(job.id));
+      if (hasNewlyCompleted) {
+        completed.forEach((job) => initializedCompletedJobIds.current.add(job.id));
+        setReloadNonce((previous) => previous + 1);
+      }
+    } catch (fetchError) {
+      setJobsError(fetchError instanceof Error ? fetchError.message : "Could not load generation jobs");
+    } finally {
+      setJobsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadQuizzes();
+  }, [fetchKey, loadQuizzes]);
+
+  useEffect(() => {
+    void loadJobs();
+  }, [loadJobs]);
+
+  useEffect(() => {
+    const retriedRaw = window.localStorage.getItem("admin-generation-retried-job-ids");
+    const dismissedRaw = window.localStorage.getItem("admin-generation-dismissed-job-ids");
+    if (retriedRaw) {
+      try {
+        const parsed = JSON.parse(retriedRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          setRetriedJobIds(parsed.filter((item): item is string => typeof item === "string"));
+        }
+      } catch {
+        // no-op
+      }
+    }
+    if (dismissedRaw) {
+      try {
+        const parsed = JSON.parse(dismissedRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          setDismissedJobIds(parsed.filter((item): item is string => typeof item === "string"));
+        }
+      } catch {
+        // no-op
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("admin-generation-retried-job-ids", JSON.stringify(retriedJobIds));
+  }, [retriedJobIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem("admin-generation-dismissed-job-ids", JSON.stringify(dismissedJobIds));
+  }, [dismissedJobIds]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadJobs();
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [loadJobs]);
+
+  async function startGeneration() {
+    setIsGenerating(true);
+    setGenerationMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/quizzes/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(quizDraft),
+        body: JSON.stringify({
+          theme: generationInput.theme,
+          gameMode: generationInput.gameMode,
+          difficulty: generationInput.difficulty,
+          language: "en",
+        }),
       });
 
-      const payload = (await response.json()) as { quizId?: string; error?: string };
+      const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to create quiz");
+        throw new Error(payload.error ?? "Failed to start generation");
       }
 
-      setCreateMessage("Quiz created successfully.");
-      setQuizDraft(createInitialQuizDraft());
-      setPage(1);
-      setSearch("");
-    } catch (createError) {
-      setCreateMessage(createError instanceof Error ? createError.message : "Failed to create quiz");
+      setGenerationMessage("Generation started.");
+      await loadJobs();
+    } catch (generationError) {
+      setGenerationMessage(
+        generationError instanceof Error ? generationError.message : "Failed to start generation",
+      );
     } finally {
-      setIsCreating(false);
+      setIsGenerating(false);
     }
   }
+
+  async function retryGeneration(job: QuizGenerationJob) {
+    if (retriedJobIds.includes(job.id)) return;
+    const details = parseJobInputData(job.inputData);
+    setRetryingJobId(job.id);
+    setGenerationMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/quizzes/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          theme: details.theme,
+          gameMode: details.gameMode,
+          difficulty: details.difficulty,
+          language: "en",
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to retry generation");
+      }
+
+      setRetriedJobIds((previous) => [...previous, job.id]);
+      setGenerationMessage("Retry started.");
+      await loadJobs();
+    } catch (error) {
+      setGenerationMessage(error instanceof Error ? error.message : "Failed to retry generation");
+    } finally {
+      setRetryingJobId(null);
+    }
+  }
+
+  const visibleJobs = useMemo(
+    () => jobs.filter((job) => !dismissedJobIds.includes(job.id)),
+    [dismissedJobIds, jobs],
+  );
 
   return (
     <main className="space-y-6">
@@ -357,268 +485,166 @@ export function AdminQuizzesPageClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Add New Quiz</CardTitle>
-          <CardDescription>Create a quiz manually and add all questions in one flow.</CardDescription>
+          <CardTitle>Generate Quiz</CardTitle>
+          <CardDescription>
+            Trigger AI generation using the same prompt system as seed scripts.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
             <Input
-              placeholder="Title"
-              value={quizDraft.title}
-              onChange={(event) => setQuizDraft((previous) => ({ ...previous, title: event.target.value }))}
-            />
-            <Input
-              placeholder="Theme"
-              value={quizDraft.theme}
-              onChange={(event) => setQuizDraft((previous) => ({ ...previous, theme: event.target.value }))}
-            />
-            <Input
-              placeholder="Language"
-              value={quizDraft.language}
-              onChange={(event) => setQuizDraft((previous) => ({ ...previous, language: event.target.value }))}
+              placeholder="Theme (optional)"
+              value={generationInput.theme}
+              onChange={(event) =>
+                setGenerationInput((previous) => ({
+                  ...previous,
+                  theme: event.target.value,
+                }))
+              }
             />
             <Select
-              value={quizDraft.gameMode}
-              onValueChange={(value: QuizDraft["gameMode"]) =>
-                setQuizDraft((previous) => ({ ...previous, gameMode: value }))
+              value={generationInput.gameMode}
+              onValueChange={(value: QuizGenerationInput["gameMode"]) =>
+                setGenerationInput((previous) => ({
+                  ...previous,
+                  gameMode: value,
+                  difficulty:
+                    value === "wwtbam"
+                      ? "escalating"
+                      : previous.difficulty === "escalating"
+                        ? "mixed"
+                        : previous.difficulty,
+                }))
               }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Game mode" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="single">Single</SelectItem>
-                <SelectItem value="couch_coop">Couch co-op</SelectItem>
+                <SelectItem value="single">Single Player</SelectItem>
+                <SelectItem value="couch_coop">Couch Co-op</SelectItem>
                 <SelectItem value="wwtbam">WWTBAM</SelectItem>
               </SelectContent>
             </Select>
             <Select
-              value={quizDraft.difficulty}
-              onValueChange={(value: QuizDraft["difficulty"]) =>
-                setQuizDraft((previous) => ({ ...previous, difficulty: value }))
+              value={generationInput.difficulty}
+              onValueChange={(value: QuizGenerationInput["difficulty"]) =>
+                setGenerationInput((previous) => ({
+                  ...previous,
+                  difficulty: value,
+                }))
               }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Difficulty" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="easy">Easy</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="hard">Hard</SelectItem>
-                <SelectItem value="mixed">Mixed</SelectItem>
-                <SelectItem value="escalating">Escalating</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={quizDraft.sourceType}
-              onValueChange={(value: QuizDraft["sourceType"]) =>
-                setQuizDraft((previous) => ({ ...previous, sourceType: value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Source type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="ai_generated">AI generated</SelectItem>
-                <SelectItem value="pdf">PDF</SelectItem>
-                <SelectItem value="url">URL</SelectItem>
+                {generationInput.gameMode === "wwtbam" ? (
+                  <SelectItem value="escalating">Escalating</SelectItem>
+                ) : (
+                  <>
+                    <SelectItem value="easy">Easy</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="hard">Hard</SelectItem>
+                    <SelectItem value="mixed">Mixed</SelectItem>
+                    <SelectItem value="escalating">Escalating</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
 
-          <Textarea
-            placeholder="Description"
-            value={quizDraft.description}
-            onChange={(event) => setQuizDraft((previous) => ({ ...previous, description: event.target.value }))}
-          />
+          <p className="text-sm text-slate-500">
+            Admin generation is English-only and intended for hub population.
+          </p>
+          {generationInput.gameMode === "wwtbam" ? (
+            <p className="text-sm text-slate-500">
+              WWTBAM generation always uses escalating difficulty.
+            </p>
+          ) : null}
 
-          <div className="flex flex-wrap gap-6">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <Switch
-                checked={quizDraft.isHub}
-                onCheckedChange={(checked) => setQuizDraft((previous) => ({ ...previous, isHub: checked }))}
-              />
-              Publish in hub
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <Switch
-                checked={quizDraft.isPublic}
-                onCheckedChange={(checked) => setQuizDraft((previous) => ({ ...previous, isPublic: checked }))}
-              />
-              Public
-            </label>
-          </div>
+          <Button disabled={isGenerating} onClick={() => void startGeneration()}>
+            {isGenerating ? "Starting..." : "Generate Quiz"}
+          </Button>
 
-          <div className="space-y-4">
-            {quizDraft.questions.map((question, questionIndex) => (
-              <div key={`draft-question-${questionIndex}`} className="rounded-lg border p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h4 className="font-semibold">Question {questionIndex + 1}</h4>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={quizDraft.questions.length <= 1}
-                    onClick={() =>
-                      setQuizDraft((previous) => ({
-                        ...previous,
-                        questions: previous.questions.filter((_, index) => index !== questionIndex),
-                      }))
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
+          {generationMessage ? <p className="text-sm text-slate-600">{generationMessage}</p> : null}
+        </CardContent>
+      </Card>
 
-                <div className="space-y-3">
-                  <Textarea
-                    placeholder="Question text"
-                    value={question.questionText}
-                    onChange={(event) =>
-                      setQuizDraft((previous) => {
-                        const nextQuestions = [...previous.questions];
-                        nextQuestions[questionIndex] = {
-                          ...nextQuestions[questionIndex],
-                          questionText: event.target.value,
-                        };
-                        return { ...previous, questions: nextQuestions };
-                      })
-                    }
-                  />
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <Input
-                      placeholder="Subject"
-                      value={question.subject}
-                      onChange={(event) =>
-                        setQuizDraft((previous) => {
-                          const nextQuestions = [...previous.questions];
-                          nextQuestions[questionIndex] = {
-                            ...nextQuestions[questionIndex],
-                            subject: event.target.value,
-                          };
-                          return { ...previous, questions: nextQuestions };
-                        })
-                      }
-                    />
-                    <Select
-                      value={question.difficulty}
-                      onValueChange={(value: QuestionDraft["difficulty"]) =>
-                        setQuizDraft((previous) => {
-                          const nextQuestions = [...previous.questions];
-                          nextQuestions[questionIndex] = {
-                            ...nextQuestions[questionIndex],
-                            difficulty: value,
-                          };
-                          return { ...previous, questions: nextQuestions };
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Question difficulty" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="easy">Easy</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="hard">Hard</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={String(question.correctOptionIndex)}
-                      onValueChange={(value) =>
-                        setQuizDraft((previous) => {
-                          const nextQuestions = [...previous.questions];
-                          nextQuestions[questionIndex] = {
-                            ...nextQuestions[questionIndex],
-                            correctOptionIndex: Number(value),
-                          };
-                          return { ...previous, questions: nextQuestions };
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Correct option" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Option A</SelectItem>
-                        <SelectItem value="1">Option B</SelectItem>
-                        <SelectItem value="2">Option C</SelectItem>
-                        <SelectItem value="3">Option D</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Generation Status</CardTitle>
+          <CardDescription>Recent Trigger runs for quiz generation.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {jobsLoading ? <p className="text-sm text-slate-500">Loading generation jobs...</p> : null}
+          {jobsError ? <p className="text-sm text-rose-600">{jobsError}</p> : null}
+          {!jobsLoading && visibleJobs.length === 0 ? (
+            <p className="text-sm text-slate-500">No generation jobs yet.</p>
+          ) : null}
 
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {question.options.map((option, optionIndex) => (
-                      <div key={`q-${questionIndex}-o-${optionIndex}`} className="rounded border p-3">
-                        <p className="mb-2 text-sm font-medium">Option {String.fromCharCode(65 + optionIndex)}</p>
-                        <Input
-                          placeholder="Option text"
-                          value={option.text}
-                          onChange={(event) =>
-                            setQuizDraft((previous) => {
-                              const nextQuestions = [...previous.questions];
-                              const nextOptions = [...nextQuestions[questionIndex].options];
-                              nextOptions[optionIndex] = {
-                                ...nextOptions[optionIndex],
-                                text: event.target.value,
-                              };
-                              nextQuestions[questionIndex] = {
-                                ...nextQuestions[questionIndex],
-                                options: nextOptions,
-                              };
-                              return { ...previous, questions: nextQuestions };
-                            })
-                          }
-                        />
-                        <Textarea
-                          className="mt-2"
-                          placeholder="Explanation"
-                          value={option.explanation}
-                          onChange={(event) =>
-                            setQuizDraft((previous) => {
-                              const nextQuestions = [...previous.questions];
-                              const nextOptions = [...nextQuestions[questionIndex].options];
-                              nextOptions[optionIndex] = {
-                                ...nextOptions[optionIndex],
-                                explanation: event.target.value,
-                              };
-                              nextQuestions[questionIndex] = {
-                                ...nextQuestions[questionIndex],
-                                options: nextOptions,
-                              };
-                              return { ...previous, questions: nextQuestions };
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+            {visibleJobs.map((job) => {
+              const details = parseJobInputData(job.inputData);
+              const hasRetried = retriedJobIds.includes(job.id);
+              return (
+                <div key={job.id} className="aspect-square rounded-lg border p-3">
+                  <div className="flex h-full flex-col">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">{details.theme}</p>
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        {mapGenerationStatus(job.status)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Mode: {details.gameMode} | Difficulty: {details.difficulty}
+                    </p>
+
+                    <div className="mt-auto">
+                      {job.status === "completed" && job.quizId ? (
+                        <div className="mt-2 flex flex-col gap-2">
+                          <p className="text-sm text-emerald-600">
+                            {job.quizTitle ? `Generated: ${job.quizTitle}` : "Quiz generated"}
+                          </p>
+                          <Button size="sm" asChild>
+                            <Link href={`/admin/quizzes/${job.quizId}`}>Inspect</Link>
+                          </Button>
+                        </div>
+                      ) : null}
+                      {job.status === "failed" ? (
+                        <div className="mt-2 flex flex-col gap-2">
+                          <p className="text-sm text-rose-600">{job.errorMessage ?? "Generation failed"}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={hasRetried || retryingJobId === job.id}
+                              onClick={() => void retryGeneration(job)}
+                            >
+                              {retryingJobId === job.id ? "Retrying..." : hasRetried ? "Retried" : "Retry"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setDismissedJobIds((previous) =>
+                                  previous.includes(job.id) ? previous : [...previous, job.id],
+                                )
+                              }
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              onClick={() =>
-                setQuizDraft((previous) => ({
-                  ...previous,
-                  questions: [...previous.questions, createEmptyQuestion()],
-                }))
-              }
-            >
-              Add Question
-            </Button>
-            <Button disabled={isCreating} onClick={() => void createQuiz()}>
-              {isCreating ? "Creating..." : "Create Quiz"}
-            </Button>
-          </div>
-
-          {createMessage ? <p className="text-sm text-slate-600">{createMessage}</p> : null}
         </CardContent>
       </Card>
     </main>
   );
 }
-
