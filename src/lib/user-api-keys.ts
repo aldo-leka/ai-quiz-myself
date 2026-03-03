@@ -18,6 +18,7 @@ export type UserApiKeyRecord = {
 export async function resolveUserApiKey(
   userId: string,
   apiKeyId?: string,
+  preferredProvider?: ProviderName | null,
 ): Promise<UserApiKeyRecord | null> {
   const selected = apiKeyId
     ? (
@@ -31,6 +32,19 @@ export async function resolveUserApiKey(
         .where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.userId, userId)))
         .limit(1)
     )[0]
+    : preferredProvider
+      ? (
+        await db
+          .select({
+            id: apiKeys.id,
+            provider: apiKeys.provider,
+            encryptedKey: apiKeys.encryptedKey,
+          })
+          .from(apiKeys)
+          .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, preferredProvider)))
+          .orderBy(desc(apiKeys.createdAt))
+          .limit(1)
+      )[0]
     : (
       await db
         .select({

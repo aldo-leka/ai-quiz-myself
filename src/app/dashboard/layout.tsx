@@ -19,6 +19,7 @@ export default async function DashboardLayout({
         name: session.user.name || session.user.email || "Player",
         image: session.user.image,
         avatarUrl: session.user.avatarUrl,
+        isAdmin: Boolean(session.user.isAdmin),
       }}
     >
       {children}

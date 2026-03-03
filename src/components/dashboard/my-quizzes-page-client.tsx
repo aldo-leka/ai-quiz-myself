@@ -158,7 +158,7 @@ export function MyQuizzesPageClient() {
       if (document.visibilityState === "visible") {
         void load({ background: true });
       }
-    }, 4000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [jobs, load, page]);
@@ -248,7 +248,15 @@ export function MyQuizzesPageClient() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-3xl font-black tracking-tight text-slate-100">My Quiz Library</h3>
-          <p className="text-lg text-slate-300">{total} items</p>
+          <div className="flex items-center gap-3">
+            <p className="text-lg text-slate-300">{total} items</p>
+            <Button
+              asChild
+              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonCyanClass}`}
+            >
+              <Link href="/dashboard/create">Create Quiz</Link>
+            </Button>
+          </div>
         </div>
 
         {error ? (
@@ -272,7 +280,7 @@ export function MyQuizzesPageClient() {
               asChild
               className={`mt-4 ${playerButtonBaseClass} ${playerButtonCyanClass}`}
             >
-              <Link href="/dashboard/api-keys">Set Up API Key</Link>
+              <Link href="/dashboard/create">Create Quiz</Link>
             </Button>
           </div>
         ) : null}

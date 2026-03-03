@@ -83,12 +83,14 @@ export function createQuizGenerationPrompt(input: {
   difficulty: QuizGenerationDifficulty;
   questionCount?: number;
   existingQuestions?: string[];
+  sourceText?: string;
 }): string {
   const questionCount = input.questionCount ?? QUIZ_QUESTION_COUNT[input.gameMode];
   const existingQuestions = (input.existingQuestions ?? [])
     .map((question) => question.trim())
     .filter((question) => question.length > 0)
     .slice(0, 80);
+  const sourceText = input.sourceText?.trim() ?? "";
   const lines = [
     modePromptLeads[input.gameMode],
     "",
@@ -105,6 +107,16 @@ export function createQuizGenerationPrompt(input: {
     ...modeExtraRequirements[input.gameMode].map((requirement) => `- ${requirement}`),
     `- ${buildDifficultyPolicy(input.difficulty, questionCount)}`,
   ];
+
+  if (sourceText.length > 0) {
+    lines.push(
+      "",
+      "Generate questions based on the following article content.",
+      "Questions must be derived from this source, not from unrelated general knowledge.",
+      "",
+      sourceText,
+    );
+  }
 
   if (existingQuestions.length > 0) {
     lines.push(
@@ -222,6 +234,7 @@ export async function generateQuizFromPrompt(input: {
   model: LanguageModel;
   temperature?: number;
   existingQuestions?: string[];
+  sourceText?: string;
 }): Promise<GeneratedQuiz> {
   const questionCount = QUIZ_QUESTION_COUNT[input.gameMode];
   const generatedQuizSchema = z.object({
@@ -239,6 +252,7 @@ export async function generateQuizFromPrompt(input: {
       difficulty: input.difficulty,
       questionCount,
       existingQuestions: input.existingQuestions,
+      sourceText: input.sourceText,
     }),
     temperature: input.temperature ?? 0.6,
   });

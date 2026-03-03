@@ -14,6 +14,7 @@ import {
   type QuizGenerationDifficulty,
   type QuizGenerationGameMode,
 } from "@/lib/quiz-generation";
+import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
 
 const taskPayloadSchema = z.object({
@@ -21,15 +22,19 @@ const taskPayloadSchema = z.object({
 });
 
 const jobInputSchema = z.object({
-  theme: z.string().min(2),
+  theme: z.string().min(2).optional(),
+  url: z.string().url().optional(),
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
   language: z.string().min(2).default("en"),
-  isHub: z.boolean().default(true),
+  isHub: z.boolean().default(false),
   isPublic: z.boolean().default(true),
-  apiKeyId: z.string().uuid(),
+  apiKeyId: z.string().uuid().optional(),
+  fileName: z.string().min(1).optional(),
+  fileSizeBytes: z.number().int().positive().optional(),
 });
 
+type GenerationSourceType = "theme" | "url" | "pdf";
 type JobInput = z.infer<typeof jobInputSchema>;
 
 function toErrorMessage(error: unknown): string {
@@ -37,6 +42,19 @@ function toErrorMessage(error: unknown): string {
     return error.message.slice(0, 500);
   }
   return "Unknown generation error";
+}
+
+function isEnglishLanguage(language: string): boolean {
+  const normalized = language.trim().toLowerCase();
+  return normalized === "en" || normalized.startsWith("en-");
+}
+
+function mapGenerationSourceToQuizSource(
+  sourceType: GenerationSourceType,
+): "ai_generated" | "url" | "pdf" {
+  if (sourceType === "url") return "url";
+  if (sourceType === "pdf") return "pdf";
+  return "ai_generated";
 }
 
 async function setJobStatus(
@@ -62,6 +80,7 @@ async function loadJob(jobId: string) {
     .select({
       id: quizGenerationJobs.id,
       userId: quizGenerationJobs.userId,
+      sourceType: quizGenerationJobs.sourceType,
       inputData: quizGenerationJobs.inputData,
     })
     .from(quizGenerationJobs)
@@ -81,6 +100,8 @@ function parseInputData(inputData: unknown): JobInput {
 
 async function persistGeneratedQuiz(params: {
   userId: string;
+  sourceType: GenerationSourceType;
+  sourceUrl?: string | null;
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
 }) {
@@ -94,7 +115,8 @@ async function persistGeneratedQuiz(params: {
       difficulty: params.input.difficulty,
       gameMode: params.input.gameMode,
       questionCount: params.generated.questions.length,
-      sourceType: "ai_generated",
+      sourceType: mapGenerationSourceToQuizSource(params.sourceType),
+      sourceUrl: params.sourceUrl ?? null,
       isHub: params.input.isHub,
       isPublic: params.input.isPublic,
       hubStatus: params.input.isHub ? "approved" : null,
@@ -148,7 +170,7 @@ async function applyHubUniqueness(quizId: string, questionTexts: string[]) {
 }
 
 export const generateQuizTask = task({
-  id: "admin-generate-quiz",
+  id: "generate-quiz",
   maxDuration: 900,
   run: async (payload: z.infer<typeof taskPayloadSchema>) => {
     const parsedPayload = taskPayloadSchema.parse(payload);
@@ -169,40 +191,73 @@ export const generateQuizTask = task({
       return { ok: false, error: message };
     }
 
+    const sourceType = job.sourceType as GenerationSourceType;
     const effectiveInput: JobInput = {
       ...input,
       difficulty: input.gameMode === "wwtbam" ? "escalating" : input.difficulty,
+      language: input.language.trim().toLowerCase(),
     };
 
     await setJobStatus(job.id, { status: "processing", errorMessage: null });
 
     try {
+      if (sourceType === "pdf") {
+        throw new Error("PDF generation coming soon");
+      }
+
       const credentials = await resolveUserApiKey(job.userId, effectiveInput.apiKeyId);
       if (!credentials) {
         throw new Error("Selected API key not found");
       }
 
+      let effectiveTheme = effectiveInput.theme?.trim() || "General Knowledge";
+      let sourceText: string | undefined;
+      let sourceUrl: string | null = null;
+
+      if (sourceType === "url") {
+        if (!effectiveInput.url) {
+          throw new Error("URL source is missing");
+        }
+
+        const extracted = await extractArticleText(effectiveInput.url);
+        effectiveTheme = effectiveInput.theme?.trim() || extracted.title || effectiveTheme;
+        sourceText = extracted.text;
+        sourceUrl = effectiveInput.url;
+      }
+
       const model = getLanguageModel(credentials.provider, credentials.apiKey);
-      const existingQuestions = await getExistingQuestionsForTheme(effectiveInput.theme);
+      const existingQuestions = await getExistingQuestionsForTheme(effectiveTheme);
+
       const generated = await generateQuizFromPrompt({
-        theme: effectiveInput.theme,
+        theme: effectiveTheme,
         gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
         difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
         model,
         temperature: 0.6,
         existingQuestions,
+        sourceText,
       });
 
       const quizId = await persistGeneratedQuiz({
         userId: job.userId,
+        sourceType,
+        sourceUrl,
         input: effectiveInput,
         generated,
       });
 
-      const uniquenessResult = await applyHubUniqueness(
-        quizId,
-        generated.questions.map((question) => question.questionText),
-      );
+      let duplicate = false;
+      if (
+        effectiveInput.isHub &&
+        sourceType === "theme" &&
+        isEnglishLanguage(effectiveInput.language)
+      ) {
+        const uniquenessResult = await applyHubUniqueness(
+          quizId,
+          generated.questions.map((question) => question.questionText),
+        );
+        duplicate = uniquenessResult.uniqueness.isDuplicate;
+      }
 
       await setJobStatus(job.id, {
         status: "completed",
@@ -213,19 +268,18 @@ export const generateQuizTask = task({
       logger.log("Quiz generation completed", {
         jobId: job.id,
         quizId,
+        sourceType,
         gameMode: effectiveInput.gameMode,
         difficulty: effectiveInput.difficulty,
         provider: credentials.provider,
-        similarity: uniquenessResult.uniqueness.similarity,
-        duplicate: uniquenessResult.uniqueness.isDuplicate,
-        flaggedReason: uniquenessResult.reason,
+        duplicate,
       });
 
       return {
         ok: true,
         jobId: job.id,
         quizId,
-        duplicate: uniquenessResult.uniqueness.isDuplicate,
+        duplicate,
       };
     } catch (error) {
       const message = toErrorMessage(error);
@@ -236,6 +290,7 @@ export const generateQuizTask = task({
 
       logger.error("Quiz generation failed", {
         jobId: job.id,
+        sourceType,
         error: message,
       });
 
@@ -247,3 +302,4 @@ export const generateQuizTask = task({
     }
   },
 });
+

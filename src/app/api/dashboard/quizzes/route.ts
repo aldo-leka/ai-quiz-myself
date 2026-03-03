@@ -50,6 +50,7 @@ function parseJobInputData(inputData: unknown): {
 
   const payload = inputData as {
     theme?: unknown;
+    displayTheme?: unknown;
     gameMode?: unknown;
     difficulty?: unknown;
   };
@@ -60,7 +61,12 @@ function parseJobInputData(inputData: unknown): {
       : "single";
 
   return {
-    theme: typeof payload.theme === "string" ? payload.theme : "Unknown",
+    theme:
+      typeof payload.displayTheme === "string"
+        ? payload.displayTheme
+        : typeof payload.theme === "string"
+          ? payload.theme
+          : "Unknown",
     gameMode,
     difficulty: typeof payload.difficulty === "string" ? payload.difficulty : "mixed",
   };

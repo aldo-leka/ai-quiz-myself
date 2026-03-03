@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, History, KeyRound, LayoutGrid, LibraryBig, LogOut, Settings } from "lucide-react";
+import { ArrowLeft, History, KeyRound, LayoutGrid, LibraryBig, LogOut, PlusCircle, Settings, ShieldCheck } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
@@ -15,10 +15,17 @@ type DashboardShellProps = {
     name: string;
     image?: string | null;
     avatarUrl?: string | null;
+    isAdmin?: boolean;
   };
 };
 
-const navItems = [
+const navItems: Array<{
+  href: string;
+  label: string;
+  icon: typeof LayoutGrid;
+  accent?: boolean;
+}> = [
+  { href: "/dashboard/create", label: "Create Quiz", icon: PlusCircle, accent: true },
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/my-quizzes", label: "My Quizzes", icon: LibraryBig },
   { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
@@ -104,11 +111,23 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                   align="end"
                   className="w-[var(--radix-popover-trigger-width)] rounded-2xl border-slate-700 bg-slate-950/95 p-2 text-slate-100"
                 >
+                  {user.isAdmin ? (
+                    <Link
+                      href="/admin"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-cyan-100 transition hover:bg-cyan-500/20 hover:text-cyan-100"
+                    >
+                      <ShieldCheck className="size-4" />
+                      Admin
+                    </Link>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void handleSignOut()}
                     disabled={isSigningOut}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70",
+                      user.isAdmin ? "mt-1" : "",
+                    )}
                   >
                     <LogOut className="size-4" />
                     {isSigningOut ? "Signing out..." : "Log out"}
@@ -130,7 +149,9 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
                       isActive
                         ? "border-cyan-400 bg-cyan-500/20 text-cyan-100"
-                        : "border-slate-700 bg-slate-900 text-slate-200",
+                        : item.accent
+                          ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
+                          : "border-slate-700 bg-slate-900 text-slate-200",
                     )}
                   >
                     <Icon className="size-5" />

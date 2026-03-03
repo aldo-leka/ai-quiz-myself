@@ -119,7 +119,7 @@ export default async function DashboardOverviewPage() {
             variant="outline"
             className="border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
           >
-            <Link href="/dashboard/my-quizzes">
+            <Link href="/dashboard/create">
               <Plus className="mr-2 size-4" />
               Create Quiz
             </Link>
@@ -128,7 +128,16 @@ export default async function DashboardOverviewPage() {
 
         {recentQuizzes.length === 0 ? (
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
-            No quizzes yet. Generate your first quiz!
+            <p>No quizzes yet. Generate your first quiz!</p>
+            <Button
+              asChild
+              className="mt-4 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+            >
+              <Link href="/dashboard/create">
+                <Plus className="mr-2 size-4" />
+                Create Quiz
+              </Link>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
