@@ -91,6 +91,7 @@ export async function POST(request: Request) {
         difficulty: effectiveDifficulty,
         language: normalizedLanguage,
         isHub,
+        reviewForHub: false,
         isPublic,
         apiKeyId: selectedKey.id,
       },

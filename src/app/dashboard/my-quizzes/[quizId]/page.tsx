@@ -37,8 +37,13 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
       id: quizzes.id,
       title: quizzes.title,
       theme: quizzes.theme,
+      language: quizzes.language,
       gameMode: quizzes.gameMode,
       difficulty: quizzes.difficulty,
+      isHub: quizzes.isHub,
+      hubStatus: quizzes.hubStatus,
+      isFlagged: quizzes.isFlagged,
+      flagReason: quizzes.flagReason,
     })
     .from(quizzes)
     .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)))
@@ -69,8 +74,15 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
           <div>
             <h2 className="text-3xl font-black text-slate-100">{quiz.title}</h2>
             <p className="mt-2 text-slate-300">
-              Theme: {quiz.theme} · Mode: {quiz.gameMode} · Difficulty: {quiz.difficulty}
+              Theme: {quiz.theme} · Mode: {quiz.gameMode} · Difficulty: {quiz.difficulty} · Language: {quiz.language}
             </p>
+            <p className="mt-2 text-sm text-slate-300">
+              Hub: {quiz.isHub ? "Approved" : quiz.hubStatus ?? "Not reviewed"}
+              {quiz.isFlagged ? " · Flagged for moderation" : ""}
+            </p>
+            {quiz.flagReason ? (
+              <p className="mt-1 text-sm text-slate-400">Reason: {quiz.flagReason}</p>
+            ) : null}
           </div>
           <Button asChild variant="outline" className="border-cyan-500/50 text-cyan-100">
             <Link href="/dashboard/my-quizzes">Back to My Quizzes</Link>

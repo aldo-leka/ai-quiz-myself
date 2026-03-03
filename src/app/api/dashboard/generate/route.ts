@@ -178,6 +178,7 @@ export async function POST(request: Request) {
         difficulty: effectiveDifficulty,
         language: normalizedLanguage,
         isHub: false,
+        reviewForHub: payload.sourceType === "theme" || payload.sourceType === "url",
         isPublic: true,
         apiKeyId: resolvedApiKeyId,
         fileName: payload.fileName,

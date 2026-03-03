@@ -28,6 +28,7 @@ const jobInputSchema = z.object({
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
   language: z.string().min(2).default("en"),
   isHub: z.boolean().default(false),
+  reviewForHub: z.boolean().default(false),
   isPublic: z.boolean().default(true),
   apiKeyId: z.string().uuid().optional(),
   fileName: z.string().min(1).optional(),
@@ -105,6 +106,13 @@ async function persistGeneratedQuiz(params: {
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
 }) {
+  const hubStatus =
+    params.input.isHub
+      ? "approved"
+      : params.input.reviewForHub
+        ? "pending"
+        : null;
+
   const [createdQuiz] = await db
     .insert(quizzes)
     .values({
@@ -119,7 +127,7 @@ async function persistGeneratedQuiz(params: {
       sourceUrl: params.sourceUrl ?? null,
       isHub: params.input.isHub,
       isPublic: params.input.isPublic,
-      hubStatus: params.input.isHub ? "approved" : null,
+      hubStatus,
     })
     .returning({ id: quizzes.id });
 
@@ -302,4 +310,3 @@ export const generateQuizTask = task({
     }
   },
 });
-
