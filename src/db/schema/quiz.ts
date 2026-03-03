@@ -219,6 +219,7 @@ export const quizGenerationJobs = pgTable(
     provider: text("provider").notNull(),
     quizId: uuid("quiz_id").references(() => quizzes.id, { onDelete: "set null" }),
     errorMessage: text("error_message"),
+    dismissedAt: timestamp("dismissed_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
       .notNull()
@@ -229,6 +230,7 @@ export const quizGenerationJobs = pgTable(
     index("quiz_generation_jobs_user_id_idx").on(table.userId),
     index("quiz_generation_jobs_status_idx").on(table.status),
     index("quiz_generation_jobs_created_at_idx").on(table.createdAt),
+    index("quiz_generation_jobs_dismissed_at_idx").on(table.dismissedAt),
   ],
 );
 

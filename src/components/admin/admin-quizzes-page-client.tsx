@@ -152,12 +152,11 @@ export function AdminQuizzesPageClient() {
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
-  const [retriedJobIds, setRetriedJobIds] = useState<string[]>([]);
-  const [dismissedJobIds, setDismissedJobIds] = useState<string[]>([]);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
 
   const initializedCompletedJobIds = useRef(new Set<string>());
   const jobsInitialized = useRef(false);
+  const jobsLoadedOnce = useRef(false);
 
   const fetchKey = useMemo(
     () => `${search}|${gameMode}|${sourceType}|${isHub}|${language}|${page}|${reloadNonce}`,
@@ -197,7 +196,9 @@ export function AdminQuizzesPageClient() {
   }, [gameMode, isHub, language, page, search, sourceType]);
 
   const loadJobs = useCallback(async () => {
-    setJobsLoading(true);
+    if (!jobsLoadedOnce.current) {
+      setJobsLoading(true);
+    }
     setJobsError(null);
 
     try {
@@ -226,7 +227,10 @@ export function AdminQuizzesPageClient() {
     } catch (fetchError) {
       setJobsError(fetchError instanceof Error ? fetchError.message : "Could not load generation jobs");
     } finally {
-      setJobsLoading(false);
+      if (!jobsLoadedOnce.current) {
+        setJobsLoading(false);
+        jobsLoadedOnce.current = true;
+      }
     }
   }, []);
 
@@ -272,39 +276,6 @@ export function AdminQuizzesPageClient() {
   }, [loadApiKeys]);
 
   useEffect(() => {
-    const retriedRaw = window.localStorage.getItem("admin-generation-retried-job-ids");
-    const dismissedRaw = window.localStorage.getItem("admin-generation-dismissed-job-ids");
-    if (retriedRaw) {
-      try {
-        const parsed = JSON.parse(retriedRaw) as unknown;
-        if (Array.isArray(parsed)) {
-          setRetriedJobIds(parsed.filter((item): item is string => typeof item === "string"));
-        }
-      } catch {
-        // no-op
-      }
-    }
-    if (dismissedRaw) {
-      try {
-        const parsed = JSON.parse(dismissedRaw) as unknown;
-        if (Array.isArray(parsed)) {
-          setDismissedJobIds(parsed.filter((item): item is string => typeof item === "string"));
-        }
-      } catch {
-        // no-op
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("admin-generation-retried-job-ids", JSON.stringify(retriedJobIds));
-  }, [retriedJobIds]);
-
-  useEffect(() => {
-    window.localStorage.setItem("admin-generation-dismissed-job-ids", JSON.stringify(dismissedJobIds));
-  }, [dismissedJobIds]);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       void loadJobs();
     }, 4000);
@@ -347,8 +318,17 @@ export function AdminQuizzesPageClient() {
     }
   }
 
+  async function dismissGenerationJob(jobId: string) {
+    const response = await fetch(`/api/admin/quizzes/generation-jobs/${jobId}`, {
+      method: "PATCH",
+    });
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Failed to dismiss generation job");
+    }
+  }
+
   async function retryGeneration(job: QuizGenerationJob) {
-    if (retriedJobIds.includes(job.id)) return;
     const details = parseJobInputData(job.inputData);
     setRetryingJobId(job.id);
     setGenerationMessage(null);
@@ -373,10 +353,8 @@ export function AdminQuizzesPageClient() {
         throw new Error(payload.error ?? "Failed to retry generation");
       }
 
-      setRetriedJobIds((previous) => [...previous, job.id]);
-      setDismissedJobIds((previous) =>
-        previous.includes(job.id) ? previous : [...previous, job.id],
-      );
+      await dismissGenerationJob(job.id);
+      setJobs((previous) => previous.filter((existingJob) => existingJob.id !== job.id));
       setGenerationMessage("Retry started.");
       await loadJobs();
     } catch (error) {
@@ -385,11 +363,6 @@ export function AdminQuizzesPageClient() {
       setRetryingJobId(null);
     }
   }
-
-  const visibleJobs = useMemo(
-    () => jobs.filter((job) => !dismissedJobIds.includes(job.id)),
-    [dismissedJobIds, jobs],
-  );
 
   return (
     <main className="space-y-6">
@@ -657,16 +630,14 @@ export function AdminQuizzesPageClient() {
           <CardDescription>Recent Trigger runs for quiz generation.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {jobsLoading ? <p className="text-sm text-slate-500">Loading generation jobs...</p> : null}
           {jobsError ? <p className="text-sm text-rose-600">{jobsError}</p> : null}
-          {!jobsLoading && visibleJobs.length === 0 ? (
+          {!jobsLoading && jobs.length === 0 ? (
             <p className="text-sm text-slate-500">No generation jobs yet.</p>
           ) : null}
 
           <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
-            {visibleJobs.map((job) => {
+            {jobs.map((job) => {
               const details = parseJobInputData(job.inputData);
-              const hasRetried = retriedJobIds.includes(job.id);
               return (
                 <div key={job.id} className="aspect-square rounded-lg border p-3">
                   <div className="flex h-full flex-col">
@@ -698,19 +669,28 @@ export function AdminQuizzesPageClient() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={hasRetried || retryingJobId === job.id}
+                              disabled={retryingJobId === job.id}
                               onClick={() => void retryGeneration(job)}
                             >
-                              {retryingJobId === job.id ? "Retrying..." : hasRetried ? "Retried" : "Retry"}
+                              {retryingJobId === job.id ? "Retrying..." : "Retry"}
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() =>
-                                setDismissedJobIds((previous) =>
-                                  previous.includes(job.id) ? previous : [...previous, job.id],
-                                )
-                              }
+                              onClick={async () => {
+                                try {
+                                  await dismissGenerationJob(job.id);
+                                  setJobs((previous) =>
+                                    previous.filter((existingJob) => existingJob.id !== job.id),
+                                  );
+                                } catch (dismissError) {
+                                  setGenerationMessage(
+                                    dismissError instanceof Error
+                                      ? dismissError.message
+                                      : "Failed to dismiss generation job",
+                                  );
+                                }
+                              }}
                             >
                               Dismiss
                             </Button>

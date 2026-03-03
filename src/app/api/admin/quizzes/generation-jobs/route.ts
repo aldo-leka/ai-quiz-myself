@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { quizGenerationJobs, quizzes } from "@/db/schema";
@@ -25,7 +25,7 @@ export async function GET() {
     })
     .from(quizGenerationJobs)
     .leftJoin(quizzes, eq(quizGenerationJobs.quizId, quizzes.id))
-    .where(eq(quizGenerationJobs.userId, adminSession.user.id))
+    .where(and(eq(quizGenerationJobs.userId, adminSession.user.id), isNull(quizGenerationJobs.dismissedAt)))
     .orderBy(desc(quizGenerationJobs.createdAt))
     .limit(12);
 

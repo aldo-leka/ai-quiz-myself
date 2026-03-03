@@ -1,0 +1,2 @@
+ALTER TABLE "quiz_generation_jobs" ADD COLUMN "dismissed_at" timestamp;--> statement-breakpoint
+CREATE INDEX "quiz_generation_jobs_dismissed_at_idx" ON "quiz_generation_jobs" USING btree ("dismissed_at");
