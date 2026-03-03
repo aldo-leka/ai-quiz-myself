@@ -1,11 +1,10 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { generateObject } from "ai";
 import { logger, schedules } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
 import { questions, quizzes } from "@/db/schema";
-import { user } from "@/db/schema/auth";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -142,14 +141,12 @@ async function loadHubCandidates(limit: number): Promise<HubCandidate[]> {
       difficulty: quizzes.difficulty,
     })
     .from(quizzes)
-    .leftJoin(user, eq(quizzes.creatorId, user.id))
     .where(
       and(
         eq(quizzes.isPublic, true),
         eq(quizzes.isHub, false),
+        eq(quizzes.hubStatus, "pending"),
         inArray(quizzes.sourceType, ["ai_generated", "url"]),
-        or(eq(quizzes.hubStatus, "pending"), isNull(quizzes.hubStatus)),
-        or(eq(user.isAdmin, false), isNull(user.isAdmin)),
       ),
     )
     .orderBy(asc(quizzes.createdAt))
@@ -265,4 +262,3 @@ export const reviewHubCandidatesTask = schedules.task({
     };
   },
 });
-
