@@ -16,6 +16,7 @@ import { GameButton } from "@/components/quiz/GameButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 type HubQuiz = {
@@ -178,6 +179,7 @@ function QuizSkeletonGrid() {
 export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: sessionData } = authClient.useSession();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [gridColumns, setGridColumns] = useState(4);
@@ -490,9 +492,21 @@ export default function HomePage() {
         <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-2xl md:p-8">
           <div className="flex flex-col gap-6">
             <div>
-              <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-6xl">
-                QuizPlus Hub
-              </h1>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-6xl">
+                  QuizPlus Hub
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className={cn(
+                    "min-h-11 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                  )}
+                >
+                  {sessionData?.user?.name?.trim() || "Not logged in"}
+                </button>
+              </div>
               <p className="mt-3 text-lg text-slate-300 md:text-2xl">
                 Browse hub quizzes, filter by mode and difficulty, then jump straight into play.
               </p>
