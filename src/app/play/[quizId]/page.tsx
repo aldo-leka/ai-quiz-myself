@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { CouchCoopGame } from "@/components/quiz/CouchCoopGame";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { SinglePlayerGame } from "@/components/quiz/SinglePlayerGame";
@@ -84,6 +85,10 @@ export default function PlayQuizPage() {
 
   if (quiz.gameMode === "single") {
     return <SinglePlayerGame quiz={quiz} />;
+  }
+
+  if (quiz.gameMode === "couch_coop") {
+    return <CouchCoopGame quiz={quiz} />;
   }
 
   return (

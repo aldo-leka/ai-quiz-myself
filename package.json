@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:seed:wwtbam": "npx tsx src/db/seed-wwtbam.ts",
     "db:seed:single": "npx tsx src/db/seed-single.ts",
+    "db:seed:couch": "npx tsx src/db/seed-couch.ts",
     "trigger:dev": "npx trigger.dev@latest dev"
   },
   "dependencies": {
