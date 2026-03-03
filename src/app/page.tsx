@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Clock3,
   Gamepad2,
-  Search,
   Shuffle,
   ThumbsUp,
   Trophy,
@@ -16,7 +15,6 @@ import {
 import { GameButton } from "@/components/quiz/GameButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +43,6 @@ type DifficultyFilter = "all" | "easy" | "medium" | "hard" | "mixed";
 type ModeFilter = "all" | "single" | "wwtbam" | "couch_coop";
 
 const DEFAULT_LIMIT = 20;
-const SEARCH_DEBOUNCE_MS = 300;
 
 const DIFFICULTY_OPTIONS: Array<{ value: DifficultyFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -58,8 +55,8 @@ const DIFFICULTY_OPTIONS: Array<{ value: DifficultyFilter; label: string }> = [
 const MODE_OPTIONS: Array<{ value: ModeFilter; label: string }> = [
   { value: "all", label: "All Modes" },
   { value: "single", label: "Single Player" },
-  { value: "wwtbam", label: "WWTBAM" },
   { value: "couch_coop", label: "Couch Co-op" },
+  { value: "wwtbam", label: "WWTBAM" },
 ];
 
 const SORT_OPTIONS: Array<{ value: HubSort; label: string }> = [
@@ -185,9 +182,6 @@ export default function HomePage() {
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [gridColumns, setGridColumns] = useState(4);
 
-  const [themes, setThemes] = useState<string[]>([]);
-  const [themesError, setThemesError] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState("");
   const [hubQuizzes, setHubQuizzes] = useState<HubQuiz[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -201,38 +195,28 @@ export default function HomePage() {
   });
 
   const filters = useMemo(() => {
-    const theme = searchParams.get("theme")?.trim() ?? "";
     const difficulty = normalizeDifficulty(searchParams.get("difficulty"));
     const mode = normalizeMode(searchParams.get("mode"));
     const sort = normalizeSort(searchParams.get("sort"));
-    const search = searchParams.get("search")?.trim() ?? "";
     const page = normalizePositiveInt(searchParams.get("page"), 1);
     const limit = normalizePositiveInt(searchParams.get("limit"), DEFAULT_LIMIT);
 
     return {
-      theme,
       difficulty,
       mode,
       sort,
-      search,
       page,
       limit,
-      fetchKey: `${theme}|${difficulty}|${mode}|${sort}|${search}|${limit}`,
+      fetchKey: `${difficulty}|${mode}|${sort}|${limit}`,
     };
   }, [searchParams]);
-
-  useEffect(() => {
-    setSearchInput(filters.search);
-  }, [filters.search]);
 
   const updateQueryParams = useCallback(
     (
       updates: Partial<{
-        theme: string | null;
         difficulty: DifficultyFilter;
         mode: ModeFilter;
         sort: HubSort;
-        search: string | null;
         page: number;
         limit: number;
       }>,
@@ -248,10 +232,6 @@ export default function HomePage() {
         }
       };
 
-      if (updates.theme !== undefined) {
-        setOrDelete("theme", updates.theme || null);
-      }
-
       if (updates.difficulty !== undefined) {
         setOrDelete("difficulty", updates.difficulty === "all" ? null : updates.difficulty);
       }
@@ -262,10 +242,6 @@ export default function HomePage() {
 
       if (updates.sort !== undefined) {
         setOrDelete("sort", updates.sort === "popular" ? null : updates.sort);
-      }
-
-      if (updates.search !== undefined) {
-        setOrDelete("search", updates.search?.trim() || null);
       }
 
       if (updates.page !== undefined) {
@@ -289,54 +265,14 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (searchInput === filters.search) return;
-      updateQueryParams({ search: searchInput, page: 1 });
-    }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timeout);
-  }, [filters.search, searchInput, updateQueryParams]);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadThemes() {
-      try {
-        const response = await fetch("/api/quiz/hub/themes", { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error("Could not load themes.");
-        }
-
-        const payload = (await response.json()) as { themes: string[] };
-        if (!isCancelled) {
-          setThemes(payload.themes);
-          setThemesError(null);
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setThemesError(error instanceof Error ? error.message : "Failed to fetch themes.");
-        }
-      }
-    }
-
-    void loadThemes();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     let isCancelled = false;
     const controller = new AbortController();
 
     async function fetchHubPage(pageNumber: number): Promise<HubResponse> {
       const params = new URLSearchParams();
-      if (filters.theme) params.set("theme", filters.theme);
       if (filters.difficulty !== "all") params.set("difficulty", filters.difficulty);
       if (filters.mode !== "all") params.set("mode", filters.mode);
       if (filters.sort !== "popular") params.set("sort", filters.sort);
-      if (filters.search) params.set("search", filters.search);
       params.set("page", String(pageNumber));
       params.set("limit", String(filters.limit));
 
@@ -562,22 +498,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-4 xl:flex-row">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute top-1/2 left-4 size-6 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      updateQueryParams({ search: searchInput, page: 1 });
-                    }
-                  }}
-                  placeholder="Search by title or theme..."
-                  className="min-h-14 rounded-xl border-slate-700 bg-slate-900 pl-13 text-lg text-slate-100 placeholder:text-slate-400 focus-visible:ring-cyan-400/60"
-                />
-              </div>
-
+            <div className="flex flex-col gap-4 xl:flex-row xl:justify-end">
               <GameButton
                 centered
                 className="min-h-14 w-full max-w-full border-cyan-500/50 bg-cyan-500/20 text-lg text-cyan-100 xl:w-auto xl:min-w-64"
@@ -593,27 +514,18 @@ export default function HomePage() {
 
         <section className="space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Themes</h2>
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              <FilterPill
-                isActive={filters.theme.length === 0}
-                onClick={() => updateQueryParams({ theme: null, page: 1 })}
-              >
-                All Themes
-              </FilterPill>
-              {themes.map((theme) => (
+            <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
+            <div className="flex flex-wrap gap-3">
+              {MODE_OPTIONS.map((option) => (
                 <FilterPill
-                  key={theme}
-                  isActive={filters.theme === theme}
-                  onClick={() => updateQueryParams({ theme, page: 1 })}
+                  key={option.value}
+                  isActive={filters.mode === option.value}
+                  onClick={() => updateQueryParams({ mode: option.value, page: 1 })}
                 >
-                  {theme}
+                  {option.label}
                 </FilterPill>
               ))}
             </div>
-            {themesError ? (
-              <p className="text-lg text-rose-300">{themesError}</p>
-            ) : null}
           </div>
 
           <div className="space-y-3">
@@ -624,21 +536,6 @@ export default function HomePage() {
                   key={option.value}
                   isActive={filters.difficulty === option.value}
                   onClick={() => updateQueryParams({ difficulty: option.value, page: 1 })}
-                >
-                  {option.label}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
-            <div className="flex flex-wrap gap-3">
-              {MODE_OPTIONS.map((option) => (
-                <FilterPill
-                  key={option.value}
-                  isActive={filters.mode === option.value}
-                  onClick={() => updateQueryParams({ mode: option.value, page: 1 })}
                 >
                   {option.label}
                 </FilterPill>
