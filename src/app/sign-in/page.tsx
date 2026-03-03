@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
@@ -11,7 +11,7 @@ function normalizeCallbackUrl(url: string | null): string {
   return url;
 }
 
-export default function SignInPage() {
+function SignInPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -58,3 +58,10 @@ export default function SignInPage() {
   );
 }
 
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-white" />}>
+      <SignInPageContent />
+    </Suspense>
+  );
+}
