@@ -13,6 +13,25 @@ import {
 
 const REVIEW_BATCH_SIZE = 15;
 const HUB_DUPLICATE_THRESHOLD = 0.85;
+const HUB_APPROVAL_CONFIDENCE_THRESHOLD = 0.85;
+const UNSAFE_KEYWORDS = [
+  "porn",
+  "pornography",
+  "adult film",
+  "adult actress",
+  "adult actor",
+  "onlyfans",
+  "xxx",
+  "erotica",
+  "sexual content",
+  "explicit content",
+] as const;
+const NARROW_THEME_PATTERNS = [
+  /\blife and career of\b/i,
+  /\bbiography of\b/i,
+  /\bpersonal life of\b/i,
+  /\bnet worth\b/i,
+] as const;
 
 const hubFitSchema = z.object({
   decision: z.enum(["approve", "reject_niche", "reject_polarizing", "reject_unsafe"]),
@@ -64,7 +83,7 @@ function buildReviewPrompt(quiz: HubCandidate, questionRows: Array<{ questionTex
   return [
     "You are a strict content curator for QuizPlus Hub random quizzes.",
     "Goal: only approve quizzes that are broadly interesting to a global general audience.",
-    "Reject quizzes that are too niche, locally specific, or politically polarizing.",
+    "Reject quizzes that are too niche, locally specific, focused on one celebrity/personality, or politically polarizing.",
     "Reject unsafe content (hate, harassment, explicit sexual content, graphic violence).",
     "",
     "Decision policy:",
@@ -82,6 +101,29 @@ function buildReviewPrompt(quiz: HubCandidate, questionRows: Array<{ questionTex
     "Question preview:",
     preview,
   ].join("\n");
+}
+
+function hardRejectIfDisallowed(quiz: HubCandidate): {
+  decision: HubDecision;
+  reason: string;
+} | null {
+  const combined = `${quiz.title} ${quiz.theme}`.toLowerCase();
+
+  if (UNSAFE_KEYWORDS.some((keyword) => combined.includes(keyword))) {
+    return {
+      decision: "reject_unsafe",
+      reason: "Rejected for hub: adult/sexual content is not eligible for random hub distribution.",
+    };
+  }
+
+  if (NARROW_THEME_PATTERNS.some((pattern) => pattern.test(combined))) {
+    return {
+      decision: "reject_niche",
+      reason: "Rejected for hub: single-person biography themes are too narrow for default random hub.",
+    };
+  }
+
+  return null;
 }
 
 async function assessHubFit(quiz: HubCandidate, questionRows: Array<{ questionText: string; options: unknown }>) {
@@ -210,6 +252,17 @@ export const reviewHubCandidatesTask = schedules.task({
           continue;
         }
 
+        const hardRejection = hardRejectIfDisallowed(quiz);
+        if (hardRejection) {
+          await rejectQuiz({
+            quizId: quiz.id,
+            decision: hardRejection.decision,
+            reason: hardRejection.reason,
+          });
+          rejected += 1;
+          continue;
+        }
+
         const embedding = await generateEmbedding(questionTexts);
         const uniqueness = await checkHubUniqueness(embedding, HUB_DUPLICATE_THRESHOLD);
 
@@ -224,7 +277,7 @@ export const reviewHubCandidatesTask = schedules.task({
         }
 
         const hubFit = await assessHubFit(quiz, questionRows);
-        if (hubFit.decision === "approve" && hubFit.confidence >= 0.65) {
+        if (hubFit.decision === "approve" && hubFit.confidence >= HUB_APPROVAL_CONFIDENCE_THRESHOLD) {
           await approveQuiz(quiz.id, embedding);
           approved += 1;
           continue;
