@@ -1,4 +1,3 @@
-import { createDecipheriv, createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { streamText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -10,6 +9,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { apiKeys } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { decryptApiKey } from "@/lib/api-key-crypto";
 import type { HostActionType } from "@/lib/quiz-types";
 
 export const runtime = "nodejs";
@@ -47,37 +47,6 @@ const requestSchema = z.object({
 });
 
 type ProviderName = "openai" | "anthropic" | "google";
-
-function decodeBase64(input: string) {
-  return Buffer.from(input.replace(/-/g, "+").replace(/_/g, "/"), "base64");
-}
-
-function decryptApiKey(encryptedValue: string): string {
-  if (!encryptedValue.startsWith("enc:v1:")) {
-    return encryptedValue;
-  }
-
-  const secret = process.env.API_KEY_ENCRYPTION_SECRET;
-  if (!secret) {
-    throw new Error("Missing API_KEY_ENCRYPTION_SECRET for encrypted API key decryption");
-  }
-
-  const [, , ivB64, payloadB64, tagB64] = encryptedValue.split(":");
-  if (!ivB64 || !payloadB64 || !tagB64) {
-    throw new Error("Malformed encrypted API key payload");
-  }
-
-  const key = createHash("sha256").update(secret).digest();
-  const iv = decodeBase64(ivB64);
-  const payload = decodeBase64(payloadB64);
-  const authTag = decodeBase64(tagB64);
-
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(authTag);
-
-  const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]);
-  return decrypted.toString("utf8");
-}
 
 async function resolveApiCredentials(
   requestedProvider?: ProviderName,

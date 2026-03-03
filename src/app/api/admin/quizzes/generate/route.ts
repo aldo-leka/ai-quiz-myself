@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { quizGenerationJobs } from "@/db/schema";
+import { apiKeys, quizGenerationJobs } from "@/db/schema";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
 import { generateQuizTask } from "@/trigger/generate-quiz";
 
@@ -20,6 +20,7 @@ const requestSchema = z.object({
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
   language: z.string().trim().min(2).max(10).default("en"),
+  apiKeyId: z.string().uuid().optional(),
 });
 
 const fallbackThemeByMode: Record<"single" | "wwtbam" | "couch_coop", string> = {
@@ -51,6 +52,33 @@ export async function POST(request: Request) {
   const isHub = isEnglish;
   const isPublic = true;
 
+  const selectedKey = payload.apiKeyId
+    ? (
+      await db
+        .select({
+          id: apiKeys.id,
+          provider: apiKeys.provider,
+        })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.id, payload.apiKeyId), eq(apiKeys.userId, adminSession.user.id)))
+        .limit(1)
+    )[0]
+    : (
+      await db
+        .select({
+          id: apiKeys.id,
+          provider: apiKeys.provider,
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.userId, adminSession.user.id))
+        .orderBy(desc(apiKeys.createdAt))
+        .limit(1)
+    )[0];
+
+  if (!selectedKey) {
+    return NextResponse.json({ error: "No API key found. Add one in Admin > API Keys." }, { status: 412 });
+  }
+
   const [job] = await db
     .insert(quizGenerationJobs)
     .values({
@@ -64,8 +92,9 @@ export async function POST(request: Request) {
         language: normalizedLanguage,
         isHub,
         isPublic,
+        apiKeyId: selectedKey.id,
       },
-      provider: "google",
+      provider: selectedKey.provider,
       errorMessage: null,
     })
     .returning({

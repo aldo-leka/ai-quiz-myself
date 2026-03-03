@@ -25,6 +25,7 @@ type AdminShellProps = {
 const navItems = [
   { href: "/admin", label: "📊 Dashboard" },
   { href: "/admin/quizzes", label: "📝 Quizzes" },
+  { href: "/admin/api-keys", label: "🔑 API Keys" },
   { href: "/admin/moderation", label: "🚩 Moderation" },
   { href: "/admin/pricing", label: "💰 Pricing" },
 ] as const;
@@ -75,4 +76,3 @@ export function AdminShell({ children, userLabel }: AdminShellProps) {
     </SidebarProvider>
   );
 }
-

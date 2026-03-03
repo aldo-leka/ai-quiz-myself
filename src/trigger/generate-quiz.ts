@@ -1,10 +1,12 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { eq } from "drizzle-orm";
+import { createOpenAI } from "@ai-sdk/openai";
+import { and, eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
-import { questions, quizGenerationJobs, quizzes } from "@/db/schema";
-import { requireEnv } from "@/lib/env";
+import { apiKeys, questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import { decryptApiKey } from "@/lib/api-key-crypto";
 import {
   generateQuizFromPrompt,
   type QuizGenerationDifficulty,
@@ -22,9 +24,11 @@ const jobInputSchema = z.object({
   language: z.string().min(2).default("en"),
   isHub: z.boolean().default(true),
   isPublic: z.boolean().default(true),
+  apiKeyId: z.string().uuid(),
 });
 
 type JobInput = z.infer<typeof jobInputSchema>;
+type ProviderName = "openai" | "anthropic" | "google";
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -71,6 +75,41 @@ function parseInputData(inputData: unknown): JobInput {
     throw new Error("Invalid quiz generation payload");
   }
   return parsed.data;
+}
+
+async function resolveApiKey(userId: string, apiKeyId: string) {
+  const [savedKey] = await db
+    .select({
+      provider: apiKeys.provider,
+      encryptedKey: apiKeys.encryptedKey,
+    })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.userId, userId)))
+    .limit(1);
+
+  if (!savedKey) {
+    throw new Error("Selected API key not found");
+  }
+
+  return {
+    provider: savedKey.provider as ProviderName,
+    apiKey: decryptApiKey(savedKey.encryptedKey),
+  };
+}
+
+function getModel(provider: ProviderName, apiKey: string) {
+  if (provider === "openai") {
+    const openai = createOpenAI({ apiKey });
+    return openai(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
+  }
+
+  if (provider === "anthropic") {
+    const anthropic = createAnthropic({ apiKey });
+    return anthropic(process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest");
+  }
+
+  const google = createGoogleGenerativeAI({ apiKey });
+  return google(process.env.GOOGLE_MODEL ?? "gemini-2.0-flash");
 }
 
 async function persistGeneratedQuiz(params: {
@@ -140,17 +179,14 @@ export const generateQuizTask = task({
     await setJobStatus(job.id, { status: "processing", errorMessage: null });
 
     try {
-      const google = createGoogleGenerativeAI({
-        apiKey: requireEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
-      });
-
-      const modelName = process.env.GOOGLE_MODEL ?? "gemini-2.0-flash";
+      const credentials = await resolveApiKey(job.userId, effectiveInput.apiKeyId);
+      const model = getModel(credentials.provider, credentials.apiKey);
 
       const generated = await generateQuizFromPrompt({
         theme: effectiveInput.theme,
         gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
         difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
-        model: google(modelName),
+        model,
         temperature: 0.6,
       });
 
@@ -171,6 +207,7 @@ export const generateQuizTask = task({
         quizId,
         gameMode: effectiveInput.gameMode,
         difficulty: effectiveInput.difficulty,
+        provider: credentials.provider,
       });
 
       return {

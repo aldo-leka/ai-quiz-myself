@@ -61,6 +61,14 @@ type QuizGenerationInput = {
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
 };
 
+type ApiKeyOption = {
+  id: string;
+  provider: "openai" | "anthropic" | "google";
+  label: string | null;
+  maskedKey: string;
+  createdAt: string;
+};
+
 type ListResponse = {
   quizzes: QuizListItem[];
   total: number;
@@ -71,6 +79,11 @@ type ListResponse = {
 
 type JobsResponse = {
   jobs: QuizGenerationJob[];
+};
+
+type ApiKeysResponse = {
+  keys: ApiKeyOption[];
+  error?: string;
 };
 
 const defaultGenerationInput: QuizGenerationInput = {
@@ -133,6 +146,10 @@ export function AdminQuizzesPageClient() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [generationInput, setGenerationInput] = useState<QuizGenerationInput>(defaultGenerationInput);
+  const [apiKeys, setApiKeys] = useState<ApiKeyOption[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(true);
+  const [apiKeysError, setApiKeysError] = useState<string | null>(null);
+  const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const [retriedJobIds, setRetriedJobIds] = useState<string[]>([]);
@@ -213,6 +230,35 @@ export function AdminQuizzesPageClient() {
     }
   }, []);
 
+  const loadApiKeys = useCallback(async () => {
+    setApiKeysLoading(true);
+    setApiKeysError(null);
+
+    try {
+      const response = await fetch("/api/admin/api-keys", {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as ApiKeysResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to load API keys");
+      }
+
+      setApiKeys(payload.keys);
+      setSelectedApiKeyId((previous) => {
+        if (previous && payload.keys.some((key) => key.id === previous)) {
+          return previous;
+        }
+        const firstGoogle = payload.keys.find((key) => key.provider === "google");
+        if (firstGoogle) return firstGoogle.id;
+        return payload.keys[0]?.id ?? "";
+      });
+    } catch (fetchError) {
+      setApiKeysError(fetchError instanceof Error ? fetchError.message : "Could not load API keys");
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadQuizzes();
   }, [fetchKey, loadQuizzes]);
@@ -220,6 +266,10 @@ export function AdminQuizzesPageClient() {
   useEffect(() => {
     void loadJobs();
   }, [loadJobs]);
+
+  useEffect(() => {
+    void loadApiKeys();
+  }, [loadApiKeys]);
 
   useEffect(() => {
     const retriedRaw = window.localStorage.getItem("admin-generation-retried-job-ids");
@@ -277,6 +327,7 @@ export function AdminQuizzesPageClient() {
           gameMode: generationInput.gameMode,
           difficulty: generationInput.difficulty,
           language: "en",
+          apiKeyId: selectedApiKeyId || undefined,
         }),
       });
 
@@ -313,6 +364,7 @@ export function AdminQuizzesPageClient() {
           gameMode: details.gameMode,
           difficulty: details.difficulty,
           language: "en",
+          apiKeyId: selectedApiKeyId || undefined,
         }),
       });
 
@@ -566,7 +618,32 @@ export function AdminQuizzesPageClient() {
             </p>
           ) : null}
 
-          <Button disabled={isGenerating} onClick={() => void startGeneration()}>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">API Key</p>
+            <Select value={selectedApiKeyId} onValueChange={setSelectedApiKeyId}>
+              <SelectTrigger>
+                <SelectValue placeholder={apiKeysLoading ? "Loading keys..." : "Select key"} />
+              </SelectTrigger>
+              <SelectContent>
+                {apiKeys.map((key) => (
+                  <SelectItem key={key.id} value={key.id}>
+                    {key.provider} {key.label ? `• ${key.label}` : ""} • {key.maskedKey}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {apiKeysError ? <p className="text-sm text-rose-600">{apiKeysError}</p> : null}
+            {!apiKeysLoading && apiKeys.length === 0 ? (
+              <p className="text-sm text-rose-600">
+                No API keys found. Add one in Admin &gt; API Keys.
+              </p>
+            ) : null}
+          </div>
+
+          <Button
+            disabled={isGenerating || apiKeysLoading || !selectedApiKeyId}
+            onClick={() => void startGeneration()}
+          >
             {isGenerating ? "Starting..." : "Generate Quiz"}
           </Button>
 
