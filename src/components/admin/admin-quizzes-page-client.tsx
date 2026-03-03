@@ -322,6 +322,9 @@ export function AdminQuizzesPageClient() {
       }
 
       setRetriedJobIds((previous) => [...previous, job.id]);
+      setDismissedJobIds((previous) =>
+        previous.includes(job.id) ? previous : [...previous, job.id],
+      );
       setGenerationMessage("Retry started.");
       await loadJobs();
     } catch (error) {
