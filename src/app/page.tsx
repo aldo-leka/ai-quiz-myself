@@ -3,17 +3,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Clock3,
-  Gamepad2,
   Shuffle,
-  ThumbsUp,
-  Trophy,
-  Tv,
-  UserRound,
-  Users,
 } from "lucide-react";
 import { GameButton } from "@/components/quiz/GameButton";
-import { Badge } from "@/components/ui/badge";
+import { FilterPill } from "@/components/quiz/FilterPill";
+import { QuizCard } from "@/components/quiz/QuizCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
@@ -93,58 +87,6 @@ function getGridColumns(width: number): number {
   if (width < 1280) return 2;
   if (width < 1536) return 3;
   return 4;
-}
-
-function formatLikeRatio(likeRatio: number | null): string {
-  if (likeRatio === null) return "No votes";
-  return `${Math.round(likeRatio * 100)}% likes`;
-}
-
-function difficultyBadgeClass(difficulty: HubQuiz["difficulty"]): string {
-  if (difficulty === "easy") return "border-emerald-500/50 bg-emerald-500/20 text-emerald-200";
-  if (difficulty === "medium") return "border-amber-500/50 bg-amber-500/20 text-amber-200";
-  if (difficulty === "hard") return "border-rose-500/50 bg-rose-500/20 text-rose-200";
-  if (difficulty === "escalating") return "border-violet-500/50 bg-violet-500/20 text-violet-200";
-  return "border-cyan-500/50 bg-cyan-500/20 text-cyan-200";
-}
-
-function gameModeMeta(mode: HubQuiz["gameMode"]): {
-  label: string;
-  icon: React.ReactNode;
-} {
-  if (mode === "single") {
-    return { label: "Single Player", icon: <UserRound className="size-5" /> };
-  }
-  if (mode === "couch_coop") {
-    return { label: "Couch Co-op", icon: <Users className="size-5" /> };
-  }
-  return { label: "WWTBAM", icon: <Tv className="size-5" /> };
-}
-
-function FilterPill({
-  isActive,
-  onClick,
-  children,
-}: {
-  isActive: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "min-h-12 min-w-12 rounded-full border px-5 py-2 text-lg font-semibold transition",
-        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
-        isActive
-          ? "border-cyan-400 bg-cyan-500/20 text-cyan-100"
-          : "border-slate-700 bg-slate-900 text-slate-200",
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 function QuizSkeletonGrid() {
@@ -601,76 +543,24 @@ function HomePageContent() {
             <>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {hubQuizzes.map((quiz, index) => {
-                  const modeMeta = gameModeMeta(quiz.gameMode);
                   return (
-                    <button
+                    <QuizCard
                       key={quiz.id}
-                      ref={(node) => {
+                      interactive
+                      cardRef={(node) => {
                         cardRefs.current[index] = node;
                       }}
-                      type="button"
+                      title={quiz.title}
+                      theme={quiz.theme}
+                      difficulty={quiz.difficulty}
+                      gameMode={quiz.gameMode}
+                      questionCount={quiz.questionCount}
+                      playCount={quiz.playCount}
+                      likeRatio={quiz.likeRatio}
+                      statusLabel="Ready"
                       onClick={() => router.push(`/play/${quiz.id}`)}
                       onKeyDown={(event) => handleCardKeyDown(event, index, quiz.id)}
-                      className={cn(
-                        "group min-h-[320px] rounded-2xl border border-slate-700 bg-slate-900/90 p-5 text-left transition",
-                        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
-                      )}
-                    >
-                      <h3 className="line-clamp-2 text-2xl font-bold text-slate-100">{quiz.title}</h3>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Badge
-                          variant="outline"
-                          className="min-h-8 border-cyan-500/40 bg-cyan-500/10 px-3 text-sm text-cyan-100"
-                        >
-                          {quiz.theme}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn("min-h-8 px-3 text-sm", difficultyBadgeClass(quiz.difficulty))}
-                        >
-                          {quiz.difficulty === "escalating" ? "Escalating" : quiz.difficulty}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-5 flex items-center gap-2 text-lg text-slate-200">
-                        <span className="text-cyan-300">{modeMeta.icon}</span>
-                        <span>{modeMeta.label}</span>
-                      </div>
-
-                      <div className="mt-5 grid grid-cols-2 gap-3 text-base text-slate-300">
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                          <div className="flex items-center gap-2 text-slate-400">
-                            <Gamepad2 className="size-4" />
-                            Questions
-                          </div>
-                          <div className="mt-1 text-2xl font-bold text-slate-100">{quiz.questionCount}</div>
-                        </div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                          <div className="flex items-center gap-2 text-slate-400">
-                            <Trophy className="size-4" />
-                            Plays
-                          </div>
-                          <div className="mt-1 text-2xl font-bold text-slate-100">{quiz.playCount}</div>
-                        </div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                          <div className="flex items-center gap-2 text-slate-400">
-                            <ThumbsUp className="size-4" />
-                            Rating
-                          </div>
-                          <div className="mt-1 text-xl font-bold text-slate-100">
-                            {formatLikeRatio(quiz.likeRatio)}
-                          </div>
-                        </div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                          <div className="flex items-center gap-2 text-slate-400">
-                            <Clock3 className="size-4" />
-                            Status
-                          </div>
-                          <div className="mt-1 text-xl font-bold text-cyan-200">Ready</div>
-                        </div>
-                      </div>
-                    </button>
+                    />
                   );
                 })}
               </div>

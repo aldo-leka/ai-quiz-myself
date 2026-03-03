@@ -43,6 +43,10 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "en-US",
       },
+      preferredProvider: {
+        type: "string",
+        required: false,
+      },
     },
   },
   databaseHooks: {

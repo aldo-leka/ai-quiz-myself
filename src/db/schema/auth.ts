@@ -15,6 +15,7 @@ export const user = pgTable("user", {
   avatarUrl: text("avatar_url"),
   isAdmin: boolean("is_admin").default(false).notNull(),
   locale: text("locale").default("en").notNull(),
+  preferredProvider: text("preferred_provider"),
 });
 
 export const session = pgTable(

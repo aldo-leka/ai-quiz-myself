@@ -43,6 +43,13 @@
       "when": 1772546342838,
       "tag": "0005_mixed_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772556518676,
+      "tag": "0006_tearful_quentin_quire",
+      "breakpoints": true
     }
   ]
 }
