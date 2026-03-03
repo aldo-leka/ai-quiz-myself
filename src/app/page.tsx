@@ -8,6 +8,7 @@ import {
 import { GameButton } from "@/components/quiz/GameButton";
 import { FilterPill } from "@/components/quiz/FilterPill";
 import { QuizCard } from "@/components/quiz/QuizCard";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
@@ -80,6 +81,17 @@ function normalizePositiveInt(value: string | null, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function userInitials(name: string): string {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .slice(0, 2);
+
+  if (parts.length === 0) return "U";
+  return parts.map((part) => part[0]!.toUpperCase()).join("");
 }
 
 function getGridColumns(width: number): number {
@@ -438,16 +450,40 @@ function HomePageContent() {
                 <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-6xl">
                   QuizPlus Hub
                 </h1>
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard")}
-                  className={cn(
-                    "min-h-11 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition",
-                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
-                  )}
-                >
-                  {sessionData?.user?.name?.trim() || "Not logged in"}
-                </button>
+                {sessionData?.user ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard")}
+                    className={cn(
+                      "inline-flex min-h-11 select-none items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-slate-100 transition",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    )}
+                  >
+                    <Avatar size="lg" className="border border-slate-700">
+                      <AvatarImage
+                        src={sessionData.user.avatarUrl ?? sessionData.user.image ?? undefined}
+                        alt={sessionData.user.name}
+                      />
+                      <AvatarFallback className="bg-slate-800 text-cyan-100">
+                        {userInitials(sessionData.user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="select-none">
+                      {sessionData.user.name.trim() || "Player"}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard")}
+                    className={cn(
+                      "min-h-11 select-none rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    )}
+                  >
+                    Not logged in
+                  </button>
+                )}
               </div>
               <p className="mt-3 text-lg text-slate-300 md:text-2xl">
                 Browse hub quizzes, filter by mode and difficulty, then jump straight into play.

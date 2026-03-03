@@ -70,6 +70,15 @@ const sortOptions: Array<{ value: SortFilter; label: string }> = [
   { value: "most_played", label: "Most Played" },
 ];
 
+const playerButtonBaseClass =
+  "rounded-xl border transition focus-visible:ring-cyan-400/60";
+const playerButtonCyanClass =
+  "border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30";
+const playerButtonSecondaryClass =
+  "border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/60 hover:bg-cyan-500/10 hover:text-cyan-100";
+const playerButtonDangerClass =
+  "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100";
+
 export function MyQuizzesPageClient() {
   const [rows, setRows] = useState<UserQuizRow[]>([]);
   const [jobs, setJobs] = useState<GenerationJobRow[]>([]);
@@ -89,9 +98,12 @@ export function MyQuizzesPageClient() {
     [mode, status, sort, page],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (options?: { background?: boolean }) => {
+    const isBackground = options?.background ?? false;
+    if (!isBackground) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const params = new URLSearchParams({
@@ -110,14 +122,23 @@ export function MyQuizzesPageClient() {
         throw new Error(payload.error ?? "Failed to load quizzes");
       }
 
-      setRows((previous) => (page > 1 ? [...previous, ...payload.quizzes] : payload.quizzes));
+      setRows((previous) => {
+        if (page > 1 && !isBackground) {
+          return [...previous, ...payload.quizzes];
+        }
+        return payload.quizzes;
+      });
       setJobs(payload.jobs);
       setTotal(payload.total);
       setHasMore(payload.hasMore);
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : "Failed to load quizzes");
+      if (!isBackground) {
+        setError(fetchError instanceof Error ? fetchError.message : "Failed to load quizzes");
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, [mode, page, sort, status]);
 
@@ -126,11 +147,21 @@ export function MyQuizzesPageClient() {
   }, [fetchKey, load]);
 
   useEffect(() => {
+    const hasActiveJobs = jobs.some(
+      (job) => job.status === "pending" || job.status === "processing",
+    );
+    if (!hasActiveJobs || page !== 1) {
+      return;
+    }
+
     const interval = setInterval(() => {
-      void load();
+      if (document.visibilityState === "visible") {
+        void load({ background: true });
+      }
     }, 4000);
+
     return () => clearInterval(interval);
-  }, [load]);
+  }, [jobs, load, page]);
 
   async function deleteQuiz(quiz: UserQuizRow | null) {
     if (!quiz) return;
@@ -239,7 +270,7 @@ export function MyQuizzesPageClient() {
             </p>
             <Button
               asChild
-              className="mt-4 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              className={`mt-4 ${playerButtonBaseClass} ${playerButtonCyanClass}`}
             >
               <Link href="/dashboard/api-keys">Set Up API Key</Link>
             </Button>
@@ -298,19 +329,25 @@ export function MyQuizzesPageClient() {
                   <Button
                     asChild
                     size="sm"
-                    className="border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+                    className={`${playerButtonBaseClass} ${playerButtonCyanClass}`}
                   >
                     <Link href={`/play/${quiz.id}`}>
                       <Play className="mr-1 size-4" />
                       Play
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline" className="border-slate-600 text-slate-100">
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+                  >
                     <Link href={`/dashboard/my-quizzes/${quiz.id}`}>View Details</Link>
                   </Button>
                   <Button
                     size="sm"
-                    variant="destructive"
+                    variant="outline"
+                    className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
                     onClick={() => setQuizPendingDelete(quiz)}
                     disabled={deletingQuizId === quiz.id}
                   >
@@ -355,9 +392,15 @@ export function MyQuizzesPageClient() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(deletingQuizId)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={Boolean(deletingQuizId)}
+              className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+            >
+              Cancel
+            </AlertDialogCancel>
             <Button
-              variant="destructive"
+              variant="outline"
+              className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
               disabled={Boolean(deletingQuizId)}
               onClick={() => void deleteQuiz(quizPendingDelete)}
             >

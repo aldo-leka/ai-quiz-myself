@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ArrowLeft, History, KeyRound, LayoutGrid, LibraryBig, Settings } from "lucide-react";
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, History, KeyRound, LayoutGrid, LibraryBig, LogOut, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
@@ -41,7 +44,21 @@ function isActivePath(pathname: string, href: string): boolean {
 
 export function DashboardShell({ children, user }: DashboardShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const userImage = user.avatarUrl || user.image || null;
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await authClient.signOut();
+      router.replace("/");
+      router.refresh();
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -65,15 +82,39 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                 </h1>
               </div>
 
-              <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2">
-                <Avatar size="lg" className="border border-slate-700">
-                  <AvatarImage src={userImage ?? undefined} alt={user.name} />
-                  <AvatarFallback className="bg-slate-800 text-cyan-100">
-                    {userInitials(user.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <p className="text-sm font-semibold text-slate-100">{user.name}</p>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex min-h-11 select-none items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-slate-100 transition",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    )}
+                  >
+                    <Avatar size="lg" className="border border-slate-700">
+                      <AvatarImage src={userImage ?? undefined} alt={user.name} />
+                      <AvatarFallback className="bg-slate-800 text-cyan-100">
+                        {userInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="select-none">{user.name}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-[var(--radix-popover-trigger-width)] rounded-2xl border-slate-700 bg-slate-950/95 p-2 text-slate-100"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    disabled={isSigningOut}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <LogOut className="size-4" />
+                    {isSigningOut ? "Signing out..." : "Log out"}
+                  </button>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <nav className="flex flex-wrap gap-3">

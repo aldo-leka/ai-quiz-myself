@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PlayerSelect } from "@/components/dashboard/player-select";
 
 type ProviderOption = "openai" | "anthropic" | "google";
 
@@ -28,13 +22,35 @@ const localeOptions = [
   { value: "nl", label: "Dutch" },
   { value: "sq", label: "Albanian" },
 ];
+const providerOptions: Array<{ value: ProviderOption | "none"; label: string }> = [
+  { value: "none", label: "None" },
+  { value: "google", label: "Google" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+];
+
+function normalizeLocale(value: string): string {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return "en";
+
+  if (localeOptions.some((option) => option.value === raw)) {
+    return raw;
+  }
+
+  const primaryTag = raw.split("-")[0] ?? "";
+  if (localeOptions.some((option) => option.value === primaryTag)) {
+    return primaryTag;
+  }
+
+  return "en";
+}
 
 export function DashboardSettingsPageClient({
   initialLocale,
   initialPreferredProvider,
   availableProviders,
 }: DashboardSettingsPageClientProps) {
-  const [locale, setLocale] = useState(initialLocale);
+  const [locale, setLocale] = useState(normalizeLocale(initialLocale));
   const [preferredProvider, setPreferredProvider] = useState<ProviderOption | "none">(
     initialPreferredProvider ?? "none",
   );
@@ -84,38 +100,26 @@ export function DashboardSettingsPageClient({
       <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
         <div className="space-y-2">
           <p className="text-sm font-semibold text-slate-300">Preferred Language</p>
-          <Select value={locale} onValueChange={setLocale}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select language" />
-            </SelectTrigger>
-            <SelectContent>
-              {localeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <PlayerSelect
+            value={locale}
+            onValueChange={setLocale}
+            placeholder="Select language"
+            options={localeOptions}
+          />
         </div>
 
         <div className="space-y-2">
           <p className="text-sm font-semibold text-slate-300">Preferred AI Provider</p>
-          <Select
+          <PlayerSelect
             value={preferredProvider}
             onValueChange={(value: ProviderOption | "none") => setPreferredProvider(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {selectableProviders.map((provider) => (
-                <SelectItem key={provider} value={provider}>
-                  {provider}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder="Select provider"
+            options={providerOptions.filter(
+              (option) =>
+                option.value === "none" ||
+                selectableProviders.includes(option.value as ProviderOption),
+            )}
+          />
           {selectableProviders.length === 0 ? (
             <p className="text-sm text-slate-400">
               Add an API key first in API Keys before selecting a preferred provider.

@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { KeyRound, Trash2 } from "lucide-react";
+import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type ApiKeyRow = {
   id: string;
@@ -119,19 +113,17 @@ export function DashboardApiKeysPageClient() {
       <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
         <h3 className="text-2xl font-bold text-slate-100">Add or Update Key</h3>
         <div className="grid gap-3 md:grid-cols-3">
-          <Select
+          <PlayerSelect
             value={provider}
             onValueChange={(value: "openai" | "anthropic" | "google") => setProvider(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="google">Google</SelectItem>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-            </SelectContent>
-          </Select>
+            placeholder="Provider"
+            widthClassName="w-full"
+            options={[
+              { value: "google", label: "Google" },
+              { value: "openai", label: "OpenAI" },
+              { value: "anthropic", label: "Anthropic" },
+            ]}
+          />
           <Input
             placeholder="Label (optional)"
             value={label}
