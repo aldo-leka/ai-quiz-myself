@@ -13,7 +13,8 @@
     "db:seed:wwtbam": "npx tsx src/db/seed-wwtbam.ts",
     "db:seed:single": "npx tsx src/db/seed-single.ts",
     "db:seed:couch": "npx tsx src/db/seed-couch.ts",
-    "trigger:dev": "npx trigger.dev@latest dev"
+    "trigger:dev": "npx trigger.dev@latest dev",
+    "ngrok:dev": "node -r dotenv/config scripts/ngrok-dev.cjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.50",
