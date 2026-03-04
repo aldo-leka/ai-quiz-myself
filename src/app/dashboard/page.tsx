@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { desc, eq, sql } from "drizzle-orm";
-import { Plus, Trophy } from "lucide-react";
+import { Play, Plus, Trophy } from "lucide-react";
 import { QuizCard } from "@/components/quiz/QuizCard";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { credits, quizSessions, quizzes } from "@/db/schema";
 import { getUserSessionOrNull } from "@/lib/user-auth";
+
+const playerButtonBaseClass =
+  "rounded-xl border transition focus-visible:ring-cyan-400/60";
+const playerButtonCyanClass =
+  "border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -154,7 +159,18 @@ export default async function DashboardOverviewPage() {
                   playCount={quiz.playCount}
                   likeRatio={totalVotes > 0 ? quiz.likes / totalVotes : null}
                   statusLabel="Ready"
-                />
+                >
+                  <Button
+                    asChild
+                    size="sm"
+                    className={`${playerButtonBaseClass} ${playerButtonCyanClass}`}
+                  >
+                    <Link href={`/play/${quiz.id}`}>
+                      <Play className="mr-1 size-4" />
+                      Play
+                    </Link>
+                  </Button>
+                </QuizCard>
               );
             })}
           </div>
