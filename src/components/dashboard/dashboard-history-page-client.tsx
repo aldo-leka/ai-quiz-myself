@@ -73,6 +73,14 @@ function modeMeta(mode: HistorySessionRow["gameMode"]) {
   return { label: "WWTBAM", icon: <Tv className="size-4" /> };
 }
 
+function getCorrectAnswerText(answer: SessionAnswer): string {
+  const option = answer.options[answer.correctOptionIndex];
+  if (option?.text) {
+    return option.text;
+  }
+  return "Unavailable";
+}
+
 export function DashboardHistoryPageClient() {
   const [rows, setRows] = useState<HistorySessionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,6 +297,11 @@ export function DashboardHistoryPageClient() {
                           <p className="mt-1 text-sm text-slate-300">
                             {answer.isCorrect ? "Correct" : "Wrong"} · {Math.round(answer.timeTakenMs / 1000)}s
                           </p>
+                          <div className="mt-2 space-y-1 text-sm">
+                            <p className="text-cyan-200">
+                              Correct answer: {getCorrectAnswerText(answer)}
+                            </p>
+                          </div>
                         </div>
                       ))
                     ) : (
