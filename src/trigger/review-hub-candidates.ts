@@ -277,9 +277,21 @@ export const reviewHubCandidatesTask = schedules.task({
         }
 
         const hubFit = await assessHubFit(quiz, questionRows);
-        if (hubFit.decision === "approve" && hubFit.confidence >= HUB_APPROVAL_CONFIDENCE_THRESHOLD) {
-          await approveQuiz(quiz.id, embedding);
-          approved += 1;
+        if (hubFit.decision === "approve") {
+          if (hubFit.confidence >= HUB_APPROVAL_CONFIDENCE_THRESHOLD) {
+            await approveQuiz(quiz.id, embedding);
+            approved += 1;
+            continue;
+          }
+
+          await rejectQuiz({
+            quizId: quiz.id,
+            decision: "reject_niche",
+            reason:
+              `Rejected for hub: review confidence ${hubFit.confidence.toFixed(2)} ` +
+              `is below required threshold ${HUB_APPROVAL_CONFIDENCE_THRESHOLD.toFixed(2)}.`,
+          });
+          rejected += 1;
           continue;
         }
 
