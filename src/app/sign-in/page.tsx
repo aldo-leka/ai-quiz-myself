@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
 function normalizeCallbackUrl(url: string | null): string {
@@ -37,30 +39,75 @@ function SignInPageContent() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        Continue with Google to manage quizzes, API keys, and history.
-      </p>
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-blue-600/15 blur-3xl" />
+        <div className="absolute right-0 top-1/3 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+      </div>
 
-      <button
-        type="button"
-        disabled={isSubmitting}
-        onClick={continueWithGoogle}
-        className="mt-8 flex w-full items-center justify-center gap-3 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-60"
-      >
-        <Image src="/logos/google.svg" alt="Google" width={18} height={18} />
-        Continue with Google
-      </button>
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 md:px-8">
+        <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <section className="min-h-[420px] rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-950/90 p-6 shadow-2xl md:p-8">
+            <div className="flex h-full flex-col">
+              <div>
+                <Link
+                  href="/"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/20 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                >
+                  <ArrowLeft className="size-4" />
+                  Back to Hub
+                </Link>
+              </div>
 
-      {message ? <p className="mt-4 text-sm text-slate-700">{message}</p> : null}
+              <div className="flex flex-1 items-center">
+                <div className="space-y-4">
+                  <h1 className="text-4xl font-black tracking-tight md:text-6xl">
+                    Sign in and keep your quiz journey synced.
+                  </h1>
+                  <p className="max-w-xl text-lg text-slate-300 md:text-xl">
+                    Save scores, manage API keys, generate quizzes, and track your full play history.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="min-h-[420px] rounded-3xl border border-slate-800 bg-slate-900/85 p-6 shadow-2xl md:p-8">
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <div className="space-y-2">
+                <h2 className="text-3xl font-black tracking-tight">Continue</h2>
+                <p className="text-slate-300">
+                  Use Google to enter your QuizPlus dashboard.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={continueWithGoogle}
+                className="mt-8 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full border border-cyan-500/50 bg-cyan-500/15 px-5 py-3 text-base font-semibold text-cyan-100 transition hover:bg-cyan-500/25 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <Image src="/logos/google.svg" alt="Google" width={20} height={20} />
+                {isSubmitting ? "Connecting..." : "Continue with Google"}
+              </button>
+
+              {message ? (
+                <p className="mt-4 w-full max-w-sm rounded-xl border border-rose-500/50 bg-rose-500/10 p-3 text-sm text-rose-200">
+                  {message}
+                </p>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
 
 export default function SignInPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-white" />}>
+    <Suspense fallback={<main className="min-h-screen bg-slate-950" />}>
       <SignInPageContent />
     </Suspense>
   );
