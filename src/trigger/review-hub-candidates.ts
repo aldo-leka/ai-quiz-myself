@@ -264,7 +264,11 @@ export const reviewHubCandidatesTask = schedules.task({
         }
 
         const embedding = await generateEmbedding(questionTexts);
-        const uniqueness = await checkHubUniqueness(embedding, HUB_DUPLICATE_THRESHOLD);
+        const uniqueness = await checkHubUniqueness(
+          embedding,
+          quiz.gameMode,
+          HUB_DUPLICATE_THRESHOLD,
+        );
 
         if (uniqueness.isDuplicate) {
           await rejectQuiz({

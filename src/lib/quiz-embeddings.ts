@@ -38,6 +38,7 @@ export async function generateEmbedding(texts: string[]): Promise<number[]> {
 
 export async function checkHubUniqueness(
   embedding: number[],
+  gameMode: "single" | "wwtbam" | "couch_coop",
   threshold = 0.85,
 ): Promise<{
   isDuplicate: boolean;
@@ -60,7 +61,7 @@ export async function checkHubUniqueness(
       1 - (${quizEmbeddings.embedding} <=> ${vectorLiteral}::vector) as "similarity"
     from ${quizEmbeddings}
     inner join ${quizzes} on ${quizzes.id} = ${quizEmbeddings.quizId}
-    where ${eq(quizzes.isHub, true)}
+    where ${eq(quizzes.isHub, true)} and ${eq(quizzes.gameMode, gameMode)}
     order by ${quizEmbeddings.embedding} <=> ${vectorLiteral}::vector
     limit 1
   `);

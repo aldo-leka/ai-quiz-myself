@@ -150,9 +150,13 @@ async function persistGeneratedQuiz(params: {
   return createdQuiz.id;
 }
 
-async function applyHubUniqueness(quizId: string, questionTexts: string[]) {
+async function applyHubUniqueness(
+  quizId: string,
+  questionTexts: string[],
+  gameMode: "single" | "wwtbam" | "couch_coop",
+) {
   const embedding = await generateEmbedding(questionTexts);
-  const uniqueness = await checkHubUniqueness(embedding, 0.85);
+  const uniqueness = await checkHubUniqueness(embedding, gameMode, 0.85);
 
   if (uniqueness.isDuplicate) {
     const similarQuizId = uniqueness.mostSimilarQuizId ?? "unknown";
@@ -415,6 +419,7 @@ export const generateQuizTask = task({
         const uniquenessResult = await applyHubUniqueness(
           quizId,
           generated.questions.map((question) => question.questionText),
+          effectiveInput.gameMode,
         );
         duplicate = uniquenessResult.uniqueness.isDuplicate;
       }
