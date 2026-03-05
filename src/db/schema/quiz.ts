@@ -261,6 +261,36 @@ export const quizEmbeddings = pgTable(
   ],
 );
 
+export const surpriseThemeHistory = pgTable(
+  "surprise_theme_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    gameMode: quizGameModeEnum("game_mode").notNull(),
+    language: text("language").notNull().default("en"),
+    theme: text("theme").notNull(),
+    themeKey: text("theme_key").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("surprise_theme_history_user_id_idx").on(table.userId),
+    index("surprise_theme_history_mode_lang_idx").on(table.gameMode, table.language),
+    uniqueIndex("surprise_theme_history_user_scope_theme_key_uq").on(
+      table.userId,
+      table.gameMode,
+      table.language,
+      table.themeKey,
+    ),
+    index("surprise_theme_history_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
 export const credits = pgTable(
   "credits",
   {
@@ -471,6 +501,16 @@ export const quizEmbeddingsRelations = relations(quizEmbeddings, ({ one }) => ({
     references: [quizzes.id],
   }),
 }));
+
+export const surpriseThemeHistoryRelations = relations(
+  surpriseThemeHistory,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [surpriseThemeHistory.userId],
+      references: [user.id],
+    }),
+  }),
+);
 
 export const creditsRelations = relations(credits, ({ one }) => ({
   user: one(user, {

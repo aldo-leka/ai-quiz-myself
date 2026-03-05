@@ -26,6 +26,7 @@ type UserQuizRow = {
   playCount: number;
   likeRatio: number | null;
   status: "ready";
+  createdAt: string;
 };
 
 type GenerationJobRow = {
@@ -92,6 +93,28 @@ export function MyQuizzesPageClient() {
   const [hasMore, setHasMore] = useState(false);
   const [quizPendingDelete, setQuizPendingDelete] = useState<UserQuizRow | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
+
+  const displayItems = useMemo(() => {
+    const quizItems = rows.map((quiz) => ({
+      kind: "quiz" as const,
+      createdAt: quiz.createdAt,
+      quiz,
+    }));
+
+    const jobItems = jobs.map((job) => ({
+      kind: "job" as const,
+      createdAt: job.createdAt,
+      job,
+    }));
+
+    if (sort !== "newest") {
+      return [...quizItems, ...jobItems];
+    }
+
+    return [...quizItems, ...jobItems].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [jobs, rows, sort]);
 
   const fetchKey = useMemo(
     () => `${mode}|${status}|${sort}|${page}`,
@@ -287,84 +310,88 @@ export function MyQuizzesPageClient() {
 
         {!loading ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {jobs.map((job) => {
-              const isGenerating = job.status === "pending" || job.status === "processing";
-              return (
-                <div
-                  key={job.id}
-                  className="min-h-[320px] rounded-2xl border border-slate-700 bg-slate-900/90 p-5"
-                >
-                  <h4 className="text-2xl font-bold text-slate-100">{job.theme}</h4>
-                  <p className="mt-3 text-slate-300">Mode: {job.gameMode}</p>
-                  <p className="text-slate-300">Difficulty: {job.difficulty}</p>
-                  <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/70 p-4">
-                    {isGenerating ? (
-                      <div className="flex items-center gap-2 text-amber-200">
-                        <Loader2 className="size-4 animate-spin" />
-                        Generating...
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-rose-200">
-                          <AlertTriangle className="size-4" />
-                          Failed
+            {displayItems.map((item) => {
+              if (item.kind === "job") {
+                const { job } = item;
+                const isGenerating = job.status === "pending" || job.status === "processing";
+                return (
+                  <div
+                    key={job.id}
+                    className="min-h-[320px] rounded-2xl border border-slate-700 bg-slate-900/90 p-5"
+                  >
+                    <h4 className="text-2xl font-bold text-slate-100">{job.theme}</h4>
+                    <p className="mt-3 text-slate-300">Mode: {job.gameMode}</p>
+                    <p className="text-slate-300">Difficulty: {job.difficulty}</p>
+                    <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+                      {isGenerating ? (
+                        <div className="flex items-center gap-2 text-amber-200">
+                          <Loader2 className="size-4 animate-spin" />
+                          Generating...
                         </div>
-                        <p className="text-sm text-rose-300">{job.errorMessage ?? "Generation failed."}</p>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-rose-200">
+                            <AlertTriangle className="size-4" />
+                            Failed
+                          </div>
+                          <p className="text-sm text-rose-300">{job.errorMessage ?? "Generation failed."}</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-4 text-sm text-slate-400">
+                      Created {new Date(job.createdAt).toLocaleString()}
+                    </p>
                   </div>
-                  <p className="mt-4 text-sm text-slate-400">
-                    Created {new Date(job.createdAt).toLocaleString()}
-                  </p>
-                </div>
+                );
+              }
+
+              const { quiz } = item;
+              return (
+                <QuizCard
+                  key={quiz.id}
+                  title={quiz.title}
+                  theme={quiz.theme}
+                  difficulty={quiz.difficulty}
+                  gameMode={quiz.gameMode}
+                  questionCount={quiz.questionCount}
+                  playCount={quiz.playCount}
+                  likeRatio={quiz.likeRatio}
+                  statusLabel="Ready"
+                  statusTone="ready"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      asChild
+                      size="sm"
+                      className={`${playerButtonBaseClass} ${playerButtonCyanClass}`}
+                    >
+                      <Link href={`/play/${quiz.id}`}>
+                        <Play className="mr-1 size-4" />
+                        Play
+                      </Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+                    >
+                      <Link href={`/dashboard/my-quizzes/${quiz.id}`}>View Details</Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
+                      onClick={() => setQuizPendingDelete(quiz)}
+                      disabled={deletingQuizId === quiz.id}
+                    >
+                      <Trash2 className="mr-1 size-4" />
+                      {deletingQuizId === quiz.id ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
+                </QuizCard>
               );
             })}
-
-            {rows.map((quiz) => (
-              <QuizCard
-                key={quiz.id}
-                title={quiz.title}
-                theme={quiz.theme}
-                difficulty={quiz.difficulty}
-                gameMode={quiz.gameMode}
-                questionCount={quiz.questionCount}
-                playCount={quiz.playCount}
-                likeRatio={quiz.likeRatio}
-                statusLabel="Ready"
-                statusTone="ready"
-              >
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    asChild
-                    size="sm"
-                    className={`${playerButtonBaseClass} ${playerButtonCyanClass}`}
-                  >
-                    <Link href={`/play/${quiz.id}`}>
-                      <Play className="mr-1 size-4" />
-                      Play
-                    </Link>
-                  </Button>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
-                  >
-                    <Link href={`/dashboard/my-quizzes/${quiz.id}`}>View Details</Link>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
-                    onClick={() => setQuizPendingDelete(quiz)}
-                    disabled={deletingQuizId === quiz.id}
-                  >
-                    <Trash2 className="mr-1 size-4" />
-                    {deletingQuizId === quiz.id ? "Deleting..." : "Delete"}
-                  </Button>
-                </div>
-              </QuizCard>
-            ))}
           </div>
         ) : null}
 
