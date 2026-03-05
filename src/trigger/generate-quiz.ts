@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
@@ -17,7 +17,7 @@ import {
 } from "@/lib/quiz-generation";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
-import { tryDeductWalletBalanceCents } from "@/lib/wallet";
+import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
 
 const taskPayloadSchema = z.object({
   jobId: z.string().uuid(),
@@ -181,7 +181,7 @@ async function applyHubUniqueness(quizId: string, questionTexts: string[]) {
   };
 }
 
-async function settleGenerationCharge(params: {
+async function settleGenerationChargeOnSuccess(params: {
   userId: string;
   jobId: string;
   sourceType: GenerationSourceType;
@@ -190,6 +190,38 @@ async function settleGenerationCharge(params: {
 }) {
   if (params.billingMode !== "platform_credits" || params.amountCents <= 0) {
     return { charged: false };
+  }
+
+  const [reservedTransaction] = await db
+    .select({
+      id: creditTransactions.id,
+    })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.userId, params.userId),
+        eq(creditTransactions.generationJobId, params.jobId),
+        eq(creditTransactions.type, "generation"),
+        eq(creditTransactions.status, "pending"),
+      ),
+    )
+    .limit(1);
+
+  if (reservedTransaction) {
+    await db
+      .update(creditTransactions)
+      .set({
+        status: "completed",
+        description: "Quiz generation charge",
+        metadata: {
+          sourceType: params.sourceType,
+          billingMode: params.billingMode,
+          reason: "settled_after_success",
+        },
+      })
+      .where(eq(creditTransactions.id, reservedTransaction.id));
+
+    return { charged: true };
   }
 
   const deducted = await tryDeductWalletBalanceCents({
@@ -230,6 +262,60 @@ async function settleGenerationCharge(params: {
   });
 
   return { charged: true };
+}
+
+async function refundReservedGenerationChargeOnFailure(params: {
+  userId: string;
+  jobId: string;
+  sourceType: GenerationSourceType;
+  billingMode: GenerationBillingMode;
+  amountCents: number;
+  errorMessage: string;
+}) {
+  if (params.billingMode !== "platform_credits" || params.amountCents <= 0) {
+    return { refunded: false };
+  }
+
+  const [reservedTransaction] = await db
+    .select({
+      id: creditTransactions.id,
+      amountCents: creditTransactions.amountCents,
+    })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.userId, params.userId),
+        eq(creditTransactions.generationJobId, params.jobId),
+        eq(creditTransactions.type, "generation"),
+        eq(creditTransactions.status, "pending"),
+      ),
+    )
+    .limit(1);
+
+  if (!reservedTransaction) {
+    return { refunded: false };
+  }
+
+  await incrementWalletBalanceCents(
+    params.userId,
+    Math.abs(Number(reservedTransaction.amountCents)),
+  );
+
+  await db
+    .update(creditTransactions)
+    .set({
+      status: "failed",
+      description: "Quiz generation charge refunded (generation failed)",
+      metadata: {
+        sourceType: params.sourceType,
+        billingMode: params.billingMode,
+        reason: "generation_failed_refund",
+        error: params.errorMessage.slice(0, 500),
+      },
+    })
+    .where(eq(creditTransactions.id, reservedTransaction.id));
+
+  return { refunded: true };
 }
 
 export const generateQuizTask = task({
@@ -339,7 +425,7 @@ export const generateQuizTask = task({
         errorMessage: null,
       });
 
-      const settled = await settleGenerationCharge({
+      const settled = await settleGenerationChargeOnSuccess({
         userId: job.userId,
         jobId: job.id,
         sourceType,
@@ -372,10 +458,20 @@ export const generateQuizTask = task({
         errorMessage: message,
       });
 
+      const refunded = await refundReservedGenerationChargeOnFailure({
+        userId: job.userId,
+        jobId: job.id,
+        sourceType,
+        billingMode: effectiveInput.billingMode,
+        amountCents: effectiveInput.billingAmountCents,
+        errorMessage: message,
+      });
+
       logger.error("Quiz generation failed", {
         jobId: job.id,
         sourceType,
         error: message,
+        refundedCharge: refunded.refunded,
       });
 
       return {

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { credits, platformSettings, quizGenerationJobs } from "@/db/schema";
+import { creditTransactions, credits, platformSettings, quizGenerationJobs } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import {
   computeGenerationCostCents,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
+import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
 import { generateQuizTask } from "@/trigger/generate-quiz";
 
 export const runtime = "nodejs";
@@ -251,6 +252,52 @@ export async function POST(request: Request) {
       createdAt: quizGenerationJobs.createdAt,
     });
 
+  let reservedCharge = false;
+
+  if (billingMode === "platform_credits" && generationCostCents > 0) {
+    const deducted = await tryDeductWalletBalanceCents({
+      userId: session.user.id,
+      amountCents: generationCostCents,
+    });
+
+    if (!deducted) {
+      await db.delete(quizGenerationJobs).where(eq(quizGenerationJobs.id, job.id));
+      return NextResponse.json(
+        {
+          error: "Insufficient balance for this generation.",
+          balanceCents: walletBalanceCents,
+          requiredCents: generationCostCents,
+        },
+        { status: 402 },
+      );
+    }
+
+    try {
+      await db.insert(creditTransactions).values({
+        userId: session.user.id,
+        amountCents: -generationCostCents,
+        currency: "usd",
+        type: "generation",
+        status: "pending",
+        description: "Quiz generation charge (reserved)",
+        generationJobId: job.id,
+        metadata: {
+          sourceType: payload.sourceType,
+          billingMode,
+          reason: "reserved_on_start",
+        },
+      });
+      reservedCharge = true;
+    } catch {
+      await incrementWalletBalanceCents(session.user.id, generationCostCents);
+      await db.delete(quizGenerationJobs).where(eq(quizGenerationJobs.id, job.id));
+      return NextResponse.json(
+        { error: "Failed to reserve balance for generation." },
+        { status: 500 },
+      );
+    }
+  }
+
   try {
     const run = await generateQuizTask.trigger({ jobId: job.id });
     return NextResponse.json(
@@ -272,6 +319,22 @@ export async function POST(request: Request) {
         errorMessage: message.slice(0, 500),
       })
       .where(eq(quizGenerationJobs.id, job.id));
+
+    if (reservedCharge) {
+      await incrementWalletBalanceCents(session.user.id, generationCostCents);
+      await db
+        .update(creditTransactions)
+        .set({
+          status: "failed",
+          description: "Quiz generation charge refunded (task start failed)",
+          metadata: {
+            sourceType: payload.sourceType,
+            billingMode,
+            reason: "task_start_failed_refund",
+          },
+        })
+        .where(eq(creditTransactions.generationJobId, job.id));
+    }
 
     return NextResponse.json({ error: "Failed to start generation task" }, { status: 500 });
   }
