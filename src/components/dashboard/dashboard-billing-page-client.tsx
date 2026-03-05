@@ -116,6 +116,14 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
   const [targetInput, setTargetInput] = useState("10.00");
   const [monthlyCapInput, setMonthlyCapInput] = useState("");
 
+  const currentThresholdCents = parseDollarsToCents(thresholdInput);
+  const willRechargeImmediately = Boolean(
+    data &&
+    autoRechargeEnabled &&
+    currentThresholdCents !== null &&
+    data.balanceCents < currentThresholdCents,
+  );
+
   const topUpSelectOptions = useMemo(
     () =>
       topUpOptionsCents.map((amountCents) => ({
@@ -341,7 +349,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
           <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
             <h3 className="text-2xl font-black text-slate-100">Auto recharge</h3>
             <p className="mt-2 text-slate-300">
-              When enabled, we check balance every 15 minutes and recharge to your target amount.
+              When enabled, we check balance every minute and recharge to your target amount.
             </p>
 
             <div className="mt-5 space-y-4">
@@ -410,6 +418,16 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   </div>
                 </div>
               </div>
+
+              {willRechargeImmediately ? (
+                <div className="rounded-2xl border border-cyan-500/40 bg-cyan-500/10 p-4 text-cyan-100">
+                  <p className="text-lg font-bold">Recharge will happen immediately</p>
+                  <p className="mt-1 text-sm text-cyan-100/90">
+                    Your credit balance is below the recharge threshold you&apos;ve set, so a
+                    recharge will happen immediately after you save these settings.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="flex flex-wrap gap-3">
                 <Button
