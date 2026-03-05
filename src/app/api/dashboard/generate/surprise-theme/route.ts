@@ -64,7 +64,6 @@ export async function POST(request: Request) {
     schema: z.object({
       theme: z.string().min(3).max(80),
     }),
-    temperature: 0.7,
     prompt: [
       "Suggest one family-friendly quiz theme.",
       `Language/locale: ${parsed.data.language}`,

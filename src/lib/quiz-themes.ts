@@ -90,7 +90,6 @@ export async function generateUniqueSubtopics(params: {
   const { object } = await generateObject({
     model: params.model,
     schema,
-    temperature: 0.4,
     prompt: [
       "You are creating concise quiz subtopics for a quiz hub catalog.",
       `Broad category: ${broadCategory}`,

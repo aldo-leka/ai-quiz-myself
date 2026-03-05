@@ -52,7 +52,6 @@ async function validateApiKey(provider: (typeof apiKeyProviderEnum.enumValues)[n
       model: openai(process.env.OPENAI_MODEL ?? "gpt-5-nano"),
       prompt: "Reply with: ok",
       maxOutputTokens: 4,
-      temperature: 0,
     });
     return;
   }
@@ -63,7 +62,6 @@ async function validateApiKey(provider: (typeof apiKeyProviderEnum.enumValues)[n
       model: anthropic(process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6"),
       prompt: "Reply with: ok",
       maxOutputTokens: 4,
-      temperature: 0,
     });
     return;
   }
@@ -73,7 +71,6 @@ async function validateApiKey(provider: (typeof apiKeyProviderEnum.enumValues)[n
     model: google(process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview"),
     prompt: "Reply with: ok",
     maxOutputTokens: 4,
-    temperature: 0,
   });
 }
 

@@ -226,7 +226,6 @@ export async function POST(request: Request) {
   const result = streamText({
     model,
     system,
-    temperature: 0.8,
     messages: [
       ...payload.history.map((message) => ({
         role: message.role,

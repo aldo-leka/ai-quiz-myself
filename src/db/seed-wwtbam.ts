@@ -28,7 +28,6 @@ async function generateQuiz(theme: string, modelName: string) {
     gameMode: "wwtbam",
     difficulty: "escalating",
     model: google(modelName),
-    temperature: 0.6,
   });
 }
 

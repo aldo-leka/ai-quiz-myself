@@ -308,7 +308,6 @@ export const generateQuizTask = task({
         gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
         difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
         model,
-        temperature: 0.6,
         existingQuestions,
         sourceText,
       });

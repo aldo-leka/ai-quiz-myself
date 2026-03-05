@@ -232,7 +232,6 @@ export async function generateQuizFromPrompt(input: {
   gameMode: QuizGenerationGameMode;
   difficulty: QuizGenerationDifficulty;
   model: LanguageModel;
-  temperature?: number;
   existingQuestions?: string[];
   sourceText?: string;
 }): Promise<GeneratedQuiz> {
@@ -243,7 +242,7 @@ export async function generateQuizFromPrompt(input: {
     questions: z.array(generatedQuestionSchema).length(questionCount),
   });
 
-  const { object } = await generateObject({
+  const requestConfig = {
     model: input.model,
     schema: generatedQuizSchema,
     prompt: createQuizGenerationPrompt({
@@ -254,8 +253,9 @@ export async function generateQuizFromPrompt(input: {
       existingQuestions: input.existingQuestions,
       sourceText: input.sourceText,
     }),
-    temperature: input.temperature ?? 0.6,
-  });
+  } satisfies Parameters<typeof generateObject>[0];
+
+  const { object } = await generateObject(requestConfig);
 
   return normalizeGeneratedQuiz(object, input.difficulty);
 }
