@@ -75,6 +75,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const answeredQuestionIdsRef = useRef(new Set<string>());
   const pendingAnswersRef = useRef<SaveQuizSessionPayload["answers"]>([]);
   const hasPersistedSessionRef = useRef(false);
+  const isAdvancingRef = useRef(false);
+  const revealedAnswerRef = useRef(false);
 
   const { data: sessionData } = authClient.useSession();
 
@@ -144,6 +146,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setOptionsDisabled(true);
       setEliminatedOptions([]);
       setRevealedAnswer(false);
+      revealedAnswerRef.current = false;
       setCorrectAnswerIndex(null);
       setUsedLifelines({ fiftyFifty: false, askHost: false });
       setGameOver(false);
@@ -151,6 +154,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       pendingAnswersRef.current = [];
       answeredQuestionIdsRef.current = new Set();
       hasPersistedSessionRef.current = false;
+      isAdvancingRef.current = false;
       startedAtRef.current = new Date();
 
       await welcomePlayer(quiz);
@@ -253,6 +257,16 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }, 1000);
   }
 
+  function setHostCompletionOnce(onComplete: () => void | Promise<void>) {
+    let completed = false;
+    setHostMessageOnComplete(() => () => {
+      if (completed) return;
+      completed = true;
+      setHostMessageOnComplete(undefined);
+      void onComplete();
+    });
+  }
+
   async function welcomePlayer(loadedQuiz: QuizWithQuestions) {
     const playerName = sessionData?.user?.name ?? "Contestant";
 
@@ -271,9 +285,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setHostMessage(fallback);
     }
 
-    setHostMessageOnComplete(() => () => {
-      void beginQuestion(loadedQuiz.questions, 0);
-    });
+    setHostCompletionOnce(() => beginQuestion(loadedQuiz.questions, 0));
   }
 
   async function beginQuestion(questionSet: PlayableQuestion[], index: number) {
@@ -287,6 +299,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     setVisibleOptions(0);
     setEliminatedOptions([]);
     setRevealedAnswer(false);
+    revealedAnswerRef.current = false;
     setCorrectAnswerIndex(null);
 
     const aiIntro = await sendAction({
@@ -314,7 +327,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setHostMessage(fallback);
     }
 
-    setHostMessageOnComplete(() => () => revealAllOptions());
+    setHostCompletionOnce(() => revealAllOptions());
   }
 
   function revealAllOptions() {
@@ -341,15 +354,15 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }
 
   function revealAnswer() {
-    if (!currentQuestion) return;
+    if (!currentQuestion || revealedAnswerRef.current) return;
 
     stopTimer();
+    setOptionsDisabled(true);
+    revealedAnswerRef.current = true;
     setRevealedAnswer(true);
     setCorrectAnswerIndex(currentQuestion.correctOptionIndex);
     trackCurrentAnswer(selectedAnswerIndex);
-    setHostMessageOnComplete(() => () => {
-      void handleNextQuestion();
-    });
+    setHostCompletionOnce(() => handleNextQuestion());
   }
 
   function onHostCue(type: "reveal" | "option", value?: "A" | "B" | "C" | "D") {
@@ -364,6 +377,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
+    // Ignore accidental/early reveal cues unless we're in an answer-locked path
+    // (final answer confirmation or timeout flow).
+    if (!finalAnswerLocked) return;
     revealAnswer();
   }
 
@@ -546,24 +562,34 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }
 
   async function handleNextQuestion() {
-    if (!currentQuestion) return;
+    if (isAdvancingRef.current || !currentQuestion || !revealedAnswerRef.current) return;
 
-    if (selectedAnswerIndex !== currentQuestion.correctOptionIndex) {
-      const lastCheckpoint = [...CHECKPOINTS].filter((checkpoint) => checkpoint < currentQuestionIndex).pop();
-      const safeAmount = lastCheckpoint !== undefined ? MONEY_LADDER[lastCheckpoint] : 0;
-      await endGame(safeAmount);
-      return;
+    isAdvancingRef.current = true;
+    try {
+      if (selectedAnswerIndex !== currentQuestion.correctOptionIndex) {
+        const lastCheckpoint = [...CHECKPOINTS].filter((checkpoint) => checkpoint < currentQuestionIndex).pop();
+        const safeAmount = lastCheckpoint !== undefined ? MONEY_LADDER[lastCheckpoint] : 0;
+        await endGame(safeAmount);
+        return;
+      }
+
+      const nextIndex = currentQuestionIndex + 1;
+
+      if (nextIndex >= questions.length) {
+        await endGame(MONEY_LADDER[currentQuestionIndex]);
+        return;
+      }
+
+      setCurrentQuestionIndex(nextIndex);
+      await beginQuestion(questions, nextIndex);
+    } finally {
+      isAdvancingRef.current = false;
     }
+  }
 
-    const nextIndex = currentQuestionIndex + 1;
-
-    if (nextIndex >= questions.length) {
-      await endGame(MONEY_LADDER[currentQuestionIndex]);
-      return;
-    }
-
-    setCurrentQuestionIndex(nextIndex);
-    await beginQuestion(questions, nextIndex);
+  function continueAfterReveal() {
+    setHostMessageOnComplete(undefined);
+    void handleNextQuestion();
   }
 
   function cashOut() {
@@ -602,7 +628,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
 
     if (controlId === "continue") {
-      void handleNextQuestion();
+      continueAfterReveal();
       return;
     }
 
@@ -740,7 +766,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
             {revealedAnswer ? (
               <div className="flex items-center justify-center">
-                <CircularButton focused={focusedControl === "continue"} onClick={() => void handleNextQuestion()}>
+                <CircularButton focused={focusedControl === "continue"} onClick={continueAfterReveal}>
                   Continue
                 </CircularButton>
               </div>
