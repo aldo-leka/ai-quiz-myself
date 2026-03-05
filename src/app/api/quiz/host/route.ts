@@ -182,16 +182,18 @@ Instruction: Give your best guess and reasoning, but do not claim certainty.`;
 function getModel(provider: ProviderName, apiKey: string) {
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
-    return openai(process.env.OPENAI_MODEL ?? "gpt-5-nano");
+    return openai(process.env.HOST_OPENAI_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5-mini");
   }
 
   if (provider === "anthropic") {
     const anthropic = createAnthropic({ apiKey });
-    return anthropic(process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6");
+    return anthropic(
+      process.env.HOST_ANTHROPIC_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5",
+    );
   }
 
   const google = createGoogleGenerativeAI({ apiKey });
-  return google(process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview");
+  return google(process.env.HOST_GOOGLE_MODEL ?? process.env.GOOGLE_MODEL ?? "gemini-3.1-flash-lite");
 }
 
 export async function POST(request: Request) {
