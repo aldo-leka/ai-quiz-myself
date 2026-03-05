@@ -3,22 +3,33 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Link2, Sparkles, Target } from "lucide-react";
+import { CreditCard, FileText, Link2, Sparkles, Target, Wallet } from "lucide-react";
 import { FilterPill } from "@/components/quiz/FilterPill";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type SourceType = "theme" | "url" | "pdf";
 type GameMode = "single" | "wwtbam" | "couch_coop";
 type Difficulty = "easy" | "medium" | "hard" | "mixed" | "escalating";
+type BillingMode = "byok" | "platform_credits";
 
 type DashboardCreatePageClientProps = {
   hasApiKey: boolean;
   initialLocale: string;
-  creditBalance: number;
-  pdfCreditCost: number;
+  walletBalanceCents: number;
+  standardGenerationCostCents: number;
+  pdfGenerationCostCents: number;
+  platformBillingAvailable: boolean;
 };
 
 const MAX_PDF_FILE_SIZE = 100 * 1024 * 1024;
@@ -32,19 +43,19 @@ const sourceCards: Array<{
   {
     value: "theme",
     title: "From Theme",
-    description: "Type a topic and generate with your own API key.",
+    description: "Type a topic and generate a fresh quiz instantly.",
     icon: Target,
   },
   {
     value: "url",
     title: "From URL",
-    description: "Paste an article URL and turn it into a quiz.",
+    description: "Paste an article URL and transform it into a quiz.",
     icon: Link2,
   },
   {
     value: "pdf",
     title: "From PDF",
-    description: "Upload a PDF document. Uses platform key + credits.",
+    description: "Upload a PDF document (platform credits mode).",
     icon: FileText,
   },
 ];
@@ -73,6 +84,8 @@ const languageOptions = [
   { value: "sq", label: "Albanian" },
 ];
 
+const topUpOptionsCents = [500, 1000, 2000, 5000, 10000];
+
 function normalizeLocale(value: string): string {
   const raw = value.trim().toLowerCase();
   if (!raw) return "en";
@@ -100,14 +113,67 @@ function formatBytes(value: number): string {
 }
 
 function formatPdfFileName(fileName: string): string {
-  return fileName.length > 64 ? `${fileName.slice(0, 63)}…` : fileName;
+  return fileName.length > 64 ? `${fileName.slice(0, 63)}...` : fileName;
+}
+
+function formatUsd(amountCents: number): string {
+  return `$${(amountCents / 100).toFixed(2)}`;
+}
+
+function computeInitialBillingMode(params: {
+  sourceType: SourceType;
+  hasApiKey: boolean;
+  platformBillingAvailable: boolean;
+  walletBalanceCents: number;
+  standardGenerationCostCents: number;
+}): BillingMode {
+  if (params.sourceType === "pdf") {
+    return "platform_credits";
+  }
+
+  if (!params.platformBillingAvailable) {
+    return "byok";
+  }
+
+  if (!params.hasApiKey) {
+    return "platform_credits";
+  }
+
+  if (params.walletBalanceCents >= params.standardGenerationCostCents) {
+    return "platform_credits";
+  }
+
+  return "byok";
+}
+
+function normalizeBillingModeForSource(params: {
+  current: BillingMode;
+  sourceType: SourceType;
+  hasApiKey: boolean;
+  platformBillingAvailable: boolean;
+}): BillingMode {
+  if (params.sourceType === "pdf") {
+    return "platform_credits";
+  }
+
+  if (!params.platformBillingAvailable) {
+    return "byok";
+  }
+
+  if (!params.hasApiKey) {
+    return "platform_credits";
+  }
+
+  return params.current;
 }
 
 export function DashboardCreatePageClient({
   hasApiKey,
   initialLocale,
-  creditBalance,
-  pdfCreditCost,
+  walletBalanceCents,
+  standardGenerationCostCents,
+  pdfGenerationCostCents,
+  platformBillingAvailable,
 }: DashboardCreatePageClientProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -118,26 +184,78 @@ export function DashboardCreatePageClient({
   const [gameMode, setGameMode] = useState<GameMode>("single");
   const [difficulty, setDifficulty] = useState<Difficulty>("mixed");
   const [language, setLanguage] = useState(normalizeLocale(initialLocale));
+  const [billingMode, setBillingMode] = useState<BillingMode>(
+    computeInitialBillingMode({
+      sourceType: "theme",
+      hasApiKey,
+      platformBillingAvailable,
+      walletBalanceCents,
+      standardGenerationCostCents,
+    }),
+  );
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
+  const [topUpLoading, setTopUpLoading] = useState(false);
 
   const isWwtbam = gameMode === "wwtbam";
   const effectiveDifficulty: Difficulty = isWwtbam ? "escalating" : difficulty;
-  const hasEnoughCredits = creditBalance >= pdfCreditCost;
+
+  const generationCostCents =
+    sourceType === "pdf" ? pdfGenerationCostCents : standardGenerationCostCents;
+
+  const effectiveBillingMode = normalizeBillingModeForSource({
+    current: billingMode,
+    sourceType,
+    hasApiKey,
+    platformBillingAvailable,
+  });
+
+  const canUseByok = sourceType !== "pdf" && hasApiKey;
+  const canUseCredits = platformBillingAvailable;
+  const showBillingToggle = sourceType !== "pdf" && canUseByok && canUseCredits;
+  const hasEnoughBalance = walletBalanceCents >= generationCostCents;
 
   const canGenerate = useMemo(() => {
     if (submitting) return false;
+
     if (sourceType === "theme") {
-      return hasApiKey && theme.trim().length >= 2;
+      if (theme.trim().length < 2) return false;
+    } else if (sourceType === "url") {
+      if (!isValidHttpUrl(url)) return false;
+    } else if (!pdfFile) {
+      return false;
     }
-    if (sourceType === "url") {
-      return hasApiKey && isValidHttpUrl(url);
+
+    if (effectiveBillingMode === "byok") {
+      return canUseByok;
     }
-    return Boolean(pdfFile) && hasEnoughCredits;
-  }, [hasApiKey, hasEnoughCredits, pdfFile, sourceType, submitting, theme, url]);
+
+    return canUseCredits && hasEnoughBalance;
+  }, [
+    canUseByok,
+    canUseCredits,
+    effectiveBillingMode,
+    hasEnoughBalance,
+    pdfFile,
+    sourceType,
+    submitting,
+    theme,
+    url,
+  ]);
+
+  const topUpSelectOptions = useMemo(
+    () =>
+      topUpOptionsCents.map((amountCents) => ({
+        value: String(amountCents),
+        label: `${formatUsd(amountCents)} top-up`,
+      })),
+    [],
+  );
 
   function applyGameMode(nextMode: GameMode) {
     setGameMode(nextMode);
@@ -148,6 +266,19 @@ export function DashboardCreatePageClient({
     if (difficulty === "escalating") {
       setDifficulty("mixed");
     }
+  }
+
+  function applySourceType(nextSourceType: SourceType) {
+    setStatusMessage(null);
+    setSourceType(nextSourceType);
+    setBillingMode((current) =>
+      normalizeBillingModeForSource({
+        current,
+        sourceType: nextSourceType,
+        hasApiKey,
+        platformBillingAvailable,
+      }),
+    );
   }
 
   function setPdfFileFromInput(file: File | null) {
@@ -174,7 +305,7 @@ export function DashboardCreatePageClient({
   }
 
   async function surpriseMeTheme() {
-    if (!hasApiKey || surpriseLoading) return;
+    if (surpriseLoading || (!hasApiKey && !platformBillingAvailable)) return;
 
     setSurpriseLoading(true);
     setStatusMessage(null);
@@ -202,6 +333,51 @@ export function DashboardCreatePageClient({
     }
   }
 
+  async function openTopUpCheckout() {
+    if (topUpLoading) return;
+
+    const amountCents = Number(topUpAmount);
+    if (!Number.isInteger(amountCents) || amountCents < 500 || amountCents > 10000) {
+      setStatusMessage("Select a top-up amount between $5 and $100.");
+      return;
+    }
+
+    setTopUpLoading(true);
+    setStatusMessage(null);
+
+    try {
+      const response = await fetch("/api/dashboard/billing/top-up", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amountCents,
+          returnPath: "/dashboard/create",
+        }),
+      });
+      const raw = await response.text();
+      let payload: { checkoutUrl?: string; error?: string } = {};
+      try {
+        payload = raw ? (JSON.parse(raw) as { checkoutUrl?: string; error?: string }) : {};
+      } catch {
+        payload = {};
+      }
+      if (!response.ok || !payload.checkoutUrl) {
+        const fallback =
+          raw && !raw.startsWith("<!DOCTYPE")
+            ? raw.slice(0, 180)
+            : `Failed to create checkout (HTTP ${response.status})`;
+        throw new Error(payload.error ?? fallback);
+      }
+
+      window.location.href = payload.checkoutUrl;
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not start top-up checkout");
+      setTopUpLoading(false);
+    }
+  }
+
   async function generateQuiz() {
     if (!canGenerate) return;
 
@@ -217,6 +393,7 @@ export function DashboardCreatePageClient({
               gameMode,
               difficulty: effectiveDifficulty,
               language,
+              billingMode: effectiveBillingMode,
             }
           : sourceType === "url"
             ? {
@@ -225,12 +402,14 @@ export function DashboardCreatePageClient({
                 gameMode,
                 difficulty: effectiveDifficulty,
                 language,
+                billingMode: effectiveBillingMode,
               }
             : {
                 sourceType,
                 gameMode,
                 difficulty: effectiveDifficulty,
                 language,
+                billingMode: "platform_credits" as const,
                 fileName: pdfFile?.name,
                 fileSizeBytes: pdfFile?.size,
               };
@@ -263,8 +442,54 @@ export function DashboardCreatePageClient({
           Create Quiz
         </h2>
         <p className="mt-2 text-lg text-slate-300">
-          Pick a source, tune game mode and difficulty, then generate instantly.
+          Pick a source, tune the game mode, and launch generation.
         </p>
+      </section>
+
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 md:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Wallet</p>
+            <p className="text-3xl font-black text-cyan-100">{formatUsd(walletBalanceCents)}</p>
+            <p className="text-sm text-slate-300">
+              Cost per generation: {formatUsd(generationCostCents)}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-200">
+              <Wallet className="size-4 text-cyan-200" />
+              Mode:{" "}
+              {sourceType === "pdf"
+                ? "Platform credits"
+                : effectiveBillingMode === "platform_credits"
+                  ? "Platform credits"
+                  : "Use my API key"}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTopUpModalOpen(true)}
+              className="border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+            >
+              <CreditCard className="mr-2 size-4" />
+              Add to credit balance
+            </Button>
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              className="border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+            >
+              <Link href="/dashboard/billing">Billing & Auto Recharge</Link>
+            </Button>
+          </div>
+        </div>
+
+        {!platformBillingAvailable ? (
+          <p className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+            Platform billing is not configured yet (`OPENAI_API_KEY` missing), so only BYOK mode is available.
+          </p>
+        ) : null}
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -275,10 +500,7 @@ export function DashboardCreatePageClient({
             <button
               key={card.value}
               type="button"
-              onClick={() => {
-                setStatusMessage(null);
-                setSourceType(card.value);
-              }}
+              onClick={() => applySourceType(card.value)}
               className={cn(
                 "rounded-3xl border p-5 text-left transition",
                 active
@@ -297,13 +519,47 @@ export function DashboardCreatePageClient({
       </section>
 
       <section className="space-y-5 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
-        {sourceType !== "pdf" && !hasApiKey ? (
+        {showBillingToggle ? (
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-slate-300">Billing Mode</p>
+            <div className="flex flex-wrap gap-3">
+              <FilterPill
+                isActive={effectiveBillingMode === "platform_credits"}
+                onClick={() => setBillingMode("platform_credits")}
+              >
+                Use platform credits ({formatUsd(generationCostCents)}/quiz)
+              </FilterPill>
+              <FilterPill
+                isActive={effectiveBillingMode === "byok"}
+                onClick={() => setBillingMode("byok")}
+              >
+                Use my API key (free)
+              </FilterPill>
+            </div>
+          </div>
+        ) : sourceType !== "pdf" && !canUseByok ? (
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-100">
-            Add an API key before generating quizzes from theme or URL.
+            No API key found, so this will run in platform credits mode.
             {" "}
             <Link href="/dashboard/api-keys" className="font-semibold underline">
-              Go to API Keys
+              Add API key
             </Link>
+          </div>
+        ) : null}
+
+        {effectiveBillingMode === "platform_credits" && !hasEnoughBalance ? (
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-100">
+            Insufficient balance for this generation.
+            {" "}
+            Required: {formatUsd(generationCostCents)}. Current: {formatUsd(walletBalanceCents)}.
+            {" "}
+            <button
+              type="button"
+              className="font-semibold underline"
+              onClick={() => setTopUpModalOpen(true)}
+            >
+              Top up now
+            </button>
           </div>
         ) : null}
 
@@ -315,7 +571,7 @@ export function DashboardCreatePageClient({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!hasApiKey || surpriseLoading}
+                disabled={(!hasApiKey && !platformBillingAvailable) || surpriseLoading}
                 className="border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                 onClick={() => void surpriseMeTheme()}
               >
@@ -390,28 +646,6 @@ export function DashboardCreatePageClient({
                 </p>
               ) : null}
             </div>
-
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-300">
-              This will use {pdfCreditCost} credit{pdfCreditCost === 1 ? "" : "s"}.
-              {" "}
-              Balance: {creditBalance}.
-              {!hasEnoughCredits ? (
-                <>
-                  {" "}
-                  <a
-                    href="https://polar.sh"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold text-cyan-200 underline"
-                  >
-                    Buy Credits
-                  </a>
-                </>
-              ) : null}
-              <p className="mt-2 text-xs text-slate-400">
-                Credits are checked now; deduction will be enabled when PDF generation goes live.
-              </p>
-            </div>
           </div>
         ) : null}
 
@@ -474,7 +708,11 @@ export function DashboardCreatePageClient({
             onClick={() => void generateQuiz()}
             className="min-h-11 border-cyan-500/50 bg-cyan-500/20 px-6 text-cyan-100 hover:bg-cyan-500/30"
           >
-            {submitting ? "Starting..." : "Generate"}
+            {submitting
+              ? "Starting..."
+              : effectiveBillingMode === "platform_credits"
+                ? `Generate (${formatUsd(generationCostCents)})`
+                : "Generate"}
           </Button>
           <Button
             type="button"
@@ -492,7 +730,51 @@ export function DashboardCreatePageClient({
           </p>
         ) : null}
       </section>
+
+      <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
+        <DialogContent className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-2xl font-black text-slate-100">Add to credit balance</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              Choose a top-up amount. You will complete payment in Stripe checkout.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-slate-300">Amount</p>
+            <PlayerSelect
+              value={topUpAmount}
+              onValueChange={setTopUpAmount}
+              placeholder="Select amount"
+              options={topUpSelectOptions}
+              widthClassName="w-full"
+            />
+            <p className="text-sm text-slate-300">
+              Current balance: {formatUsd(walletBalanceCents)}
+            </p>
+          </div>
+
+          <DialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+              disabled={topUpLoading}
+              onClick={() => setTopUpModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              disabled={topUpLoading}
+              onClick={() => void openTopUpCheckout()}
+            >
+              {topUpLoading ? "Opening checkout..." : "Continue to checkout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

@@ -70,6 +70,14 @@ export const quizGenerationSourceTypeEnum = pgEnum("quiz_generation_source_type"
 export const creditTransactionTypeEnum = pgEnum("credit_transaction_type", [
   "purchase",
   "generation",
+  "auto_reload",
+  "starter_bonus",
+]);
+
+export const creditTransactionStatusEnum = pgEnum("credit_transaction_status", [
+  "pending",
+  "completed",
+  "failed",
 ]);
 
 export const quizVoteEnum = pgEnum("quiz_vote", ["like", "dislike"]);
@@ -260,7 +268,7 @@ export const credits = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    balance: integer("balance").notNull().default(0),
+    balanceCents: integer("balance_cents").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
       .notNull()
@@ -269,7 +277,7 @@ export const credits = pgTable(
   },
   (table) => [
     uniqueIndex("credits_user_id_uq").on(table.userId),
-    index("credits_balance_idx").on(table.balance),
+    index("credits_balance_cents_idx").on(table.balanceCents),
   ],
 );
 
@@ -280,19 +288,63 @@ export const creditTransactions = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    amount: integer("amount").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("usd"),
     type: creditTransactionTypeEnum("type").notNull(),
+    status: creditTransactionStatusEnum("status").notNull().default("completed"),
     description: text("description").notNull(),
+    stripeOrderId: text("stripe_order_id"),
+    stripeCheckoutId: text("stripe_checkout_id"),
     generationJobId: uuid("generation_job_id").references(() => quizGenerationJobs.id, {
       onDelete: "set null",
     }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
     index("credit_transactions_user_id_idx").on(table.userId),
     index("credit_transactions_type_idx").on(table.type),
+    index("credit_transactions_status_idx").on(table.status),
     index("credit_transactions_created_at_idx").on(table.createdAt),
     index("credit_transactions_generation_job_id_idx").on(table.generationJobId),
+    index("credit_transactions_stripe_order_id_idx").on(table.stripeOrderId),
+    index("credit_transactions_stripe_checkout_id_idx").on(table.stripeCheckoutId),
+  ],
+);
+
+export const autoRechargeSettings = pgTable(
+  "auto_recharge_settings",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    thresholdCents: integer("threshold_cents").notNull().default(500),
+    targetCents: integer("target_cents").notNull().default(1000),
+    monthlyCapCents: integer("monthly_cap_cents"),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("auto_recharge_settings_enabled_idx").on(table.enabled),
+  ],
+);
+
+export const billingWebhookEvents = pgTable(
+  "billing_webhook_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: text("provider").notNull().default("stripe"),
+    eventId: text("event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_webhook_events_provider_event_id_uq").on(table.provider, table.eventId),
+    index("billing_webhook_events_event_type_idx").on(table.eventType),
+    index("billing_webhook_events_created_at_idx").on(table.createdAt),
   ],
 );
 
@@ -426,6 +478,16 @@ export const creditsRelations = relations(credits, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const autoRechargeSettingsRelations = relations(
+  autoRechargeSettings,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [autoRechargeSettings.userId],
+      references: [user.id],
+    }),
+  }),
+);
 
 export const creditTransactionsRelations = relations(
   creditTransactions,

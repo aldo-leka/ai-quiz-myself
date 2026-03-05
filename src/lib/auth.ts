@@ -1,9 +1,11 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { isAdminEmail } from "@/lib/admin";
+import { STARTER_CREDITS_CENTS } from "@/lib/billing";
 import { detectLocaleFromRequest } from "@/lib/locale";
 import { requireEnv } from "@/lib/env";
 
@@ -63,6 +65,48 @@ export const auth = betterAuth({
               avatarUrl: image,
             },
           };
+        },
+        async after(userRecord) {
+          if (!userRecord.id) return;
+
+          const [updatedUser] = await db
+            .update(schema.user)
+            .set({
+              starterCreditsGranted: true,
+            })
+            .where(
+              sql`${schema.user.id} = ${userRecord.id} and ${schema.user.starterCreditsGranted} = false`,
+            )
+            .returning({ id: schema.user.id });
+
+          if (!updatedUser) {
+            return;
+          }
+
+          await db
+            .insert(schema.credits)
+            .values({
+              userId: userRecord.id,
+              balanceCents: STARTER_CREDITS_CENTS,
+            })
+            .onConflictDoUpdate({
+              target: schema.credits.userId,
+              set: {
+                balanceCents: sql`${schema.credits.balanceCents} + ${STARTER_CREDITS_CENTS}`,
+              },
+            });
+
+          await db.insert(schema.creditTransactions).values({
+            userId: userRecord.id,
+            amountCents: STARTER_CREDITS_CENTS,
+            currency: "usd",
+            type: "starter_bonus",
+            status: "completed",
+            description: "Starter credits",
+            metadata: {
+              reason: "signup_bonus",
+            },
+          });
         },
       },
       update: {

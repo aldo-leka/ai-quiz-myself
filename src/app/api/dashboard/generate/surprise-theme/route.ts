@@ -47,14 +47,18 @@ export async function POST(request: Request) {
 
   const preferredProvider = normalizePreferredProvider(userRow?.preferredProvider);
   const credentials = await resolveUserApiKey(session.user.id, undefined, preferredProvider);
-  if (!credentials) {
+  const platformApiKey = process.env.OPENAI_API_KEY;
+
+  if (!credentials && !platformApiKey) {
     return NextResponse.json(
-      { error: "No API key found. Add one in Dashboard > API Keys." },
+      { error: "No API key found. Add one in Dashboard > API Keys, or configure platform billing." },
       { status: 412 },
     );
   }
 
-  const model = getLanguageModel(credentials.provider, credentials.apiKey);
+  const model = credentials
+    ? getLanguageModel(credentials.provider, credentials.apiKey)
+    : getLanguageModel("openai", platformApiKey!);
   const { object } = await generateObject({
     model,
     schema: z.object({
@@ -76,4 +80,3 @@ export async function POST(request: Request) {
     theme: object.theme.trim(),
   });
 }
-

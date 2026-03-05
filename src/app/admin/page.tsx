@@ -71,9 +71,14 @@ export default async function AdminPage() {
     db.select({ total: sql<number>`count(*)::int` }).from(quizzes),
     db.select({ total: sql<number>`count(*)::int` }).from(quizSessions),
     db
-      .select({ total: sql<number>`coalesce(sum(${creditTransactions.amount}), 0)::int` })
+      .select({ total: sql<number>`coalesce(sum(${creditTransactions.amountCents}), 0)::int` })
       .from(creditTransactions)
-      .where(eq(creditTransactions.type, "purchase")),
+      .where(
+        and(
+          eq(creditTransactions.type, "purchase"),
+          eq(creditTransactions.status, "completed"),
+        ),
+      ),
     db
       .select({
         total: sql<number>`count(*)::int`,
@@ -175,7 +180,7 @@ export default async function AdminPage() {
   const totalUsers = asNumber(totalUsersRow[0]?.total);
   const totalQuizzes = asNumber(totalQuizzesRow[0]?.total);
   const totalGamesPlayed = asNumber(totalGamesPlayedRow[0]?.total);
-  const totalRevenueCredits = asNumber(totalRevenueRow[0]?.total);
+  const totalRevenueCents = asNumber(totalRevenueRow[0]?.total);
   const flaggedContentCount = asNumber(flaggedCountRow[0]?.total);
 
   return (
@@ -201,8 +206,8 @@ export default async function AdminPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Credits purchased</CardDescription>
-            <CardTitle className="text-3xl">{totalRevenueCredits.toLocaleString()}</CardTitle>
+            <CardDescription>Revenue (USD)</CardDescription>
+            <CardTitle className="text-3xl">${(totalRevenueCents / 100).toFixed(2)}</CardTitle>
           </CardHeader>
         </Card>
       </section>

@@ -16,6 +16,9 @@ export const user = pgTable("user", {
   isAdmin: boolean("is_admin").default(false).notNull(),
   locale: text("locale").default("en").notNull(),
   preferredProvider: text("preferred_provider"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripePaymentMethodId: text("stripe_payment_method_id"),
+  starterCreditsGranted: boolean("starter_credits_granted").default(false).notNull(),
 });
 
 export const session = pgTable(

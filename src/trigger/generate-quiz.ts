@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
-import { questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import { creditTransactions, questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import type { GenerationBillingMode } from "@/lib/billing";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/quiz-generation";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
+import { tryDeductWalletBalanceCents } from "@/lib/wallet";
 
 const taskPayloadSchema = z.object({
   jobId: z.string().uuid(),
@@ -31,6 +33,8 @@ const jobInputSchema = z.object({
   reviewForHub: z.boolean().default(false),
   isPublic: z.boolean().default(true),
   apiKeyId: z.string().uuid().optional(),
+  billingMode: z.enum(["byok", "platform_credits"]).default("byok"),
+  billingAmountCents: z.number().int().nonnegative().default(0),
   fileName: z.string().min(1).optional(),
   fileSizeBytes: z.number().int().positive().optional(),
 });
@@ -177,6 +181,57 @@ async function applyHubUniqueness(quizId: string, questionTexts: string[]) {
   };
 }
 
+async function settleGenerationCharge(params: {
+  userId: string;
+  jobId: string;
+  sourceType: GenerationSourceType;
+  billingMode: GenerationBillingMode;
+  amountCents: number;
+}) {
+  if (params.billingMode !== "platform_credits" || params.amountCents <= 0) {
+    return { charged: false };
+  }
+
+  const deducted = await tryDeductWalletBalanceCents({
+    userId: params.userId,
+    amountCents: params.amountCents,
+  });
+
+  if (!deducted) {
+    await db.insert(creditTransactions).values({
+      userId: params.userId,
+      amountCents: -params.amountCents,
+      currency: "usd",
+      type: "generation",
+      status: "failed",
+      description: "Quiz generation charge failed (insufficient balance)",
+      generationJobId: params.jobId,
+      metadata: {
+        sourceType: params.sourceType,
+        billingMode: params.billingMode,
+        reason: "insufficient_balance",
+      },
+    });
+    return { charged: false };
+  }
+
+  await db.insert(creditTransactions).values({
+    userId: params.userId,
+    amountCents: -params.amountCents,
+    currency: "usd",
+    type: "generation",
+    status: "completed",
+    description: "Quiz generation charge",
+    generationJobId: params.jobId,
+    metadata: {
+      sourceType: params.sourceType,
+      billingMode: params.billingMode,
+    },
+  });
+
+  return { charged: true };
+}
+
 export const generateQuizTask = task({
   id: "generate-quiz",
   maxDuration: 900,
@@ -213,7 +268,19 @@ export const generateQuizTask = task({
         throw new Error("PDF generation coming soon");
       }
 
-      const credentials = await resolveUserApiKey(job.userId, effectiveInput.apiKeyId);
+      const credentials =
+        effectiveInput.billingMode === "platform_credits"
+          ? (() => {
+            if (!process.env.OPENAI_API_KEY) {
+              throw new Error("Platform OpenAI key is not configured");
+            }
+            return {
+              provider: "openai" as const,
+              apiKey: process.env.OPENAI_API_KEY,
+            };
+          })()
+          : await resolveUserApiKey(job.userId, effectiveInput.apiKeyId);
+
       if (!credentials) {
         throw new Error("Selected API key not found");
       }
@@ -273,6 +340,14 @@ export const generateQuizTask = task({
         errorMessage: null,
       });
 
+      const settled = await settleGenerationCharge({
+        userId: job.userId,
+        jobId: job.id,
+        sourceType,
+        billingMode: effectiveInput.billingMode,
+        amountCents: effectiveInput.billingAmountCents,
+      });
+
       logger.log("Quiz generation completed", {
         jobId: job.id,
         quizId,
@@ -281,6 +356,8 @@ export const generateQuizTask = task({
         difficulty: effectiveInput.difficulty,
         provider: credentials.provider,
         duplicate,
+        billingMode: effectiveInput.billingMode,
+        billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
       });
 
       return {

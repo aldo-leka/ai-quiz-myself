@@ -4,6 +4,11 @@ import { z } from "zod";
 import { db } from "@/db";
 import { credits, platformSettings, quizGenerationJobs } from "@/db/schema";
 import { user } from "@/db/schema/auth";
+import {
+  computeGenerationCostCents,
+  parsePositiveInt,
+  type GenerationBillingMode,
+} from "@/lib/billing";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
 import { generateQuizTask } from "@/trigger/generate-quiz";
@@ -23,6 +28,7 @@ const requestSchema = z.object({
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
   language: z.string().trim().min(2).max(16).default("en"),
+  billingMode: z.enum(["byok", "platform_credits"]).optional(),
   apiKeyId: z.string().uuid().optional(),
   fileName: z.string().trim().min(1).max(220).optional(),
   fileSizeBytes: z.number().int().positive().max(100 * 1024 * 1024).optional(),
@@ -39,13 +45,6 @@ function normalizeLanguage(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function parseSettingInt(value: string | null | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-
 function hostnameForUrl(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
@@ -57,6 +56,27 @@ function hostnameForUrl(rawUrl: string): string {
 
 function fileBaseName(fileName: string): string {
   return fileName.replace(/\.pdf$/i, "").trim() || "PDF Quiz";
+}
+
+function resolveBillingMode(params: {
+  sourceType: "theme" | "url" | "pdf";
+  requestedBillingMode: GenerationBillingMode | undefined;
+  hasSufficientCredits: boolean;
+  platformBillingAvailable: boolean;
+}): GenerationBillingMode {
+  if (params.sourceType === "pdf") {
+    return "platform_credits";
+  }
+
+  if (params.requestedBillingMode) {
+    return params.requestedBillingMode;
+  }
+
+  if (params.platformBillingAvailable && params.hasSufficientCredits) {
+    return "platform_credits";
+  }
+
+  return "byok";
 }
 
 export async function POST(request: Request) {
@@ -77,14 +97,51 @@ export async function POST(request: Request) {
   const normalizedLanguage = normalizeLanguage(payload.language);
   const effectiveDifficulty =
     payload.gameMode === "wwtbam" ? "escalating" : payload.difficulty;
+  const platformBillingAvailable = Boolean(process.env.OPENAI_API_KEY);
 
-  const [userRow] = await db
-    .select({
-      preferredProvider: user.preferredProvider,
-    })
-    .from(user)
-    .where(eq(user.id, session.user.id))
-    .limit(1);
+  const [userRows, settingRows, walletRows] = await Promise.all([
+    db
+      .select({
+        preferredProvider: user.preferredProvider,
+      })
+      .from(user)
+      .where(eq(user.id, session.user.id))
+      .limit(1),
+    db
+      .select({
+        key: platformSettings.key,
+        value: platformSettings.value,
+      })
+      .from(platformSettings)
+      .where(
+        eq(
+          platformSettings.key,
+          payload.sourceType === "pdf"
+            ? "credit_cost_pdf_generation"
+            : "credit_cost_ai_generation",
+        ),
+      )
+      .limit(1),
+    db
+      .select({
+        balanceCents: credits.balanceCents,
+      })
+      .from(credits)
+      .where(eq(credits.userId, session.user.id))
+      .limit(1),
+  ]);
+
+  const userRow = userRows[0];
+  const generationMultiplier = parsePositiveInt(settingRows[0]?.value, 1);
+  const generationCostCents = computeGenerationCostCents(generationMultiplier);
+  const walletBalanceCents = Number(walletRows[0]?.balanceCents ?? 0);
+
+  const billingMode = resolveBillingMode({
+    sourceType: payload.sourceType,
+    requestedBillingMode: payload.billingMode,
+    hasSufficientCredits: walletBalanceCents >= generationCostCents,
+    platformBillingAvailable,
+  });
 
   if (payload.sourceType === "theme" && !payload.theme) {
     return NextResponse.json({ error: "Theme is required for this generation mode." }, { status: 400 });
@@ -101,7 +158,41 @@ export async function POST(request: Request) {
   let provider: ProviderName = "openai";
   let resolvedApiKeyId: string | undefined;
 
-  if (payload.sourceType !== "pdf") {
+  if (payload.sourceType === "pdf" && billingMode !== "platform_credits") {
+    return NextResponse.json(
+      { error: "PDF generation requires platform credits mode." },
+      { status: 400 },
+    );
+  }
+
+  if (billingMode === "platform_credits") {
+    if (!platformBillingAvailable) {
+      return NextResponse.json(
+        { error: "Platform OpenAI key is not configured for credits billing." },
+        { status: 412 },
+      );
+    }
+
+    if (walletBalanceCents < generationCostCents) {
+      return NextResponse.json(
+        {
+          error: "Insufficient balance for this generation.",
+          balanceCents: walletBalanceCents,
+          requiredCents: generationCostCents,
+        },
+        { status: 402 },
+      );
+    }
+
+    provider = "openai";
+  } else {
+    if (payload.sourceType === "pdf") {
+      return NextResponse.json(
+        { error: "PDF generation currently requires platform credits." },
+        { status: 400 },
+      );
+    }
+
     const preferredProvider = normalizePreferredProvider(userRow?.preferredProvider);
     const selectedKey = await resolveUserApiKey(
       session.user.id,
@@ -118,41 +209,6 @@ export async function POST(request: Request) {
 
     provider = selectedKey.provider;
     resolvedApiKeyId = selectedKey.id;
-  } else {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "Platform OpenAI key is not configured for PDF generation." },
-        { status: 412 },
-      );
-    }
-
-    const [costSetting, creditRow] = await Promise.all([
-      db
-        .select({ value: platformSettings.value })
-        .from(platformSettings)
-        .where(eq(platformSettings.key, "credit_cost_pdf_generation"))
-        .limit(1),
-      db
-        .select({ balance: credits.balance })
-        .from(credits)
-        .where(eq(credits.userId, session.user.id))
-        .limit(1),
-    ]);
-
-    const pdfCreditCost = parseSettingInt(costSetting[0]?.value, 1);
-    const creditBalance = Number(creditRow[0]?.balance ?? 0);
-    if (creditBalance < pdfCreditCost) {
-      return NextResponse.json(
-        {
-          error: "Insufficient credits for PDF generation.",
-          creditBalance,
-          creditCost: pdfCreditCost,
-        },
-        { status: 402 },
-      );
-    }
-
-    provider = "openai";
   }
 
   const displayTheme =
@@ -181,6 +237,8 @@ export async function POST(request: Request) {
         reviewForHub: payload.sourceType === "theme" || payload.sourceType === "url",
         isPublic: true,
         apiKeyId: resolvedApiKeyId,
+        billingMode,
+        billingAmountCents: billingMode === "platform_credits" ? generationCostCents : 0,
         fileName: payload.fileName,
         fileSizeBytes: payload.fileSizeBytes,
       },

@@ -101,7 +101,7 @@ export function AdminPricingPageClient({ initialSettings }: AdminPricingPageClie
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
-            Purchase prices (real money to credits) are managed in Polar.sh.
+            Purchase prices (real money to wallet balance) are managed in Stripe.
           </p>
         </CardContent>
       </Card>

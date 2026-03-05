@@ -44,7 +44,7 @@ export default async function DashboardOverviewPage() {
       .where(eq(quizSessions.userId, userId)),
     db
       .select({
-        balance: credits.balance,
+        balanceCents: credits.balanceCents,
       })
       .from(credits)
       .where(eq(credits.userId, userId))
@@ -84,7 +84,7 @@ export default async function DashboardOverviewPage() {
   const totalQuizzes = Number(quizStats[0]?.totalQuizzes ?? 0);
   const totalGames = Number(sessionStats[0]?.totalGames ?? 0);
   const avgScore = Number(sessionStats[0]?.avgScore ?? 0);
-  const creditTotal = Number(creditBalance[0]?.balance ?? 0);
+  const creditTotalCents = Number(creditBalance[0]?.balanceCents ?? 0);
 
   return (
     <div className="space-y-8">
@@ -112,7 +112,9 @@ export default async function DashboardOverviewPage() {
         </div>
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm font-semibold text-slate-400">Credits Balance</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">{creditTotal}</p>
+          <p className="mt-2 text-4xl font-black text-cyan-100">
+            ${(creditTotalCents / 100).toFixed(2)}
+          </p>
         </div>
       </section>
 

@@ -1,0 +1,536 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CreditCard, Loader2, RefreshCcw, Wallet } from "lucide-react";
+import { PlayerSelect } from "@/components/dashboard/player-select";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+type BillingTransaction = {
+  id: string;
+  amountCents: number;
+  currency: string;
+  type: "purchase" | "generation" | "auto_reload" | "starter_bonus";
+  status: "pending" | "completed" | "failed";
+  description: string;
+  createdAt: string;
+};
+
+type BillingResponse = {
+  balanceCents: number;
+  hasApiKey: boolean;
+  hasPaymentMethod: boolean;
+  standardGenerationCostCents: number;
+  pdfGenerationCostCents: number;
+  baseGenerationCostCents: number;
+  autoRecharge: {
+    enabled: boolean;
+    thresholdCents: number;
+    targetCents: number;
+    monthlyCapCents: number | null;
+  };
+  transactions: BillingTransaction[];
+};
+
+const topUpOptionsCents = [500, 1000, 2000, 5000, 10000];
+const MIN_THRESHOLD_CENTS = 500;
+const MAX_THRESHOLD_CENTS = 9500;
+const MIN_TARGET_CENTS = 1000;
+const MAX_TARGET_CENTS = 10000;
+const MIN_MONTHLY_CAP_CENTS = 1000;
+const MAX_MONTHLY_CAP_CENTS = 100000;
+
+function centsToUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function centsToInputDollars(cents: number | null): string {
+  if (cents === null) return "";
+  return (cents / 100).toFixed(2);
+}
+
+function parseDollarsToCents(value: string): number | null {
+  const trimmed = value.trim().replace(",", ".");
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+function normalizeType(type: BillingTransaction["type"]): string {
+  switch (type) {
+    case "purchase":
+      return "Top-up";
+    case "generation":
+      return "Generation";
+    case "auto_reload":
+      return "Auto recharge";
+    case "starter_bonus":
+      return "Starter bonus";
+    default:
+      return type;
+  }
+}
+
+function amountClassName(amountCents: number): string {
+  return amountCents >= 0 ? "text-emerald-300" : "text-rose-300";
+}
+
+type DashboardBillingPageClientProps = {
+  topUpStatus?: "success" | "cancel" | null;
+};
+
+export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBillingPageClientProps) {
+  const [data, setData] = useState<BillingResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(
+    topUpStatus === "success"
+      ? "Top-up completed. Your balance will refresh shortly."
+      : topUpStatus === "cancel"
+        ? "Top-up was canceled."
+        : null,
+  );
+
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
+  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [savingAutoRecharge, setSavingAutoRecharge] = useState(false);
+
+  const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState("5.00");
+  const [targetInput, setTargetInput] = useState("10.00");
+  const [monthlyCapInput, setMonthlyCapInput] = useState("");
+
+  const topUpSelectOptions = useMemo(
+    () =>
+      topUpOptionsCents.map((amountCents) => ({
+        value: String(amountCents),
+        label: `${centsToUsd(amountCents)} top-up`,
+      })),
+    [],
+  );
+
+  async function loadBilling() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/dashboard/billing", { cache: "no-store" });
+      const payload = (await response.json()) as BillingResponse & { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to load billing");
+      }
+      setData(payload);
+      setAutoRechargeEnabled(payload.autoRecharge.enabled);
+      setThresholdInput(centsToInputDollars(payload.autoRecharge.thresholdCents));
+      setTargetInput(centsToInputDollars(payload.autoRecharge.targetCents));
+      setMonthlyCapInput(centsToInputDollars(payload.autoRecharge.monthlyCapCents));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load billing");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadBilling();
+  }, []);
+
+  async function openTopUpCheckout() {
+    if (topUpLoading) return;
+
+    const amountCents = Number(topUpAmount);
+    if (!Number.isInteger(amountCents) || amountCents < 500 || amountCents > 10000) {
+      setStatusMessage("Select a top-up amount between $5 and $100.");
+      return;
+    }
+
+    setTopUpLoading(true);
+    setStatusMessage(null);
+    try {
+      const response = await fetch("/api/dashboard/billing/top-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amountCents,
+          returnPath: "/dashboard/billing",
+        }),
+      });
+      const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
+      if (!response.ok || !payload.checkoutUrl) {
+        throw new Error(payload.error ?? "Could not start checkout");
+      }
+      window.location.href = payload.checkoutUrl;
+    } catch (checkoutError) {
+      setStatusMessage(
+        checkoutError instanceof Error ? checkoutError.message : "Could not start checkout",
+      );
+      setTopUpLoading(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    if (portalLoading) return;
+    setPortalLoading(true);
+    setStatusMessage(null);
+    try {
+      const response = await fetch("/api/dashboard/billing/portal", {
+        method: "POST",
+      });
+      const payload = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error ?? "Could not open billing portal");
+      }
+      window.location.href = payload.url;
+    } catch (portalError) {
+      setStatusMessage(portalError instanceof Error ? portalError.message : "Could not open portal");
+      setPortalLoading(false);
+    }
+  }
+
+  async function saveAutoRecharge() {
+    if (!data) return;
+
+    const thresholdCents = parseDollarsToCents(thresholdInput);
+    const targetCents = parseDollarsToCents(targetInput);
+    const monthlyCapCents = parseDollarsToCents(monthlyCapInput);
+
+    if (thresholdCents === null || targetCents === null) {
+      setStatusMessage("Threshold and target are required dollar amounts.");
+      return;
+    }
+    if (thresholdCents < MIN_THRESHOLD_CENTS || thresholdCents > MAX_THRESHOLD_CENTS) {
+      setStatusMessage("Threshold must be between $5.00 and $95.00.");
+      return;
+    }
+    if (targetCents < MIN_TARGET_CENTS || targetCents > MAX_TARGET_CENTS) {
+      setStatusMessage("Target must be between $10.00 and $100.00.");
+      return;
+    }
+    if (targetCents <= thresholdCents) {
+      setStatusMessage("Target must be greater than threshold.");
+      return;
+    }
+    if (monthlyCapInput.trim().length > 0) {
+      if (monthlyCapCents === null) {
+        setStatusMessage("Monthly cap must be a valid dollar amount or empty.");
+        return;
+      }
+      if (monthlyCapCents < MIN_MONTHLY_CAP_CENTS || monthlyCapCents > MAX_MONTHLY_CAP_CENTS) {
+        setStatusMessage("Monthly cap must be between $10.00 and $1000.00.");
+        return;
+      }
+      if (monthlyCapCents < targetCents) {
+        setStatusMessage("Monthly cap should be greater than or equal to target.");
+        return;
+      }
+    }
+    if (autoRechargeEnabled && !data.hasPaymentMethod) {
+      setStatusMessage("Add a payment method first, then enable auto recharge.");
+      return;
+    }
+
+    setSavingAutoRecharge(true);
+    setStatusMessage(null);
+    try {
+      const response = await fetch("/api/dashboard/billing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: autoRechargeEnabled,
+          thresholdCents,
+          targetCents,
+          monthlyCapCents: monthlyCapInput.trim().length === 0 ? null : monthlyCapCents,
+        }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not save auto recharge settings");
+      }
+      setStatusMessage("Auto recharge settings saved.");
+      await loadBilling();
+    } catch (saveError) {
+      setStatusMessage(
+        saveError instanceof Error ? saveError.message : "Could not save auto recharge settings",
+      );
+    } finally {
+      setSavingAutoRecharge(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+        <h2 className="text-3xl font-black tracking-tight text-slate-100 md:text-4xl">
+          Billing & Wallet
+        </h2>
+        <p className="mt-2 text-lg text-slate-300">
+          Manage credit balance, payment method, and auto recharge.
+        </p>
+      </section>
+
+      {loading ? (
+        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+          Loading billing data...
+        </section>
+      ) : null}
+
+      {error ? (
+        <section className="rounded-3xl border border-rose-500/40 bg-rose-500/10 p-6 text-rose-200">
+          {error}
+        </section>
+      ) : null}
+
+      {!loading && data ? (
+        <>
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Credit balance
+                </p>
+                <p className="text-4xl font-black text-cyan-100">{centsToUsd(data.balanceCents)}</p>
+                <p className="text-sm text-slate-300">
+                  Standard quiz cost: {centsToUsd(data.standardGenerationCostCents)} | PDF:{" "}
+                  {centsToUsd(data.pdfGenerationCostCents)}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => setTopUpModalOpen(true)}
+                  className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+                >
+                  <Wallet className="mr-2 size-4" />
+                  Add to credit balance
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void openBillingPortal()}
+                  disabled={portalLoading}
+                  className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+                >
+                  <CreditCard className="mr-2 size-4" />
+                  {portalLoading ? "Opening..." : "Manage payment method"}
+                </Button>
+              </div>
+            </div>
+            {!data.hasPaymentMethod ? (
+              <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+                No saved payment method yet. Complete one top-up first, then auto recharge can run off-session.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+            <h3 className="text-2xl font-black text-slate-100">Auto recharge</h3>
+            <p className="mt-2 text-slate-300">
+              When enabled, we check balance every 15 minutes and recharge to your target amount.
+            </p>
+
+            <div className="mt-5 space-y-4">
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-slate-100">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-cyan-400"
+                  checked={autoRechargeEnabled}
+                  onChange={(event) => setAutoRechargeEnabled(event.target.checked)}
+                />
+                Enable auto recharge
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
+                  <p className="text-sm font-semibold text-slate-200">Trigger threshold ($5-$95)</p>
+                  <p className="text-xs text-slate-400">Auto recharge starts at or below this balance.</p>
+                  <div className="relative">
+                    <Input
+                      value={thresholdInput}
+                      onChange={(event) => setThresholdInput(event.target.value)}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="5.00"
+                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                    />
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
+                  <p className="text-sm font-semibold text-slate-200">Target balance ($10-$100)</p>
+                  <p className="text-xs text-slate-400">Each recharge brings your wallet back to this amount.</p>
+                  <div className="relative">
+                    <Input
+                      value={targetInput}
+                      onChange={(event) => setTargetInput(event.target.value)}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="10.00"
+                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                    />
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
+                  <p className="text-sm font-semibold text-slate-300">
+                    Monthly cap ($10-$1000, optional)
+                  </p>
+                  <p className="text-xs text-slate-400">Limit total auto recharges per calendar month.</p>
+                  <div className="relative">
+                    <Input
+                      value={monthlyCapInput}
+                      onChange={(event) => setMonthlyCapInput(event.target.value)}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="No cap"
+                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                    />
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void saveAutoRecharge()}
+                  disabled={savingAutoRecharge}
+                  className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+                >
+                  <RefreshCcw className={cn("mr-2 size-4", savingAutoRecharge ? "animate-spin" : "")} />
+                  {savingAutoRecharge ? "Saving..." : "Save settings"}
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+            <h3 className="text-2xl font-black text-slate-100">Transaction history</h3>
+            <p className="mt-2 text-slate-300">Recent purchases, recharges, and generation charges.</p>
+
+            <div className="mt-5 space-y-3">
+              {data.transactions.length === 0 ? (
+                <p className="rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-slate-300">
+                  No transactions yet.
+                </p>
+              ) : (
+                data.transactions.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-100">{normalizeType(transaction.type)}</p>
+                      <p className="text-sm text-slate-400">{transaction.description}</p>
+                      <p className="text-xs text-slate-500">{formatDate(transaction.createdAt)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-lg font-bold", amountClassName(transaction.amountCents))}>
+                        {transaction.amountCents >= 0 ? "+" : "-"}
+                        {centsToUsd(Math.abs(transaction.amountCents))}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-xs uppercase tracking-wide",
+                          transaction.status === "completed"
+                            ? "text-emerald-300"
+                            : transaction.status === "pending"
+                              ? "text-amber-300"
+                              : "text-rose-300",
+                        )}
+                      >
+                        {transaction.status}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {statusMessage ? (
+        <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-4 text-slate-100">
+          <p className="inline-flex items-center gap-2">
+            <AlertTriangle className="size-4 text-cyan-200" />
+            {statusMessage}
+          </p>
+        </section>
+      ) : null}
+
+      <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
+        <DialogContent className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-2xl font-black text-slate-100">Add to credit balance</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              Choose a top-up amount. You will complete payment in Stripe checkout.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-slate-300">Amount</p>
+            <PlayerSelect
+              value={topUpAmount}
+              onValueChange={setTopUpAmount}
+              placeholder="Select amount"
+              options={topUpSelectOptions}
+              widthClassName="w-full"
+            />
+            <p className="text-sm text-slate-300">
+              Current balance: {centsToUsd(data?.balanceCents ?? 0)}
+            </p>
+          </div>
+
+          <DialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+              disabled={topUpLoading}
+              onClick={() => setTopUpModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              disabled={topUpLoading}
+              onClick={() => void openTopUpCheckout()}
+            >
+              {topUpLoading ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Opening...
+                </>
+              ) : (
+                "Continue to checkout"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

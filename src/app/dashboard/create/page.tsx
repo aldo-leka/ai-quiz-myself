@@ -1,16 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { DashboardCreatePageClient } from "@/components/dashboard/dashboard-create-page-client";
 import { db } from "@/db";
 import { apiKeys, credits, platformSettings } from "@/db/schema";
 import { user } from "@/db/schema/auth";
+import { computeGenerationCostCents, parsePositiveInt } from "@/lib/billing";
 import { getUserSessionOrNull } from "@/lib/user-auth";
-
-function parseSettingInt(value: string | null | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
 
 export default async function DashboardCreatePage() {
   const session = await getUserSessionOrNull();
@@ -18,7 +12,7 @@ export default async function DashboardCreatePage() {
     return null;
   }
 
-  const [userRow, apiKeyRows, creditRow, pdfCostRow] = await Promise.all([
+  const [userRow, apiKeyRows, creditRow, costRows] = await Promise.all([
     db
       .select({
         locale: user.locale,
@@ -35,27 +29,39 @@ export default async function DashboardCreatePage() {
       .limit(1),
     db
       .select({
-        balance: credits.balance,
+        balanceCents: credits.balanceCents,
       })
       .from(credits)
       .where(eq(credits.userId, session.user.id))
       .limit(1),
     db
       .select({
+        key: platformSettings.key,
         value: platformSettings.value,
       })
       .from(platformSettings)
-      .where(eq(platformSettings.key, "credit_cost_pdf_generation"))
-      .limit(1),
+      .where(
+        inArray(platformSettings.key, ["credit_cost_ai_generation", "credit_cost_pdf_generation"]),
+      ),
   ]);
+
+  const aiMultiplier = parsePositiveInt(
+    costRows.find((row) => row.key === "credit_cost_ai_generation")?.value,
+    1,
+  );
+  const pdfMultiplier = parsePositiveInt(
+    costRows.find((row) => row.key === "credit_cost_pdf_generation")?.value,
+    1,
+  );
 
   return (
     <DashboardCreatePageClient
       hasApiKey={apiKeyRows.length > 0}
       initialLocale={userRow[0]?.locale ?? "en"}
-      creditBalance={Number(creditRow[0]?.balance ?? 0)}
-      pdfCreditCost={parseSettingInt(pdfCostRow[0]?.value, 1)}
+      walletBalanceCents={Number(creditRow[0]?.balanceCents ?? 0)}
+      standardGenerationCostCents={computeGenerationCostCents(aiMultiplier)}
+      pdfGenerationCostCents={computeGenerationCostCents(pdfMultiplier)}
+      platformBillingAvailable={Boolean(process.env.OPENAI_API_KEY)}
     />
   );
 }
-

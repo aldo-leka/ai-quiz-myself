@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, History, KeyRound, LayoutGrid, LibraryBig, LogOut, PlusCircle, Settings, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  CreditCard,
+  History,
+  KeyRound,
+  LayoutGrid,
+  LibraryBig,
+  LogOut,
+  PlusCircle,
+  Settings,
+  ShieldCheck,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
@@ -28,6 +39,7 @@ const navItems: Array<{
   { href: "/dashboard/create", label: "Create Quiz", icon: PlusCircle, accent: true },
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/my-quizzes", label: "My Quizzes", icon: LibraryBig },
+  { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
   { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
