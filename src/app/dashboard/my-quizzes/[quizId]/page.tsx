@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { questions, quizzes } from "@/db/schema";
 import { getUserSessionOrNull } from "@/lib/user-auth";
@@ -84,9 +84,13 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
               <p className="mt-1 text-sm text-slate-400">Reason: {quiz.flagReason}</p>
             ) : null}
           </div>
-          <Button asChild variant="outline" className="border-cyan-500/50 text-cyan-100">
-            <Link href="/dashboard/my-quizzes">Back to My Quizzes</Link>
-          </Button>
+          <Link
+            href="/dashboard/my-quizzes"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/20 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+          >
+            <ArrowLeft className="size-4" />
+            Back to My Quizzes
+          </Link>
         </div>
       </section>
 
