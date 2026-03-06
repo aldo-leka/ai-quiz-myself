@@ -36,6 +36,16 @@ type HubResponse = {
   hasMore: boolean;
 };
 
+type PopularTheme = {
+  theme: string;
+  totalPlayCount: number;
+  quizCount: number;
+};
+
+type HubThemesResponse = {
+  themes: PopularTheme[];
+};
+
 type HubSort = "popular" | "newest";
 type DifficultyFilter = "all" | "easy" | "medium" | "hard" | "mixed";
 type ModeFilter = "all" | "single" | "wwtbam" | "couch_coop";
@@ -74,8 +84,15 @@ function normalizeDifficulty(value: string | null): DifficultyFilter {
 }
 
 function normalizeMode(value: string | null): ModeFilter {
-  if (value === "single" || value === "wwtbam" || value === "couch_coop") return value;
-  return "all";
+  if (value === "all" || value === "single" || value === "wwtbam" || value === "couch_coop") {
+    return value;
+  }
+  return "single";
+}
+
+function normalizeTheme(value: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }
 
 function normalizePositiveInt(value: string | null, fallback: number): number {
@@ -141,6 +158,7 @@ function HomePageContent() {
   const [gridColumns, setGridColumns] = useState(4);
 
   const [hubQuizzes, setHubQuizzes] = useState<HubQuiz[]>([]);
+  const [popularThemes, setPopularThemes] = useState<PopularTheme[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,6 +173,7 @@ function HomePageContent() {
   const filters = useMemo(() => {
     const difficulty = normalizeDifficulty(searchParams.get("difficulty"));
     const mode = normalizeMode(searchParams.get("mode"));
+    const theme = normalizeTheme(searchParams.get("theme"));
     const sort = normalizeSort(searchParams.get("sort"));
     const page = normalizePositiveInt(searchParams.get("page"), 1);
     const limit = normalizePositiveInt(searchParams.get("limit"), DEFAULT_LIMIT);
@@ -162,10 +181,11 @@ function HomePageContent() {
     return {
       difficulty,
       mode,
+      theme,
       sort,
       page,
       limit,
-      fetchKey: `${difficulty}|${mode}|${sort}|${limit}`,
+      fetchKey: `${difficulty}|${mode}|${theme ?? "all"}|${sort}|${limit}`,
     };
   }, [searchParams]);
 
@@ -174,6 +194,7 @@ function HomePageContent() {
       updates: Partial<{
         difficulty: DifficultyFilter;
         mode: ModeFilter;
+        theme: string | null;
         sort: HubSort;
         page: number;
         limit: number;
@@ -195,7 +216,11 @@ function HomePageContent() {
       }
 
       if (updates.mode !== undefined) {
-        setOrDelete("mode", updates.mode === "all" ? null : updates.mode);
+        setOrDelete("mode", updates.mode === "single" ? null : updates.mode);
+      }
+
+      if (updates.theme !== undefined) {
+        setOrDelete("theme", updates.theme);
       }
 
       if (updates.sort !== undefined) {
@@ -230,6 +255,7 @@ function HomePageContent() {
       const params = new URLSearchParams();
       if (filters.difficulty !== "all") params.set("difficulty", filters.difficulty);
       if (filters.mode !== "all") params.set("mode", filters.mode);
+      if (filters.theme) params.set("theme", filters.theme);
       if (filters.sort !== "popular") params.set("sort", filters.sort);
       params.set("page", String(pageNumber));
       params.set("limit", String(filters.limit));
@@ -310,6 +336,65 @@ function HomePageContent() {
   }, [filters]);
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function loadPopularThemes() {
+      try {
+        const params = new URLSearchParams({ limit: "10" });
+        if (filters.mode !== "all") {
+          params.set("mode", filters.mode);
+        }
+
+        const response = await fetch(`/api/quiz/hub/themes?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load themes.");
+        }
+
+        const payload = (await response.json()) as HubThemesResponse;
+        if (!cancelled) {
+          setPopularThemes(payload.themes);
+        }
+      } catch {
+        if (!cancelled) {
+          setPopularThemes([]);
+        }
+      }
+    }
+
+    void loadPopularThemes();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [filters.mode]);
+
+  const visibleThemeOptions = useMemo(() => {
+    if (!filters.theme) {
+      return popularThemes;
+    }
+
+    const alreadyVisible = popularThemes.some((entry) => entry.theme === filters.theme);
+    if (alreadyVisible) {
+      return popularThemes;
+    }
+
+    return [
+      {
+        theme: filters.theme,
+        totalPlayCount: 0,
+        quizCount: 0,
+      },
+      ...popularThemes,
+    ];
+  }, [filters.theme, popularThemes]);
+
+  useEffect(() => {
     const updateColumns = () => {
       setGridColumns(getGridColumns(window.innerWidth));
     };
@@ -382,6 +467,9 @@ function HomePageContent() {
       if (filters.mode !== "all") {
         params.set("mode", filters.mode);
       }
+      if (filters.theme) {
+        params.set("theme", filters.theme);
+      }
 
       const response = await fetch(`/api/quiz/random?${params.toString()}`, {
         cache: "no-store",
@@ -394,7 +482,10 @@ function HomePageContent() {
       const payload = (await response.json()) as { quiz: { id: string } };
       router.push(`/play/${payload.quiz.id}`);
     } catch (error) {
-      setHubError(error instanceof Error ? error.message : "Could not start a random quiz.");
+      const fallbackMessage = filters.theme
+        ? "No hub quiz available for this theme yet."
+        : "Could not start a random quiz.";
+      setHubError(error instanceof Error ? error.message : fallbackMessage);
       setIsSurpriseLoading(false);
     }
   }
@@ -507,6 +598,23 @@ function HomePageContent() {
         </section>
 
         <section className="space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+          <div className="rounded-2xl border border-cyan-500/35 bg-gradient-to-r from-cyan-500/12 to-slate-900/80 p-4 md:p-5">
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/35 bg-cyan-500/15 text-cyan-200">
+                <Shuffle className="size-5" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-lg font-bold text-cyan-100 md:text-xl">
+                  Pick your filters, then hit Surprise Me
+                </p>
+                <p className="text-sm text-slate-300 md:text-base">
+                  Select a game mode, optionally lock in a popular theme and difficulty, then
+                  QuizPlus will launch a random matching quiz instantly.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-3">
             <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
             <div className="flex flex-wrap gap-3">
@@ -514,9 +622,30 @@ function HomePageContent() {
                 <FilterPill
                   key={option.value}
                   isActive={filters.mode === option.value}
-                  onClick={() => updateQueryParams({ mode: option.value, page: 1 })}
+                  onClick={() => updateQueryParams({ mode: option.value, theme: null, page: 1 })}
                 >
                   {option.label}
+                </FilterPill>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-2xl font-bold text-slate-100">Popular Themes</h2>
+            <div className="flex flex-wrap gap-3">
+              <FilterPill
+                isActive={filters.theme === null}
+                onClick={() => updateQueryParams({ theme: null, page: 1 })}
+              >
+                All Themes
+              </FilterPill>
+              {visibleThemeOptions.map((entry) => (
+                <FilterPill
+                  key={entry.theme}
+                  isActive={filters.theme === entry.theme}
+                  onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
+                >
+                  {entry.theme}
                 </FilterPill>
               ))}
             </div>

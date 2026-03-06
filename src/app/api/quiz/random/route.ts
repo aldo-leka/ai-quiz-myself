@@ -52,6 +52,7 @@ function shuffleQuestionOptions(
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get("mode");
+  const theme = searchParams.get("theme")?.trim();
   const exclude = searchParams
     .get("exclude")
     ?.split(",")
@@ -62,6 +63,10 @@ export async function GET(request: Request) {
 
   if (mode && validModes.has(mode as (typeof quizGameModeEnum.enumValues)[number])) {
     filters.push(eq(quizzes.gameMode, mode as (typeof quizGameModeEnum.enumValues)[number]));
+  }
+
+  if (theme) {
+    filters.push(eq(quizzes.theme, theme));
   }
 
   if (exclude && exclude.length > 0) {
