@@ -15,6 +15,8 @@ import {
   type QuizGenerationDifficulty,
   type QuizGenerationGameMode,
 } from "@/lib/quiz-generation";
+import { extractPdfSourceText } from "@/lib/pdf-extraction";
+import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
@@ -37,6 +39,8 @@ const jobInputSchema = z.object({
   billingAmountCents: z.number().int().nonnegative().default(0),
   fileName: z.string().min(1).optional(),
   fileSizeBytes: z.number().int().positive().optional(),
+  pdfBase64: z.string().min(1).optional(),
+  pdfObjectKey: z.string().min(1).optional(),
 });
 
 type GenerationSourceType = "theme" | "url" | "pdf";
@@ -101,6 +105,19 @@ function parseInputData(inputData: unknown): JobInput {
     throw new Error("Invalid quiz generation payload");
   }
   return parsed.data;
+}
+
+async function clearPdfPayloadFromJob(jobId: string, input: JobInput) {
+  if (!input.pdfBase64) return;
+
+  const rest = { ...input };
+  delete rest.pdfBase64;
+  await db
+    .update(quizGenerationJobs)
+    .set({
+      inputData: rest,
+    })
+    .where(eq(quizGenerationJobs.id, jobId));
 }
 
 async function persistGeneratedQuiz(params: {
@@ -355,7 +372,7 @@ export const generateQuizTask = task({
 
     try {
       if (sourceType === "pdf") {
-        throw new Error("PDF generation coming soon");
+        await clearPdfPayloadFromJob(job.id, effectiveInput);
       }
 
       const credentials =
@@ -379,7 +396,27 @@ export const generateQuizTask = task({
       let sourceText: string | undefined;
       let sourceUrl: string | null = null;
 
-      if (sourceType === "url") {
+      if (sourceType === "pdf") {
+        if (!effectiveInput.pdfBase64 && !effectiveInput.pdfObjectKey) {
+          throw new Error("PDF source payload is missing");
+        }
+
+        const pdfBuffer = effectiveInput.pdfObjectKey
+          ? await downloadR2ObjectBuffer(effectiveInput.pdfObjectKey)
+          : Buffer.from(effectiveInput.pdfBase64 ?? "", "base64");
+        if (!pdfBuffer.length) {
+          throw new Error("Uploaded PDF is empty");
+        }
+
+        const extractedPdf = await extractPdfSourceText({
+          pdfBuffer,
+          fileName: effectiveInput.fileName ?? "uploaded.pdf",
+          openAIApiKey: process.env.OPENAI_API_KEY,
+        });
+
+        effectiveTheme = effectiveInput.theme?.trim() || extractedPdf.title || effectiveTheme;
+        sourceText = extractedPdf.text;
+      } else if (sourceType === "url") {
         if (!effectiveInput.url) {
           throw new Error("URL source is missing");
         }

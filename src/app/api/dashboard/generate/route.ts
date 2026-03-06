@@ -9,6 +9,7 @@ import {
   parsePositiveInt,
   type GenerationBillingMode,
 } from "@/lib/billing";
+import { isR2Configured } from "@/lib/r2";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
@@ -32,8 +33,26 @@ const requestSchema = z.object({
   billingMode: z.enum(["byok", "platform_credits"]).optional(),
   apiKeyId: z.string().uuid().optional(),
   fileName: z.string().trim().min(1).max(220).optional(),
-  fileSizeBytes: z.number().int().positive().max(100 * 1024 * 1024).optional(),
+  fileSizeBytes: z.number().int().positive().optional(),
+  pdfObjectKey: z.string().trim().min(1).max(500).optional(),
 });
+
+const MAX_MULTIPART_PDF_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+
+type ParsedGenerateRequest = {
+  sourceType: "theme" | "url" | "pdf";
+  theme?: string;
+  url?: string;
+  gameMode: "single" | "wwtbam" | "couch_coop";
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
+  language: string;
+  billingMode?: "byok" | "platform_credits";
+  apiKeyId?: string;
+  fileName?: string;
+  fileSizeBytes?: number;
+  pdfBase64?: string;
+  pdfObjectKey?: string;
+};
 
 function normalizePreferredProvider(value: string | null | undefined): ProviderName | null {
   if (value === "openai" || value === "anthropic" || value === "google") {
@@ -57,6 +76,146 @@ function hostnameForUrl(rawUrl: string): string {
 
 function fileBaseName(fileName: string): string {
   return fileName.replace(/\.pdf$/i, "").trim() || "PDF Quiz";
+}
+
+async function parseGenerateRequest(request: Request): Promise<{
+  payload: ParsedGenerateRequest;
+  error?: { status: number; message: string; issues?: unknown };
+}> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.toLowerCase().includes("multipart/form-data")) {
+    const formData = await request.formData();
+
+    const sourceTypeRaw = formData.get("sourceType");
+    const sourceType = typeof sourceTypeRaw === "string" ? sourceTypeRaw : "";
+    if (sourceType !== "pdf") {
+      return {
+        payload: {
+          sourceType: "pdf",
+          gameMode: "single",
+          difficulty: "mixed",
+          language: "en",
+        },
+        error: {
+          status: 400,
+          message: "Multipart uploads are only supported for PDF generation.",
+        },
+      };
+    }
+
+    const fileEntry = formData.get("file");
+    if (!(fileEntry instanceof File)) {
+      return {
+        payload: {
+          sourceType: "pdf",
+          gameMode: "single",
+          difficulty: "mixed",
+          language: "en",
+        },
+        error: {
+          status: 400,
+          message: "PDF file is required for this generation mode.",
+        },
+      };
+    }
+
+    const isPdf =
+      fileEntry.type.toLowerCase() === "application/pdf" ||
+      fileEntry.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      return {
+        payload: {
+          sourceType: "pdf",
+          gameMode: "single",
+          difficulty: "mixed",
+          language: "en",
+        },
+        error: {
+          status: 400,
+          message: "Only PDF files are supported.",
+        },
+      };
+    }
+
+    if (fileEntry.size <= 0 || fileEntry.size > MAX_MULTIPART_PDF_FILE_SIZE_BYTES) {
+      return {
+        payload: {
+          sourceType: "pdf",
+          gameMode: "single",
+          difficulty: "mixed",
+          language: "en",
+        },
+        error: {
+          status: 400,
+          message: `PDF is too large. Max size is ${Math.floor(MAX_MULTIPART_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB.`,
+        },
+      };
+    }
+
+    const gameModeRaw = formData.get("gameMode");
+    const difficultyRaw = formData.get("difficulty");
+    const languageRaw = formData.get("language");
+    const billingModeRaw = formData.get("billingMode");
+    const apiKeyIdRaw = formData.get("apiKeyId");
+
+    const parsed = requestSchema.safeParse({
+      sourceType: "pdf",
+      gameMode: typeof gameModeRaw === "string" ? gameModeRaw : undefined,
+      difficulty: typeof difficultyRaw === "string" ? difficultyRaw : undefined,
+      language: typeof languageRaw === "string" ? languageRaw : "en",
+      billingMode: typeof billingModeRaw === "string" ? billingModeRaw : undefined,
+      apiKeyId: typeof apiKeyIdRaw === "string" ? apiKeyIdRaw : undefined,
+    });
+
+    if (!parsed.success) {
+      return {
+        payload: {
+          sourceType: "pdf",
+          gameMode: "single",
+          difficulty: "mixed",
+          language: "en",
+        },
+        error: {
+          status: 400,
+          message: "Invalid payload",
+          issues: parsed.error.issues,
+        },
+      };
+    }
+
+    const arrayBuffer = await fileEntry.arrayBuffer();
+    const pdfBase64 = Buffer.from(arrayBuffer).toString("base64");
+
+    return {
+      payload: {
+        ...parsed.data,
+        fileName: fileEntry.name,
+        fileSizeBytes: fileEntry.size,
+        pdfBase64,
+      },
+    };
+  }
+
+  const parsed = requestSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return {
+      payload: {
+        sourceType: "theme",
+        gameMode: "single",
+        difficulty: "mixed",
+        language: "en",
+      },
+      error: {
+        status: 400,
+        message: "Invalid payload",
+        issues: parsed.error.issues,
+      },
+    };
+  }
+
+  return {
+    payload: parsed.data,
+  };
 }
 
 function resolveBillingMode(params: {
@@ -86,15 +245,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = requestSchema.safeParse(await request.json());
-  if (!parsed.success) {
+  const parsedRequest = await parseGenerateRequest(request);
+  if (parsedRequest.error) {
     return NextResponse.json(
-      { error: "Invalid payload", issues: parsed.error.issues },
-      { status: 400 },
+      { error: parsedRequest.error.message, issues: parsedRequest.error.issues },
+      { status: parsedRequest.error.status },
     );
   }
 
-  const payload = parsed.data;
+  const payload = parsedRequest.payload;
   const normalizedLanguage = normalizeLanguage(payload.language);
   const effectiveDifficulty =
     payload.gameMode === "wwtbam" ? "escalating" : payload.difficulty;
@@ -152,8 +311,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "URL is required for this generation mode." }, { status: 400 });
   }
 
-  if (payload.sourceType === "pdf" && !payload.fileName) {
+  if (
+    payload.sourceType === "pdf" &&
+    (!payload.fileName || (!payload.pdfBase64 && !payload.pdfObjectKey))
+  ) {
     return NextResponse.json({ error: "PDF file is required for this generation mode." }, { status: 400 });
+  }
+
+  if (payload.sourceType === "pdf" && payload.pdfObjectKey && !isR2Configured()) {
+    return NextResponse.json(
+      { error: "R2 is not configured for async PDF processing." },
+      { status: 412 },
+    );
   }
 
   let provider: ProviderName = "openai";
@@ -242,6 +411,8 @@ export async function POST(request: Request) {
         billingAmountCents: billingMode === "platform_credits" ? generationCostCents : 0,
         fileName: payload.fileName,
         fileSizeBytes: payload.fileSizeBytes,
+        pdfBase64: payload.pdfBase64,
+        pdfObjectKey: payload.pdfObjectKey,
       },
       provider,
       errorMessage: null,

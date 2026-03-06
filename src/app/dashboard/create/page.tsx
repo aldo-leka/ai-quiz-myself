@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { apiKeys, credits, platformSettings } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { computeGenerationCostCents, parsePositiveInt } from "@/lib/billing";
+import { isR2Configured, MAX_R2_PDF_FILE_SIZE_BYTES } from "@/lib/r2";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
 export default async function DashboardCreatePage() {
@@ -62,6 +63,8 @@ export default async function DashboardCreatePage() {
       standardGenerationCostCents={computeGenerationCostCents(aiMultiplier)}
       pdfGenerationCostCents={computeGenerationCostCents(pdfMultiplier)}
       platformBillingAvailable={Boolean(process.env.OPENAI_API_KEY)}
+      r2UploadAvailable={isR2Configured()}
+      pdfMaxFileSizeBytes={isR2Configured() ? MAX_R2_PDF_FILE_SIZE_BYTES : 8 * 1024 * 1024}
     />
   );
 }

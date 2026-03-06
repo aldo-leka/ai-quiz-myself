@@ -30,9 +30,9 @@ type DashboardCreatePageClientProps = {
   standardGenerationCostCents: number;
   pdfGenerationCostCents: number;
   platformBillingAvailable: boolean;
+  r2UploadAvailable: boolean;
+  pdfMaxFileSizeBytes: number;
 };
-
-const MAX_PDF_FILE_SIZE = 100 * 1024 * 1024;
 
 const sourceCards: Array<{
   value: SourceType;
@@ -174,6 +174,8 @@ export function DashboardCreatePageClient({
   standardGenerationCostCents,
   pdfGenerationCostCents,
   platformBillingAvailable,
+  r2UploadAvailable,
+  pdfMaxFileSizeBytes,
 }: DashboardCreatePageClientProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -295,8 +297,8 @@ export function DashboardCreatePageClient({
       return;
     }
 
-    if (file.size > MAX_PDF_FILE_SIZE) {
-      setStatusMessage("PDF is too large. Max size is 100MB.");
+    if (file.size > pdfMaxFileSizeBytes) {
+      setStatusMessage(`PDF is too large. Max size is ${formatBytes(pdfMaxFileSizeBytes)}.`);
       return;
     }
 
@@ -385,42 +387,96 @@ export function DashboardCreatePageClient({
     setStatusMessage(null);
 
     try {
-      const body =
-        sourceType === "theme"
-          ? {
-              sourceType,
-              theme: theme.trim(),
-              gameMode,
-              difficulty: effectiveDifficulty,
-              language,
-              billingMode: effectiveBillingMode,
-            }
-          : sourceType === "url"
-            ? {
-                sourceType,
-                url: url.trim(),
-                gameMode,
-                difficulty: effectiveDifficulty,
-                language,
-                billingMode: effectiveBillingMode,
-              }
-            : {
-                sourceType,
-                gameMode,
-                difficulty: effectiveDifficulty,
-                language,
-                billingMode: "platform_credits" as const,
-                fileName: pdfFile?.name,
-                fileSizeBytes: pdfFile?.size,
+      const response =
+        sourceType === "pdf" && pdfFile
+          ? await (async () => {
+            if (r2UploadAvailable) {
+              const uploadResponse = await fetch("/api/dashboard/generate/pdf-upload", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  fileName: pdfFile.name,
+                  fileSizeBytes: pdfFile.size,
+                  contentType: pdfFile.type || "application/pdf",
+                }),
+              });
+              const uploadPayload = (await uploadResponse.json()) as {
+                uploadUrl?: string;
+                objectKey?: string;
+                uploadHeaders?: Record<string, string>;
+                error?: string;
               };
+              if (!uploadResponse.ok || !uploadPayload.uploadUrl || !uploadPayload.objectKey) {
+                throw new Error(uploadPayload.error ?? "Failed to prepare PDF upload");
+              }
 
-      const response = await fetch("/api/dashboard/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+              const putResponse = await fetch(uploadPayload.uploadUrl, {
+                method: "PUT",
+                headers: uploadPayload.uploadHeaders,
+                body: pdfFile,
+              });
+              if (!putResponse.ok) {
+                throw new Error(`Failed to upload PDF (HTTP ${putResponse.status})`);
+              }
+
+              return fetch("/api/dashboard/generate", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  sourceType: "pdf",
+                  gameMode,
+                  difficulty: effectiveDifficulty,
+                  language,
+                  billingMode: "platform_credits" as const,
+                  fileName: pdfFile.name,
+                  fileSizeBytes: pdfFile.size,
+                  pdfObjectKey: uploadPayload.objectKey,
+                }),
+              });
+            }
+
+            const formData = new FormData();
+            formData.append("sourceType", "pdf");
+            formData.append("gameMode", gameMode);
+            formData.append("difficulty", effectiveDifficulty);
+            formData.append("language", language);
+            formData.append("billingMode", "platform_credits");
+            formData.append("file", pdfFile);
+
+            return fetch("/api/dashboard/generate", {
+              method: "POST",
+              body: formData,
+            });
+          })()
+          : await fetch("/api/dashboard/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(
+              sourceType === "theme"
+                ? {
+                    sourceType,
+                    theme: theme.trim(),
+                    gameMode,
+                    difficulty: effectiveDifficulty,
+                    language,
+                    billingMode: effectiveBillingMode,
+                  }
+                : {
+                    sourceType,
+                    url: url.trim(),
+                    gameMode,
+                    difficulty: effectiveDifficulty,
+                    language,
+                    billingMode: effectiveBillingMode,
+                  },
+            ),
+          });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to start generation");
@@ -600,7 +656,9 @@ export function DashboardCreatePageClient({
 
         {sourceType === "pdf" ? (
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-300">PDF file (max 100MB)</p>
+            <p className="text-sm font-semibold text-slate-300">
+              PDF file (max {formatBytes(pdfMaxFileSizeBytes)})
+            </p>
             <div
               onDragOver={(event) => {
                 event.preventDefault();
@@ -646,6 +704,15 @@ export function DashboardCreatePageClient({
                 </p>
               ) : null}
             </div>
+            {r2UploadAvailable ? (
+              <p className="text-xs text-slate-400">
+                Large PDFs upload to cloud storage first, then the generation task downloads them asynchronously.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                R2 is not configured, so PDF uploads use the smaller direct-upload fallback.
+              </p>
+            )}
           </div>
         ) : null}
 
