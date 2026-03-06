@@ -1,0 +1,431 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { ArrowLeft, PencilLine, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { PlayerSelect } from "@/components/dashboard/player-select";
+import { cn } from "@/lib/utils";
+
+type EditableQuestion = {
+  id: string;
+  position: number;
+  questionText: string;
+  options: Array<{
+    text: string;
+    explanation: string;
+  }>;
+  correctOptionIndex: number;
+  difficulty: "easy" | "medium" | "hard";
+  subject: string | null;
+};
+
+type DashboardQuizDetailClientProps = {
+  quizId: string;
+  title: string;
+  theme: string;
+  language: string;
+  gameMode: "single" | "wwtbam" | "couch_coop";
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
+  isHub: boolean;
+  hubStatus: "pending" | "approved" | "rejected" | null;
+  isFlagged: boolean;
+  flagReason: string | null;
+  questions: EditableQuestion[];
+};
+
+const pillClassName =
+  "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+
+const fieldClassName =
+  "rounded-2xl border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] placeholder:text-slate-500 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/60";
+
+const selectOptions = [
+  { value: "0", label: "Option A" },
+  { value: "1", label: "Option B" },
+  { value: "2", label: "Option C" },
+  { value: "3", label: "Option D" },
+] as const;
+
+export function DashboardQuizDetailClient({
+  quizId,
+  title,
+  theme,
+  language,
+  gameMode,
+  difficulty,
+  isHub,
+  hubStatus,
+  isFlagged,
+  flagReason,
+  questions: initialQuestions,
+}: DashboardQuizDetailClientProps) {
+  const [editMode, setEditMode] = useState(false);
+  const [quizTitle, setQuizTitle] = useState(title);
+  const [savedTitle, setSavedTitle] = useState(title);
+  const [titleStatus, setTitleStatus] = useState("");
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [questions, setQuestions] = useState<EditableQuestion[]>(initialQuestions);
+  const [savedQuestions, setSavedQuestions] = useState<Record<string, EditableQuestion>>(
+    Object.fromEntries(initialQuestions.map((question) => [question.id, question])),
+  );
+  const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
+  const [statusByQuestionId, setStatusByQuestionId] = useState<Record<string, string>>({});
+
+  const metaText = useMemo(
+    () => `Theme: ${theme} · Mode: ${gameMode} · Difficulty: ${difficulty} · Language: ${language}`,
+    [difficulty, gameMode, language, theme],
+  );
+
+  function resetDrafts() {
+    setQuizTitle(savedTitle);
+    setQuestions((previousQuestions) =>
+      previousQuestions.map((question) => savedQuestions[question.id] ?? question),
+    );
+    setTitleStatus("");
+    setStatusByQuestionId({});
+  }
+
+  function handleCancelEditing() {
+    resetDrafts();
+    setEditMode(false);
+  }
+
+  async function saveTitle() {
+    const nextTitle = quizTitle.trim();
+    if (!nextTitle) {
+      setQuizTitle(savedTitle);
+      setTitleStatus("Title cannot be empty.");
+      return;
+    }
+
+    setIsSavingTitle(true);
+    setTitleStatus("Saving...");
+
+    try {
+      const response = await fetch(`/api/dashboard/quizzes/${quizId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: nextTitle,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        quiz?: { title: string };
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to save title");
+      }
+
+      const updatedTitle = payload.quiz?.title ?? nextTitle;
+      setQuizTitle(updatedTitle);
+      setSavedTitle(updatedTitle);
+      setTitleStatus("Saved");
+    } catch (error) {
+      setQuizTitle(savedTitle);
+      setTitleStatus(error instanceof Error ? error.message : "Failed to save title.");
+    } finally {
+      setIsSavingTitle(false);
+    }
+  }
+
+  async function saveQuestion(questionId: string) {
+    const current = questions.find((question) => question.id === questionId);
+    if (!current) return;
+
+    const previous = savedQuestions[questionId] ?? null;
+    setSavingQuestionId(questionId);
+    setStatusByQuestionId((previousStatus) => ({
+      ...previousStatus,
+      [questionId]: "Saving...",
+    }));
+
+    try {
+      const response = await fetch(`/api/dashboard/quizzes/${quizId}/questions/${questionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionText: current.questionText,
+          options: current.options,
+          correctOptionIndex: current.correctOptionIndex,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        question?: EditableQuestion;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to save question");
+      }
+
+      if (payload.question) {
+        setQuestions((previousQuestions) =>
+          previousQuestions.map((question) =>
+            question.id === questionId ? payload.question! : question,
+          ),
+        );
+        setSavedQuestions((previousSaved) => ({
+          ...previousSaved,
+          [questionId]: payload.question!,
+        }));
+      }
+
+      setStatusByQuestionId((previousStatus) => ({
+        ...previousStatus,
+        [questionId]: "Saved",
+      }));
+    } catch (error) {
+      if (previous) {
+        setQuestions((previousQuestions) =>
+          previousQuestions.map((question) => (question.id === questionId ? previous : question)),
+        );
+      }
+      setStatusByQuestionId((previousStatus) => ({
+        ...previousStatus,
+        [questionId]: error instanceof Error ? error.message : "Failed to save question.",
+      }));
+    } finally {
+      setSavingQuestionId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {editMode ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300/80">
+                  Quiz Title
+                </label>
+                <Input
+                  value={quizTitle}
+                  onChange={(event) => setQuizTitle(event.target.value)}
+                  className={cn("h-14 text-2xl font-black md:text-3xl", fieldClassName)}
+                  placeholder="Quiz title"
+                />
+              </div>
+            ) : (
+              <h2 className="text-3xl font-black text-slate-100 md:text-4xl">{quizTitle}</h2>
+            )}
+
+            <p className="mt-3 text-slate-300">{metaText}</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Hub: {isHub ? "Approved" : hubStatus ?? "Not reviewed"}
+              {isFlagged ? " · Flagged for moderation" : ""}
+            </p>
+            {flagReason ? (
+              <p className="mt-1 text-sm text-slate-400">Reason: {flagReason}</p>
+            ) : null}
+            {editMode ? (
+              <p className="mt-2 text-sm text-slate-400">
+                {titleStatus || "Change the title or any question, then save the parts you updated."}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/dashboard/my-quizzes"
+              className={cn(
+                pillClassName,
+                "border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20",
+              )}
+            >
+              <ArrowLeft className="size-4" />
+              Back to My Quizzes
+            </Link>
+
+            {editMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void saveTitle()}
+                  disabled={isSavingTitle || quizTitle.trim() === savedTitle}
+                  className={cn(
+                    pillClassName,
+                    "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60",
+                  )}
+                >
+                  {isSavingTitle ? "Saving..." : "Save Title"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEditing}
+                  className={cn(
+                    pillClassName,
+                    "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800",
+                  )}
+                >
+                  <X className="size-4" />
+                  Cancel Editing
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditMode(true)}
+                className={cn(
+                  pillClassName,
+                  "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+                )}
+              >
+                <PencilLine className="size-4" />
+                Edit Quiz
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        {questions.map((question) => (
+          <article
+            key={question.id}
+            className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
+          >
+            <p className="text-sm text-slate-400">
+              Question {question.position} · {question.difficulty}
+            </p>
+
+            {editMode ? (
+              <div className="mt-3 space-y-4">
+                <Textarea
+                  value={question.questionText}
+                  onChange={(event) =>
+                    setQuestions((previousQuestions) =>
+                      previousQuestions.map((row) =>
+                        row.id === question.id
+                          ? { ...row, questionText: event.target.value }
+                          : row,
+                      ),
+                    )
+                  }
+                  className={cn("min-h-28 text-base text-slate-100", fieldClassName)}
+                  placeholder="Question text"
+                />
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {question.options.map((option, optionIndex) => (
+                    <div
+                      key={`${question.id}-option-${optionIndex}`}
+                      className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4"
+                    >
+                      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300/80">
+                        Option {String.fromCharCode(65 + optionIndex)}
+                      </p>
+                      <Input
+                        value={option.text}
+                        onChange={(event) =>
+                          setQuestions((previousQuestions) =>
+                            previousQuestions.map((row) => {
+                              if (row.id !== question.id) return row;
+                              const nextOptions = [...row.options];
+                              nextOptions[optionIndex] = {
+                                ...nextOptions[optionIndex],
+                                text: event.target.value,
+                              };
+                              return { ...row, options: nextOptions };
+                            }),
+                          )
+                        }
+                        className={cn("h-12 text-sm text-slate-100", fieldClassName)}
+                        placeholder="Option text"
+                      />
+                      <Textarea
+                        value={option.explanation}
+                        onChange={(event) =>
+                          setQuestions((previousQuestions) =>
+                            previousQuestions.map((row) => {
+                              if (row.id !== question.id) return row;
+                              const nextOptions = [...row.options];
+                              nextOptions[optionIndex] = {
+                                ...nextOptions[optionIndex],
+                                explanation: event.target.value,
+                              };
+                              return { ...row, options: nextOptions };
+                            }),
+                          )
+                        }
+                        className={cn("mt-3 min-h-24 text-sm text-slate-100", fieldClassName)}
+                        placeholder="Explanation"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <PlayerSelect
+                    value={String(question.correctOptionIndex)}
+                    onValueChange={(value) =>
+                      setQuestions((previousQuestions) =>
+                        previousQuestions.map((row) =>
+                          row.id === question.id
+                            ? { ...row, correctOptionIndex: Number(value) }
+                            : row,
+                        ),
+                      )
+                    }
+                    options={[...selectOptions]}
+                    placeholder="Correct option"
+                    widthClassName="w-full sm:w-56"
+                  />
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-slate-400">
+                      {statusByQuestionId[question.id] ?? "Not saved yet"}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={savingQuestionId === question.id}
+                      onClick={() => void saveQuestion(question.id)}
+                      className={cn(
+                        pillClassName,
+                        "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60",
+                      )}
+                    >
+                      {savingQuestionId === question.id ? "Saving..." : "Save Question"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h3 className="mt-2 text-xl font-semibold text-slate-100">{question.questionText}</h3>
+                {question.subject ? (
+                  <p className="mt-1 text-sm text-slate-400">Subject: {question.subject}</p>
+                ) : null}
+                <ul className="mt-4 space-y-2">
+                  {question.options.map((option, index) => (
+                    <li
+                      key={`${question.id}-${index}`}
+                      className={cn(
+                        "rounded-lg border p-3",
+                        index === question.correctOptionIndex
+                          ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-100"
+                          : "border-slate-700 bg-slate-950/60 text-slate-200",
+                      )}
+                    >
+                      <p className="font-medium">{option.text}</p>
+                      <p className="mt-1 text-sm opacity-90">{option.explanation}</p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}

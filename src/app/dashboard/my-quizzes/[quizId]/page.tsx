@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
+import { DashboardQuizDetailClient } from "@/components/dashboard/dashboard-quiz-detail-client";
 import { db } from "@/db";
 import { questions, quizzes } from "@/db/schema";
 import { getUserSessionOrNull } from "@/lib/user-auth";
@@ -68,64 +67,21 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
     .orderBy(asc(questions.position));
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-black text-slate-100">{quiz.title}</h2>
-            <p className="mt-2 text-slate-300">
-              Theme: {quiz.theme} · Mode: {quiz.gameMode} · Difficulty: {quiz.difficulty} · Language: {quiz.language}
-            </p>
-            <p className="mt-2 text-sm text-slate-300">
-              Hub: {quiz.isHub ? "Approved" : quiz.hubStatus ?? "Not reviewed"}
-              {quiz.isFlagged ? " · Flagged for moderation" : ""}
-            </p>
-            {quiz.flagReason ? (
-              <p className="mt-1 text-sm text-slate-400">Reason: {quiz.flagReason}</p>
-            ) : null}
-          </div>
-          <Link
-            href="/dashboard/my-quizzes"
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/20 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-          >
-            <ArrowLeft className="size-4" />
-            Back to My Quizzes
-          </Link>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        {quizQuestions.map((question) => {
-          const options = parseOptions(question.options);
-          return (
-            <article
-              key={question.id}
-              className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
-            >
-              <p className="text-sm text-slate-400">
-                Question {question.position} · {question.difficulty}
-              </p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-100">{question.questionText}</h3>
-              {question.subject ? <p className="mt-1 text-sm text-slate-400">Subject: {question.subject}</p> : null}
-              <ul className="mt-4 space-y-2">
-                {options.map((option, index) => (
-                  <li
-                    key={`${question.id}-${index}`}
-                    className={`rounded-lg border p-3 ${
-                      index === question.correctOptionIndex
-                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-100"
-                        : "border-slate-700 bg-slate-950/60 text-slate-200"
-                    }`}
-                  >
-                    <p className="font-medium">{option.text}</p>
-                    <p className="mt-1 text-sm opacity-90">{option.explanation}</p>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          );
-        })}
-      </section>
-    </div>
+    <DashboardQuizDetailClient
+      quizId={quiz.id}
+      title={quiz.title}
+      theme={quiz.theme}
+      language={quiz.language}
+      gameMode={quiz.gameMode}
+      difficulty={quiz.difficulty}
+      isHub={quiz.isHub}
+      hubStatus={quiz.hubStatus}
+      isFlagged={quiz.isFlagged}
+      flagReason={quiz.flagReason}
+      questions={quizQuestions.map((question) => ({
+        ...question,
+        options: parseOptions(question.options),
+      }))}
+    />
   );
 }

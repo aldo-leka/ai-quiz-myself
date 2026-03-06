@@ -51,6 +51,10 @@ export function AdminQuizDetailClient({
   sourceType,
   questions: initialQuestions,
 }: AdminQuizDetailClientProps) {
+  const [quizTitle, setQuizTitle] = useState(title);
+  const [savedTitle, setSavedTitle] = useState(title);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [titleStatus, setTitleStatus] = useState<string>("");
   const [questions, setQuestions] = useState<EditableQuestion[]>(initialQuestions);
   const [savedQuestions, setSavedQuestions] = useState<Record<string, EditableQuestion>>(
     Object.fromEntries(initialQuestions.map((question) => [question.id, question])),
@@ -63,6 +67,49 @@ export function AdminQuizDetailClient({
     () => `Theme: ${theme} | Mode: ${gameMode} | Source: ${sourceType} | Questions: ${questionCount}`,
     [gameMode, questionCount, sourceType, theme],
   );
+
+  async function saveTitle() {
+    const nextTitle = quizTitle.trim();
+    if (!nextTitle) {
+      setQuizTitle(savedTitle);
+      setTitleStatus("Title cannot be empty.");
+      return;
+    }
+
+    setIsSavingTitle(true);
+    setTitleStatus("Saving...");
+
+    try {
+      const response = await fetch(`/api/admin/quizzes/${quizId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: nextTitle,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        quiz?: { title: string };
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to save title");
+      }
+
+      const updatedTitle = payload.quiz?.title ?? nextTitle;
+      setQuizTitle(updatedTitle);
+      setSavedTitle(updatedTitle);
+      setTitleStatus("Saved");
+    } catch (error) {
+      setQuizTitle(savedTitle);
+      setTitleStatus(error instanceof Error ? error.message : "Failed to save title.");
+    } finally {
+      setIsSavingTitle(false);
+    }
+  }
 
   async function saveQuestion(questionId: string) {
     const current = questions.find((question) => question.id === questionId);
@@ -133,10 +180,27 @@ export function AdminQuizDetailClient({
     <main className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle>Quiz Details</CardTitle>
           <CardDescription>{quizMeta}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <div className="flex-1">
+              <label className="mb-2 block text-sm font-medium text-slate-600" htmlFor="admin-quiz-title">
+                Title
+              </label>
+              <Input
+                id="admin-quiz-title"
+                value={quizTitle}
+                onChange={(event) => setQuizTitle(event.target.value)}
+                placeholder="Quiz title"
+              />
+            </div>
+            <Button disabled={isSavingTitle || quizTitle.trim() === savedTitle} onClick={() => void saveTitle()}>
+              {isSavingTitle ? "Saving..." : "Save Title"}
+            </Button>
+          </div>
+          <p className="text-sm text-slate-500">{titleStatus || "Title unchanged"}</p>
           <Button variant="outline" asChild>
             <Link href="/admin/quizzes">Back to Quizzes</Link>
           </Button>
