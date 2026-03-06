@@ -14,6 +14,7 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import type { HubCandidateSnapshot } from "@/lib/hub-candidate-snapshot";
 
 export const quizDifficultyEnum = pgEnum("quiz_difficulty", [
   "easy",
@@ -42,10 +43,19 @@ export const questionDifficultyEnum = pgEnum("question_difficulty", [
   "hard",
 ]);
 
-export const quizHubStatusEnum = pgEnum("quiz_hub_status", [
+export const hubCandidateStatusEnum = pgEnum("hub_candidate_status", [
   "pending",
+  "processing",
   "approved",
   "rejected",
+  "failed",
+]);
+
+export const hubCandidateDecisionEnum = pgEnum("hub_candidate_decision", [
+  "approve",
+  "reject_niche",
+  "reject_polarizing",
+  "reject_unsafe",
 ]);
 
 export const apiKeyProviderEnum = pgEnum("api_key_provider", [
@@ -98,9 +108,6 @@ export const quizzes = pgTable(
     sourceUrl: text("source_url"),
     isHub: boolean("is_hub").notNull().default(false),
     isPublic: boolean("is_public").notNull().default(true),
-    hubStatus: quizHubStatusEnum("hub_status"),
-    isFlagged: boolean("is_flagged").notNull().default(false),
-    flagReason: text("flag_reason"),
     playCount: integer("play_count").notNull().default(0),
     likes: integer("likes").notNull().default(0),
     dislikes: integer("dislikes").notNull().default(0),
@@ -117,7 +124,6 @@ export const quizzes = pgTable(
     index("quizzes_language_idx").on(table.language),
     index("quizzes_theme_idx").on(table.theme),
     index("quizzes_play_count_idx").on(table.playCount),
-    index("quizzes_is_flagged_idx").on(table.isFlagged),
     index("quizzes_hub_mode_idx").on(table.isHub, table.gameMode),
   ],
 );
@@ -239,6 +245,48 @@ export const quizGenerationJobs = pgTable(
     index("quiz_generation_jobs_status_idx").on(table.status),
     index("quiz_generation_jobs_created_at_idx").on(table.createdAt),
     index("quiz_generation_jobs_dismissed_at_idx").on(table.dismissedAt),
+  ],
+);
+
+export const hubCandidates = pgTable(
+  "hub_candidates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceQuizId: uuid("source_quiz_id").references(() => quizzes.id, {
+      onDelete: "set null",
+    }),
+    submittedByUserId: text("submitted_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    theme: text("theme").notNull(),
+    language: text("language").notNull().default("en"),
+    difficulty: quizDifficultyEnum("difficulty").notNull(),
+    gameMode: quizGameModeEnum("game_mode").notNull(),
+    sourceType: quizSourceTypeEnum("source_type").notNull(),
+    sourceUrl: text("source_url"),
+    questionCount: integer("question_count").notNull(),
+    snapshot: jsonb("snapshot").$type<HubCandidateSnapshot>().notNull(),
+    status: hubCandidateStatusEnum("status").notNull().default("pending"),
+    decision: hubCandidateDecisionEnum("decision"),
+    reviewReason: text("review_reason"),
+    publishedQuizId: uuid("published_quiz_id").references(() => quizzes.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("hub_candidates_source_quiz_id_idx").on(table.sourceQuizId),
+    index("hub_candidates_submitted_by_user_id_idx").on(table.submittedByUserId),
+    index("hub_candidates_status_idx").on(table.status),
+    index("hub_candidates_decision_idx").on(table.decision),
+    index("hub_candidates_created_at_idx").on(table.createdAt),
+    index("hub_candidates_published_quiz_id_idx").on(table.publishedQuizId),
   ],
 );
 
@@ -499,6 +547,23 @@ export const quizEmbeddingsRelations = relations(quizEmbeddings, ({ one }) => ({
   quiz: one(quizzes, {
     fields: [quizEmbeddings.quizId],
     references: [quizzes.id],
+  }),
+}));
+
+export const hubCandidatesRelations = relations(hubCandidates, ({ one }) => ({
+  sourceQuiz: one(quizzes, {
+    fields: [hubCandidates.sourceQuizId],
+    references: [quizzes.id],
+    relationName: "hubCandidateSourceQuiz",
+  }),
+  submittedByUser: one(user, {
+    fields: [hubCandidates.submittedByUserId],
+    references: [user.id],
+  }),
+  publishedQuiz: one(quizzes, {
+    fields: [hubCandidates.publishedQuizId],
+    references: [quizzes.id],
+    relationName: "hubCandidatePublishedQuiz",
   }),
 }));
 

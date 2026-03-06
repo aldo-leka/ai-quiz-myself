@@ -1,8 +1,18 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { quizzes } from "@/db/schema";
+import { hubCandidates } from "@/db/schema";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
+import {
+  getHubCandidateQuestionTexts,
+  parseHubCandidateSnapshot,
+  publishHubCandidateSnapshot,
+} from "@/lib/hub-candidates";
+import {
+  checkHubUniqueness,
+  generateEmbedding,
+  storeQuizEmbedding,
+} from "@/lib/quiz-embeddings";
 
 type RouteContext = {
   params: Promise<{ quizId: string }>;
@@ -15,20 +25,48 @@ export async function PATCH(_: Request, { params }: RouteContext) {
   }
 
   const { quizId } = await params;
-  const [updated] = await db
-    .update(quizzes)
-    .set({
-      isFlagged: false,
-      flagReason: null,
+  const [candidate] = await db
+    .select({
+      id: hubCandidates.id,
+      status: hubCandidates.status,
+      snapshot: hubCandidates.snapshot,
     })
-    .where(eq(quizzes.id, quizId))
-    .returning({ id: quizzes.id });
+    .from(hubCandidates)
+    .where(eq(hubCandidates.id, quizId))
+    .limit(1);
 
-  if (!updated) {
-    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+  if (!candidate) {
+    return NextResponse.json({ error: "Hub candidate not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ success: true });
+  const snapshot = parseHubCandidateSnapshot(candidate.snapshot);
+  const embedding = await generateEmbedding(getHubCandidateQuestionTexts(snapshot));
+  const uniqueness = await checkHubUniqueness(embedding, snapshot.gameMode, 0.85);
+
+  if (uniqueness.isDuplicate) {
+    return NextResponse.json(
+      {
+        error: `Too similar to existing hub quiz ${uniqueness.mostSimilarQuizId ?? "unknown"}.`,
+      },
+      { status: 409 },
+    );
+  }
+
+  const publishedQuizId = await publishHubCandidateSnapshot(snapshot);
+  await storeQuizEmbedding(publishedQuizId, embedding);
+
+  await db
+    .update(hubCandidates)
+    .set({
+      status: "approved",
+      decision: "approve",
+      reviewReason: "Approved manually by admin moderation.",
+      publishedQuizId,
+      reviewedAt: new Date(),
+    })
+    .where(eq(hubCandidates.id, quizId));
+
+  return NextResponse.json({ success: true, publishedQuizId });
 }
 
 export async function DELETE(_: Request, { params }: RouteContext) {
@@ -39,14 +77,13 @@ export async function DELETE(_: Request, { params }: RouteContext) {
 
   const { quizId } = await params;
   const [deleted] = await db
-    .delete(quizzes)
-    .where(eq(quizzes.id, quizId))
-    .returning({ id: quizzes.id });
+    .delete(hubCandidates)
+    .where(eq(hubCandidates.id, quizId))
+    .returning({ id: hubCandidates.id });
 
   if (!deleted) {
-    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+    return NextResponse.json({ error: "Hub candidate not found" }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });
 }
-

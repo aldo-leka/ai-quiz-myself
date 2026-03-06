@@ -1,51 +1,32 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AdminModerationPageClient } from "@/components/admin/admin-moderation-page-client";
 import { db } from "@/db";
-import { questions, quizzes } from "@/db/schema";
+import { hubCandidates } from "@/db/schema";
 import { user } from "@/db/schema/auth";
+import { parseHubCandidateSnapshot } from "@/lib/hub-candidates";
 
 export default async function AdminModerationPage() {
   const flagged = await db
     .select({
-      id: quizzes.id,
-      title: quizzes.title,
-      theme: quizzes.theme,
-      gameMode: quizzes.gameMode,
-      sourceType: quizzes.sourceType,
-      isHub: quizzes.isHub,
-      language: quizzes.language,
-      flagReason: quizzes.flagReason,
+      id: hubCandidates.id,
+      title: hubCandidates.title,
+      theme: hubCandidates.theme,
+      gameMode: hubCandidates.gameMode,
+      sourceType: hubCandidates.sourceType,
+      language: hubCandidates.language,
+      decision: hubCandidates.decision,
+      reviewReason: hubCandidates.reviewReason,
       creatorName: user.name,
       creatorEmail: user.email,
-      createdAt: quizzes.createdAt,
+      createdAt: hubCandidates.createdAt,
+      snapshot: hubCandidates.snapshot,
     })
-    .from(quizzes)
-    .leftJoin(user, eq(quizzes.creatorId, user.id))
-    .where(eq(quizzes.isFlagged, true));
+    .from(hubCandidates)
+    .leftJoin(user, eq(hubCandidates.submittedByUserId, user.id))
+    .where(eq(hubCandidates.decision, "reject_unsafe"));
 
   if (flagged.length === 0) {
     return <AdminModerationPageClient initialQuizzes={[]} />;
-  }
-
-  const quizIds = flagged.map((quiz) => quiz.id);
-  const questionRows = await db
-    .select({
-      quizId: questions.quizId,
-      position: questions.position,
-      questionText: questions.questionText,
-    })
-    .from(questions)
-    .where(inArray(questions.quizId, quizIds));
-
-  const previewByQuizId = new Map<string, Array<{ position: number; questionText: string }>>();
-  for (const row of questionRows) {
-    if (!previewByQuizId.has(row.quizId)) {
-      previewByQuizId.set(row.quizId, []);
-    }
-    previewByQuizId.get(row.quizId)?.push({
-      position: row.position,
-      questionText: row.questionText,
-    });
   }
 
   return (
@@ -53,9 +34,10 @@ export default async function AdminModerationPage() {
       initialQuizzes={flagged.map((quiz) => ({
         ...quiz,
         createdAt: quiz.createdAt.toISOString(),
-        questionPreview: (previewByQuizId.get(quiz.id) ?? [])
-          .sort((a, b) => a.position - b.position)
-          .slice(0, 3),
+        questionPreview: parseHubCandidateSnapshot(quiz.snapshot).questions.slice(0, 3).map((question) => ({
+          position: question.position,
+          questionText: question.questionText,
+        })),
       }))}
     />
   );

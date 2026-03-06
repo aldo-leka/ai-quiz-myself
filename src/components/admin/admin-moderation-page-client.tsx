@@ -16,9 +16,9 @@ type ModerationQuiz = {
   theme: string;
   gameMode: "single" | "wwtbam" | "couch_coop";
   sourceType: "manual" | "ai_generated" | "pdf" | "url";
-  isHub: boolean;
   language: string;
-  flagReason: string | null;
+  decision: "approve" | "reject_niche" | "reject_polarizing" | "reject_unsafe" | null;
+  reviewReason: string | null;
   creatorName: string | null;
   creatorEmail: string | null;
   createdAt: string;
@@ -90,8 +90,10 @@ export function AdminModerationPageClient({ initialQuizzes }: AdminModerationPag
     <main className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Flagged Quizzes</CardTitle>
-          <CardDescription>Review flagged content and decide whether to keep or remove it.</CardDescription>
+          <CardTitle>Unsafe Hub Candidates</CardTitle>
+          <CardDescription>
+            Review candidate snapshots rejected as unsafe and decide whether to publish or remove them.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
@@ -117,7 +119,9 @@ export function AdminModerationPageClient({ initialQuizzes }: AdminModerationPag
             <CardContent className="space-y-4">
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">Flag Reason</p>
-                <p className="mt-1">{quiz.flagReason?.trim() ? quiz.flagReason : "No reason provided."}</p>
+                <p className="mt-1">
+                  {quiz.reviewReason?.trim() ? quiz.reviewReason : "No reason provided."}
+                </p>
               </div>
 
               <div>

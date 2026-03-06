@@ -169,7 +169,6 @@ export async function POST(request: Request) {
       sourceType: payload.sourceType,
       isHub: payload.isHub,
       isPublic: payload.isPublic,
-      hubStatus: payload.isHub ? "approved" : null,
     })
     .returning({ id: quizzes.id });
 

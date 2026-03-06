@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { ActiveUsersChart } from "@/components/admin/active-users-chart";
 import {
   Card,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/db";
 import { user } from "@/db/schema/auth";
-import { creditTransactions, quizSessions, quizzes } from "@/db/schema/quiz";
+import { creditTransactions, hubCandidates, quizSessions, quizzes } from "@/db/schema/quiz";
 
 function toUtcDayStart(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -83,8 +83,13 @@ export default async function AdminPage() {
       .select({
         total: sql<number>`count(*)::int`,
       })
-      .from(quizzes)
-      .where(or(eq(quizzes.hubStatus, "pending"), eq(quizzes.isFlagged, true))),
+      .from(hubCandidates)
+      .where(
+        or(
+          inArray(hubCandidates.status, ["pending", "processing"]),
+          eq(hubCandidates.decision, "reject_unsafe"),
+        ),
+      ),
     db
       .select({
         id: quizzes.id,
@@ -225,7 +230,7 @@ export default async function AdminPage() {
         <Card>
           <CardHeader>
             <CardTitle>Flagged Content</CardTitle>
-            <CardDescription>Pending or explicitly flagged quizzes.</CardDescription>
+            <CardDescription>Pending or unsafe hub candidates.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold">{flaggedContentCount.toLocaleString()}</div>

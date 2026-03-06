@@ -2,8 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
-import { creditTransactions, questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import { creditTransactions, hubCandidates, questions, quizGenerationJobs, quizzes } from "@/db/schema";
 import type { GenerationBillingMode } from "@/lib/billing";
+import { buildHubCandidateSnapshot, createHubCandidate } from "@/lib/hub-candidates";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -20,6 +21,7 @@ import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
+import { reviewHubCandidateTask } from "@/trigger/review-hub-candidates";
 
 const taskPayloadSchema = z.object({
   jobId: z.string().uuid(),
@@ -127,13 +129,6 @@ async function persistGeneratedQuiz(params: {
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
 }) {
-  const hubStatus =
-    params.input.isHub
-      ? "approved"
-      : params.input.reviewForHub
-        ? "pending"
-        : null;
-
   const [createdQuiz] = await db
     .insert(quizzes)
     .values({
@@ -148,7 +143,6 @@ async function persistGeneratedQuiz(params: {
       sourceUrl: params.sourceUrl ?? null,
       isHub: params.input.isHub,
       isPublic: params.input.isPublic,
-      hubStatus,
     })
     .returning({ id: quizzes.id });
 
@@ -183,9 +177,6 @@ async function applyHubUniqueness(
       .update(quizzes)
       .set({
         isHub: false,
-        hubStatus: null,
-        isFlagged: true,
-        flagReason: reason,
       })
       .where(eq(quizzes.id, quizId));
 
@@ -467,6 +458,61 @@ export const generateQuizTask = task({
         errorMessage: null,
       });
 
+      let hubCandidateId: string | null = null;
+      if (
+        !effectiveInput.isHub &&
+        effectiveInput.reviewForHub &&
+        isEnglishLanguage(effectiveInput.language) &&
+        (sourceType === "theme" || sourceType === "url")
+      ) {
+        try {
+          const snapshot = buildHubCandidateSnapshot({
+            generated,
+            language: effectiveInput.language,
+            difficulty: effectiveInput.difficulty,
+            gameMode: effectiveInput.gameMode,
+            sourceType: mapGenerationSourceToQuizSource(sourceType),
+            sourceUrl,
+          });
+
+          const candidate = await createHubCandidate({
+            sourceQuizId: quizId,
+            submittedByUserId: job.userId,
+            snapshot,
+          });
+
+          hubCandidateId = candidate.id;
+
+          try {
+            await reviewHubCandidateTask.trigger({
+              candidateId: candidate.id,
+            });
+          } catch (reviewTriggerError) {
+            const message = toErrorMessage(reviewTriggerError);
+            await db
+              .update(hubCandidates)
+              .set({
+                status: "failed",
+                reviewReason: `Failed to enqueue hub review: ${message}`.slice(0, 500),
+                reviewedAt: new Date(),
+              })
+              .where(eq(hubCandidates.id, candidate.id));
+            logger.error("Failed to enqueue hub candidate review", {
+              jobId: job.id,
+              quizId,
+              candidateId: candidate.id,
+              error: message,
+            });
+          }
+        } catch (candidateError) {
+          logger.error("Failed creating hub candidate snapshot", {
+            jobId: job.id,
+            quizId,
+            error: toErrorMessage(candidateError),
+          });
+        }
+      }
+
       const settled = await settleGenerationChargeOnSuccess({
         userId: job.userId,
         jobId: job.id,
@@ -483,6 +529,7 @@ export const generateQuizTask = task({
         difficulty: effectiveInput.difficulty,
         provider: credentials.provider,
         duplicate,
+        hubCandidateId,
         billingMode: effectiveInput.billingMode,
         billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
       });
@@ -492,6 +539,7 @@ export const generateQuizTask = task({
         jobId: job.id,
         quizId,
         duplicate,
+        hubCandidateId,
       };
     } catch (error) {
       const message = toErrorMessage(error);

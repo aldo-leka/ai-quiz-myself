@@ -1,9 +1,10 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizzes } from "@/db/schema";
+import { hubCandidates } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
+import { parseHubCandidateSnapshot } from "@/lib/hub-candidates";
 
 export async function GET() {
   const adminSession = await getAdminSessionOrNull();
@@ -13,55 +14,35 @@ export async function GET() {
 
   const flagged = await db
     .select({
-      id: quizzes.id,
-      title: quizzes.title,
-      theme: quizzes.theme,
-      gameMode: quizzes.gameMode,
-      sourceType: quizzes.sourceType,
-      isHub: quizzes.isHub,
-      language: quizzes.language,
-      flagReason: quizzes.flagReason,
-      creatorId: quizzes.creatorId,
+      id: hubCandidates.id,
+      title: hubCandidates.title,
+      theme: hubCandidates.theme,
+      gameMode: hubCandidates.gameMode,
+      sourceType: hubCandidates.sourceType,
+      language: hubCandidates.language,
+      decision: hubCandidates.decision,
+      reviewReason: hubCandidates.reviewReason,
+      creatorId: hubCandidates.submittedByUserId,
       creatorName: user.name,
       creatorEmail: user.email,
-      createdAt: quizzes.createdAt,
+      createdAt: hubCandidates.createdAt,
+      snapshot: hubCandidates.snapshot,
     })
-    .from(quizzes)
-    .leftJoin(user, eq(quizzes.creatorId, user.id))
-    .where(eq(quizzes.isFlagged, true));
+    .from(hubCandidates)
+    .leftJoin(user, eq(hubCandidates.submittedByUserId, user.id))
+    .where(eq(hubCandidates.decision, "reject_unsafe"));
 
   if (flagged.length === 0) {
     return NextResponse.json({ quizzes: [] });
   }
 
-  const quizIds = flagged.map((quiz) => quiz.id);
-  const questionRows = await db
-    .select({
-      quizId: questions.quizId,
-      position: questions.position,
-      questionText: questions.questionText,
-    })
-    .from(questions)
-    .where(inArray(questions.quizId, quizIds));
-
-  const questionPreviewByQuiz = new Map<string, Array<{ position: number; questionText: string }>>();
-  for (const question of questionRows) {
-    if (!questionPreviewByQuiz.has(question.quizId)) {
-      questionPreviewByQuiz.set(question.quizId, []);
-    }
-    questionPreviewByQuiz.get(question.quizId)?.push({
-      position: question.position,
-      questionText: question.questionText,
-    });
-  }
-
   const quizzesWithPreview = flagged.map((quiz) => ({
     ...quiz,
-    questionPreview: (questionPreviewByQuiz.get(quiz.id) ?? [])
-      .sort((a, b) => a.position - b.position)
-      .slice(0, 3),
+    questionPreview: parseHubCandidateSnapshot(quiz.snapshot).questions.slice(0, 3).map((question) => ({
+      position: question.position,
+      questionText: question.questionText,
+    })),
   }));
 
   return NextResponse.json({ quizzes: quizzesWithPreview });
 }
-

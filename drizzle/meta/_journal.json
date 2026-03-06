@@ -57,6 +57,13 @@
       "when": 1772641608183,
       "tag": "0007_wallet_cents",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1772793929548,
+      "tag": "0008_add_hub_candidates",
+      "breakpoints": true
     }
   ]
 }

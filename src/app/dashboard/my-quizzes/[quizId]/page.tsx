@@ -1,8 +1,8 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { DashboardQuizDetailClient } from "@/components/dashboard/dashboard-quiz-detail-client";
 import { db } from "@/db";
-import { questions, quizzes } from "@/db/schema";
+import { hubCandidates, questions, quizzes } from "@/db/schema";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
 type PageProps = {
@@ -40,9 +40,6 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
       gameMode: quizzes.gameMode,
       difficulty: quizzes.difficulty,
       isHub: quizzes.isHub,
-      hubStatus: quizzes.hubStatus,
-      isFlagged: quizzes.isFlagged,
-      flagReason: quizzes.flagReason,
     })
     .from(quizzes)
     .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)))
@@ -66,6 +63,22 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
     .where(eq(questions.quizId, quiz.id))
     .orderBy(asc(questions.position));
 
+  const [latestHubCandidate] = await db
+    .select({
+      status: hubCandidates.status,
+      decision: hubCandidates.decision,
+      reviewReason: hubCandidates.reviewReason,
+      publishedQuizId: hubCandidates.publishedQuizId,
+    })
+    .from(hubCandidates)
+    .where(eq(hubCandidates.sourceQuizId, quiz.id))
+    .orderBy(desc(hubCandidates.createdAt))
+    .limit(1);
+
+  const hubReviewStatus = latestHubCandidate?.status ?? (quiz.isHub ? "approved" : null);
+  const hubReviewReason = latestHubCandidate?.reviewReason ?? null;
+  const isPublishedToHub = Boolean(latestHubCandidate?.publishedQuizId) || quiz.isHub;
+
   return (
     <DashboardQuizDetailClient
       quizId={quiz.id}
@@ -74,10 +87,9 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
       language={quiz.language}
       gameMode={quiz.gameMode}
       difficulty={quiz.difficulty}
-      isHub={quiz.isHub}
-      hubStatus={quiz.hubStatus}
-      isFlagged={quiz.isFlagged}
-      flagReason={quiz.flagReason}
+      isPublishedToHub={isPublishedToHub}
+      hubReviewStatus={hubReviewStatus}
+      hubReviewReason={hubReviewReason}
       questions={quizQuestions.map((question) => ({
         ...question,
         options: parseOptions(question.options),

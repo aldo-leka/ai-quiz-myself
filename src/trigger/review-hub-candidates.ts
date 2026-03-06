@@ -1,17 +1,21 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { generateObject } from "ai";
-import { logger, schedules } from "@trigger.dev/sdk/v3";
+import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
-import { questions, quizzes } from "@/db/schema";
+import { hubCandidates } from "@/db/schema";
+import {
+  getHubCandidateQuestionTexts,
+  parseHubCandidateSnapshot,
+  publishHubCandidateSnapshot,
+} from "@/lib/hub-candidates";
 import {
   checkHubUniqueness,
   generateEmbedding,
   storeQuizEmbedding,
 } from "@/lib/quiz-embeddings";
 
-const REVIEW_BATCH_SIZE = 15;
 const HUB_DUPLICATE_THRESHOLD = 0.85;
 const HUB_APPROVAL_CONFIDENCE_THRESHOLD = 0.85;
 const UNSAFE_KEYWORDS = [
@@ -33,6 +37,10 @@ const NARROW_THEME_PATTERNS = [
   /\bnet worth\b/i,
 ] as const;
 
+const taskPayloadSchema = z.object({
+  candidateId: z.string().uuid(),
+});
+
 const hubFitSchema = z.object({
   decision: z.enum(["approve", "reject_niche", "reject_polarizing", "reject_unsafe"]),
   confidence: z.number().min(0).max(1),
@@ -41,38 +49,26 @@ const hubFitSchema = z.object({
 
 type HubDecision = z.infer<typeof hubFitSchema>["decision"];
 
-type HubCandidate = {
-  id: string;
-  title: string;
-  theme: string;
-  language: string;
-  sourceType: "ai_generated" | "url";
-  gameMode: "single" | "wwtbam" | "couch_coop";
-  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
-};
-
 function isEnglishLanguage(language: string): boolean {
   const normalized = language.trim().toLowerCase();
   return normalized === "en" || normalized.startsWith("en-");
 }
 
-function parseOptionTexts(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((option) => {
-      if (!option || typeof option !== "object") return null;
-      const text = "text" in option && typeof option.text === "string" ? option.text.trim() : "";
-      return text || null;
-    })
-    .filter((text): text is string => Boolean(text));
-}
-
-function buildReviewPrompt(quiz: HubCandidate, questionRows: Array<{ questionText: string; options: unknown }>) {
-  const preview = questionRows
+function buildReviewPrompt(input: {
+  title: string;
+  theme: string;
+  sourceType: "manual" | "ai_generated" | "pdf" | "url";
+  gameMode: "single" | "wwtbam" | "couch_coop";
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
+  questions: Array<{
+    questionText: string;
+    options: Array<{ text: string; explanation: string }>;
+  }>;
+}) {
+  const preview = input.questions
     .slice(0, 8)
     .map((question, index) => {
-      const options = parseOptionTexts(question.options).slice(0, 4);
+      const options = question.options.slice(0, 4).map((option) => option.text.trim());
       return [
         `Q${index + 1}: ${question.questionText}`,
         ...options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`),
@@ -92,22 +88,25 @@ function buildReviewPrompt(quiz: HubCandidate, questionRows: Array<{ questionTex
     "- reject_polarizing: political, ideological, celebrity drama, or likely to cause negative surprise.",
     "- reject_unsafe: unsafe/inappropriate content.",
     "",
-    `Quiz title: ${quiz.title}`,
-    `Theme: ${quiz.theme}`,
-    `Source type: ${quiz.sourceType}`,
-    `Game mode: ${quiz.gameMode}`,
-    `Difficulty: ${quiz.difficulty}`,
+    `Quiz title: ${input.title}`,
+    `Theme: ${input.theme}`,
+    `Source type: ${input.sourceType}`,
+    `Game mode: ${input.gameMode}`,
+    `Difficulty: ${input.difficulty}`,
     "",
     "Question preview:",
     preview,
   ].join("\n");
 }
 
-function hardRejectIfDisallowed(quiz: HubCandidate): {
+function hardRejectIfDisallowed(input: {
+  title: string;
+  theme: string;
+}): {
   decision: HubDecision;
   reason: string;
 } | null {
-  const combined = `${quiz.title} ${quiz.theme}`.toLowerCase();
+  const combined = `${input.title} ${input.theme}`.toLowerCase();
 
   if (UNSAFE_KEYWORDS.some((keyword) => combined.includes(keyword))) {
     return {
@@ -126,7 +125,17 @@ function hardRejectIfDisallowed(quiz: HubCandidate): {
   return null;
 }
 
-async function assessHubFit(quiz: HubCandidate, questionRows: Array<{ questionText: string; options: unknown }>) {
+async function assessHubFit(input: {
+  title: string;
+  theme: string;
+  sourceType: "manual" | "ai_generated" | "pdf" | "url";
+  gameMode: "single" | "wwtbam" | "couch_coop";
+  difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
+  questions: Array<{
+    questionText: string;
+    options: Array<{ text: string; explanation: string }>;
+  }>;
+}) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
@@ -134,199 +143,200 @@ async function assessHubFit(quiz: HubCandidate, questionRows: Array<{ questionTe
   const { object } = await generateObject({
     model: openai(process.env.OPENAI_MODEL ?? "gpt-5-nano"),
     schema: hubFitSchema,
-    prompt: buildReviewPrompt(quiz, questionRows),
+    prompt: buildReviewPrompt(input),
   });
 
   return object;
 }
 
-async function approveQuiz(quizId: string, embedding: number[]) {
-  await db
-    .update(quizzes)
-    .set({
-      isHub: true,
-      hubStatus: "approved",
-      isFlagged: false,
-      flagReason: null,
+async function loadCandidate(candidateId: string) {
+  const [candidate] = await db
+    .select({
+      id: hubCandidates.id,
+      status: hubCandidates.status,
+      title: hubCandidates.title,
+      theme: hubCandidates.theme,
+      language: hubCandidates.language,
+      sourceType: hubCandidates.sourceType,
+      gameMode: hubCandidates.gameMode,
+      difficulty: hubCandidates.difficulty,
+      snapshot: hubCandidates.snapshot,
     })
-    .where(eq(quizzes.id, quizId));
+    .from(hubCandidates)
+    .where(eq(hubCandidates.id, candidateId))
+    .limit(1);
 
-  await storeQuizEmbedding(quizId, embedding);
+  return candidate ?? null;
 }
 
-async function rejectQuiz(params: {
-  quizId: string;
-  reason: string;
-  decision: HubDecision;
+async function updateCandidateStatus(candidateId: string, params: {
+  status: "processing" | "approved" | "rejected" | "failed";
+  decision?: "approve" | "reject_niche" | "reject_polarizing" | "reject_unsafe" | null;
+  reviewReason?: string | null;
+  publishedQuizId?: string | null;
+  reviewedAt?: Date | null;
 }) {
   await db
-    .update(quizzes)
+    .update(hubCandidates)
     .set({
-      isHub: false,
-      hubStatus: "rejected",
-      isFlagged: params.decision === "reject_unsafe",
-      flagReason: params.reason.slice(0, 500),
+      status: params.status,
+      decision: params.decision ?? null,
+      reviewReason: params.reviewReason ?? null,
+      publishedQuizId: params.publishedQuizId ?? null,
+      reviewedAt: params.reviewedAt ?? null,
     })
-    .where(eq(quizzes.id, params.quizId));
+    .where(eq(hubCandidates.id, candidateId));
 }
 
-async function loadHubCandidates(limit: number): Promise<HubCandidate[]> {
-  const rows = await db
-    .select({
-      id: quizzes.id,
-      title: quizzes.title,
-      theme: quizzes.theme,
-      language: quizzes.language,
-      sourceType: quizzes.sourceType,
-      gameMode: quizzes.gameMode,
-      difficulty: quizzes.difficulty,
-    })
-    .from(quizzes)
-    .where(
-      and(
-        eq(quizzes.isPublic, true),
-        eq(quizzes.isHub, false),
-        eq(quizzes.hubStatus, "pending"),
-        inArray(quizzes.sourceType, ["ai_generated", "url"]),
-      ),
-    )
-    .orderBy(asc(quizzes.createdAt))
-    .limit(limit);
-
-  return rows as HubCandidate[];
-}
-
-export const reviewHubCandidatesTask = schedules.task({
-  id: "review-hub-candidates",
-  cron: "*/15 * * * *",
+export const reviewHubCandidateTask = task({
+  id: "review-hub-candidate",
   maxDuration: 900,
-  run: async () => {
+  run: async (payload: z.infer<typeof taskPayloadSchema>) => {
     if (!process.env.OPENAI_API_KEY) {
-      logger.error("OPENAI_API_KEY is missing, skipping hub review run");
-      return { ok: false, reviewed: 0, approved: 0, rejected: 0, skipped: 0 };
+      logger.error("OPENAI_API_KEY is missing, skipping hub candidate review", payload);
+      return { ok: false, error: "missing_openai_api_key" };
     }
 
-    const candidates = await loadHubCandidates(REVIEW_BATCH_SIZE);
-    if (candidates.length === 0) {
-      logger.log("No hub candidates to review");
-      return { ok: true, reviewed: 0, approved: 0, rejected: 0, skipped: 0 };
+    const { candidateId } = taskPayloadSchema.parse(payload);
+    const candidate = await loadCandidate(candidateId);
+
+    if (!candidate) {
+      logger.error("Hub candidate not found", { candidateId });
+      return { ok: false, error: "candidate_not_found" };
     }
 
-    let approved = 0;
-    let rejected = 0;
-    let skipped = 0;
-
-    for (const quiz of candidates) {
-      try {
-        const questionRows = await db
-          .select({
-            questionText: questions.questionText,
-            options: questions.options,
-          })
-          .from(questions)
-          .where(eq(questions.quizId, quiz.id))
-          .orderBy(asc(questions.position))
-          .limit(20);
-
-        const questionTexts = questionRows
-          .map((row) => row.questionText.trim())
-          .filter((questionText) => questionText.length > 0);
-
-        if (!isEnglishLanguage(quiz.language)) {
-          await rejectQuiz({
-            quizId: quiz.id,
-            decision: "reject_niche",
-            reason: "Rejected for hub: only English quizzes are auto-published.",
-          });
-          rejected += 1;
-          continue;
-        }
-
-        if (questionTexts.length < 8) {
-          await rejectQuiz({
-            quizId: quiz.id,
-            decision: "reject_niche",
-            reason: "Rejected for hub: not enough generated questions for reliable random play.",
-          });
-          rejected += 1;
-          continue;
-        }
-
-        const hardRejection = hardRejectIfDisallowed(quiz);
-        if (hardRejection) {
-          await rejectQuiz({
-            quizId: quiz.id,
-            decision: hardRejection.decision,
-            reason: hardRejection.reason,
-          });
-          rejected += 1;
-          continue;
-        }
-
-        const embedding = await generateEmbedding(questionTexts);
-        const uniqueness = await checkHubUniqueness(
-          embedding,
-          quiz.gameMode,
-          HUB_DUPLICATE_THRESHOLD,
-        );
-
-        if (uniqueness.isDuplicate) {
-          await rejectQuiz({
-            quizId: quiz.id,
-            decision: "reject_niche",
-            reason: `Rejected for hub: too similar to existing hub quiz ${uniqueness.mostSimilarQuizId ?? "unknown"}.`,
-          });
-          rejected += 1;
-          continue;
-        }
-
-        const hubFit = await assessHubFit(quiz, questionRows);
-        if (hubFit.decision === "approve") {
-          if (hubFit.confidence >= HUB_APPROVAL_CONFIDENCE_THRESHOLD) {
-            await approveQuiz(quiz.id, embedding);
-            approved += 1;
-            continue;
-          }
-
-          await rejectQuiz({
-            quizId: quiz.id,
-            decision: "reject_niche",
-            reason:
-              `Rejected for hub: review confidence ${hubFit.confidence.toFixed(2)} ` +
-              `is below required threshold ${HUB_APPROVAL_CONFIDENCE_THRESHOLD.toFixed(2)}.`,
-          });
-          rejected += 1;
-          continue;
-        }
-
-        await rejectQuiz({
-          quizId: quiz.id,
-          decision: hubFit.decision,
-          reason: `Rejected for hub: ${hubFit.reason}`,
-        });
-        rejected += 1;
-      } catch (error) {
-        skipped += 1;
-        logger.error("Failed reviewing hub candidate", {
-          quizId: quiz.id,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
+    if (candidate.status === "approved") {
+      return { ok: true, candidateId, skipped: "already_approved" };
     }
 
-    logger.log("Hub candidate review run completed", {
-      reviewed: candidates.length,
-      approved,
-      rejected,
-      skipped,
+    const snapshot = parseHubCandidateSnapshot(candidate.snapshot);
+    await updateCandidateStatus(candidateId, {
+      status: "processing",
+      decision: null,
+      reviewReason: null,
+      publishedQuizId: null,
+      reviewedAt: null,
     });
 
-    return {
-      ok: true,
-      reviewed: candidates.length,
-      approved,
-      rejected,
-      skipped,
-    };
+    try {
+      const questionTexts = getHubCandidateQuestionTexts(snapshot);
+      if (!isEnglishLanguage(snapshot.language)) {
+        await updateCandidateStatus(candidateId, {
+          status: "rejected",
+          decision: "reject_niche",
+          reviewReason: "Rejected for hub: only English quizzes are auto-published.",
+          reviewedAt: new Date(),
+        });
+        return { ok: true, candidateId, approved: false, reason: "non_english" };
+      }
+
+      if (questionTexts.length < 8) {
+        await updateCandidateStatus(candidateId, {
+          status: "rejected",
+          decision: "reject_niche",
+          reviewReason: "Rejected for hub: not enough generated questions for reliable random play.",
+          reviewedAt: new Date(),
+        });
+        return { ok: true, candidateId, approved: false, reason: "too_few_questions" };
+      }
+
+      const hardRejection = hardRejectIfDisallowed({
+        title: snapshot.title,
+        theme: snapshot.theme,
+      });
+
+      if (hardRejection) {
+        await updateCandidateStatus(candidateId, {
+          status: "rejected",
+          decision: hardRejection.decision,
+          reviewReason: hardRejection.reason,
+          reviewedAt: new Date(),
+        });
+        return { ok: true, candidateId, approved: false, reason: hardRejection.decision };
+      }
+
+      const embedding = await generateEmbedding(questionTexts);
+      const uniqueness = await checkHubUniqueness(
+        embedding,
+        snapshot.gameMode,
+        HUB_DUPLICATE_THRESHOLD,
+      );
+
+      if (uniqueness.isDuplicate) {
+        await updateCandidateStatus(candidateId, {
+          status: "rejected",
+          decision: "reject_niche",
+          reviewReason: `Rejected for hub: too similar to existing hub quiz ${uniqueness.mostSimilarQuizId ?? "unknown"}.`,
+          reviewedAt: new Date(),
+        });
+        return { ok: true, candidateId, approved: false, reason: "duplicate" };
+      }
+
+      const hubFit = await assessHubFit({
+        title: snapshot.title,
+        theme: snapshot.theme,
+        sourceType: snapshot.sourceType,
+        gameMode: snapshot.gameMode,
+        difficulty: snapshot.difficulty,
+        questions: snapshot.questions.map((question) => ({
+          questionText: question.questionText,
+          options: question.options,
+        })),
+      });
+
+      if (
+        hubFit.decision !== "approve" ||
+        hubFit.confidence < HUB_APPROVAL_CONFIDENCE_THRESHOLD
+      ) {
+        const decision =
+          hubFit.decision === "approve" ? "reject_niche" : hubFit.decision;
+        const reviewReason =
+          hubFit.decision === "approve"
+            ? `Rejected for hub: review confidence ${hubFit.confidence.toFixed(2)} is below required threshold ${HUB_APPROVAL_CONFIDENCE_THRESHOLD.toFixed(2)}.`
+            : `Rejected for hub: ${hubFit.reason}`;
+
+        await updateCandidateStatus(candidateId, {
+          status: "rejected",
+          decision,
+          reviewReason,
+          reviewedAt: new Date(),
+        });
+
+        return { ok: true, candidateId, approved: false, reason: decision };
+      }
+
+      const publishedQuizId = await publishHubCandidateSnapshot(snapshot);
+      await storeQuizEmbedding(publishedQuizId, embedding);
+      await updateCandidateStatus(candidateId, {
+        status: "approved",
+        decision: "approve",
+        reviewReason: `Approved for hub: ${hubFit.reason}`,
+        publishedQuizId,
+        reviewedAt: new Date(),
+      });
+
+      logger.log("Hub candidate approved", {
+        candidateId,
+        publishedQuizId,
+        similarity: uniqueness.similarity,
+      });
+
+      return { ok: true, candidateId, approved: true, publishedQuizId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown review error";
+      await updateCandidateStatus(candidateId, {
+        status: "failed",
+        decision: null,
+        reviewReason: message.slice(0, 500),
+        reviewedAt: new Date(),
+      });
+
+      logger.error("Failed reviewing hub candidate", {
+        candidateId,
+        error: message,
+      });
+
+      return { ok: false, candidateId, error: message };
+    }
   },
 });

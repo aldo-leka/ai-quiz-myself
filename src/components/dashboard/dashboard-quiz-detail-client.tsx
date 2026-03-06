@@ -28,10 +28,9 @@ type DashboardQuizDetailClientProps = {
   language: string;
   gameMode: "single" | "wwtbam" | "couch_coop";
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
-  isHub: boolean;
-  hubStatus: "pending" | "approved" | "rejected" | null;
-  isFlagged: boolean;
-  flagReason: string | null;
+  isPublishedToHub: boolean;
+  hubReviewStatus: "pending" | "processing" | "approved" | "rejected" | "failed" | null;
+  hubReviewReason: string | null;
   questions: EditableQuestion[];
 };
 
@@ -39,7 +38,7 @@ const pillClassName =
   "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
 
 const fieldClassName =
-  "rounded-2xl border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] placeholder:text-slate-500 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/60";
+  "rounded-2xl border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 caret-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] placeholder:text-slate-500 selection:bg-cyan-300 selection:text-slate-950 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/60";
 
 const selectOptions = [
   { value: "0", label: "Option A" },
@@ -55,10 +54,9 @@ export function DashboardQuizDetailClient({
   language,
   gameMode,
   difficulty,
-  isHub,
-  hubStatus,
-  isFlagged,
-  flagReason,
+  isPublishedToHub,
+  hubReviewStatus,
+  hubReviewReason,
   questions: initialQuestions,
 }: DashboardQuizDetailClientProps) {
   const [editMode, setEditMode] = useState(false);
@@ -222,11 +220,10 @@ export function DashboardQuizDetailClient({
 
             <p className="mt-3 text-slate-300">{metaText}</p>
             <p className="mt-2 text-sm text-slate-300">
-              Hub: {isHub ? "Approved" : hubStatus ?? "Not reviewed"}
-              {isFlagged ? " · Flagged for moderation" : ""}
+              Hub Submission: {isPublishedToHub ? "Approved" : hubReviewStatus ?? "Not submitted"}
             </p>
-            {flagReason ? (
-              <p className="mt-1 text-sm text-slate-400">Reason: {flagReason}</p>
+            {hubReviewReason ? (
+              <p className="mt-1 text-sm text-slate-400">Reason: {hubReviewReason}</p>
             ) : null}
             {editMode ? (
               <p className="mt-2 text-sm text-slate-400">
