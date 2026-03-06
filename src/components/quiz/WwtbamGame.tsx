@@ -692,33 +692,33 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
-      <main className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-6 sm:py-6 md:px-10">
+      <main className="mx-auto w-full max-w-6xl space-y-4 md:space-y-6">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-          <section className="space-y-5">
+          <section className="space-y-4 md:space-y-5">
           <div className="overflow-hidden rounded-full border border-slate-700 bg-slate-900">
             <div
-              className="h-4 bg-gradient-to-r from-cyan-400 to-amber-400 transition-all duration-1000"
+              className="h-3 bg-gradient-to-r from-cyan-400 to-amber-400 transition-all duration-1000 md:h-4"
               style={{ width: `${Math.max(0, timerPercentage)}%` }}
             />
           </div>
 
-          <article className="space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:p-7">
-            <header className="space-y-3">
-              <p className="text-base font-semibold uppercase tracking-wide text-amber-300 md:text-lg">
+          <article className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:space-y-5 md:p-7">
+            <header className="space-y-2 md:space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-amber-300 md:text-lg">
                 Question {currentQuestionIndex + 1} of {questions.length}
               </p>
-              <h1 className="text-2xl leading-tight font-bold md:text-3xl">
+              <h1 className="text-xl leading-tight font-bold md:text-3xl">
                 {currentQuestion.questionText}
               </h1>
             </header>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 md:gap-4">
               {[0, 1, 2, 3].map((index) => {
                 const option = currentQuestion.options[index];
                 const isEliminated = eliminatedOptions.includes(index);
@@ -730,6 +730,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 return (
                   <GameButton
                     key={index}
+                    className="min-h-16 text-base md:min-h-16 md:text-lg"
                     disabled={optionsDisabled || isEliminated || !isVisible}
                     focused={focusedControl === `answer-${index}`}
                     state={
@@ -751,7 +752,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
             {selectedAnswerIndex !== null && !revealedAnswer ? (
               <div className="flex items-center justify-between gap-4">
-                <p className="text-lg font-semibold text-slate-300">Lock in your final answer?</p>
+                <p className="text-base font-semibold text-slate-300 md:text-lg">Lock in your final answer?</p>
                 <CircularButton
                   focused={focusedControl === "final"}
                   selected={finalAnswerLocked}
@@ -782,6 +783,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             <div className="grid gap-3 md:grid-cols-2">
               <GameButton
                 centered
+                className="min-h-14 text-base md:text-lg"
                 focused={focusedControl === "lifeline-5050"}
                 disabled={usedLifelines.fiftyFifty || optionsDisabled || revealedAnswer}
                 onClick={() => void handleFiftyFifty()}
@@ -791,6 +793,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
               <GameButton
                 centered
                 icon={<User size={20} />}
+                className="min-h-14 text-base md:text-lg"
                 focused={focusedControl === "lifeline-ask-host"}
                 disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
                 onClick={() => void handleAskHost()}
@@ -805,9 +808,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           ) : null}
           </section>
 
-          <aside className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-4">
-          <h2 className="mb-2 text-lg font-bold text-amber-300">Money Ladder</h2>
-          <div className="grid gap-2">
+          <aside className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 md:p-4">
+          <h2 className="mb-2 text-base font-bold text-amber-300 md:text-lg">Money Ladder</h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             {MONEY_LADDER.map((amount, index) => {
               const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
               const isCurrent = index === currentQuestionIndex;
@@ -817,7 +820,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 <div
                   key={amount}
                   className={[
-                    "min-h-16 rounded-lg border px-3 py-2 text-base font-semibold",
+                    "min-h-12 rounded-lg border px-3 py-2 text-sm font-semibold md:min-h-16 md:text-base",
                     isCurrent
                       ? "border-amber-300 bg-amber-400/20 text-amber-200"
                       : isPassed

@@ -606,24 +606,24 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     currentCorrectOptionIndex !== null ? currentQuestion.options[currentCorrectOptionIndex]?.explanation : "";
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
-      <main className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-6 sm:py-6 md:px-10">
+      <main className="mx-auto w-full max-w-6xl space-y-4 md:space-y-6">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
-        <section className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:p-7">
+        <section className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-lg font-semibold text-cyan-200 md:text-xl">
+            <p className="text-base font-semibold text-cyan-200 md:text-xl">
               Question {currentQuestionIndex + 1} of {totalQuestions}
             </p>
-            <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-4 py-1 text-sm font-bold text-amber-100 md:text-base">
+            <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-100 md:px-4 md:text-base">
               {currentPlayerName}&apos;s turn
             </span>
           </div>
 
-          <div className="h-3 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+          <div className="h-2 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-3">
             <div
               className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 transition-all"
               style={{ width: `${progressPercentage}%` }}
@@ -632,11 +632,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
           {timerEnabled ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-base font-semibold text-slate-300">
+              <div className="flex items-center justify-between text-sm font-semibold text-slate-300 md:text-base">
                 <span>Time left</span>
                 <span>{remainingSeconds}s</span>
               </div>
-              <div className="h-4 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+              <div className="h-3 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-4">
                 <div
                   className={cn(
                     "h-full bg-gradient-to-r transition-all duration-1000",
@@ -648,9 +648,9 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             </div>
           ) : null}
 
-          <h2 className="text-2xl leading-tight font-bold md:text-4xl">{currentQuestion.questionText}</h2>
+          <h2 className="text-xl leading-tight font-bold md:text-4xl">{currentQuestion.questionText}</h2>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
             {[0, 1, 2, 3].map((index) => {
               const option = currentQuestion.options[index];
               const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
@@ -660,7 +660,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               return (
                 <GameButton
                   key={index}
-                  className="min-h-20 text-lg md:text-xl"
+                  className="min-h-16 text-base md:min-h-20 md:text-xl"
                   state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
                   focused={phase === "question" && focusedAnswerIndex === index}
                   disabled={phase !== "question"}
@@ -673,19 +673,19 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
           </div>
 
           {phase === "reveal" ? (
-            <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-950/70 p-4">
-              <p className="text-lg font-semibold text-slate-100 md:text-xl">
+            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/70 p-3 md:space-y-4 md:p-4">
+              <p className="text-base font-semibold text-slate-100 md:text-xl">
                 {selectedAnswerIndex === null
                   ? `${currentPlayerName} ran out of time.`
                   : selectedAnswerIndex === currentCorrectOptionIndex
                     ? `${currentPlayerName} is correct!`
                     : `${currentPlayerName} is incorrect.`}
               </p>
-              <p className="text-base leading-relaxed text-slate-300 md:text-lg">
+              <p className="text-sm leading-relaxed text-slate-300 md:text-lg">
                 {correctExplanation || "No explanation provided for this question."}
               </p>
               <div className="flex justify-center">
-                <GameButton centered className="min-h-14 max-w-xs text-lg" onClick={moveToNextTurn}>
+                <GameButton centered className="min-h-12 max-w-xs text-base md:min-h-14 md:text-lg" onClick={moveToNextTurn}>
                   {currentQuestionIndex + 1 >= totalQuestions ? "Show Leaderboard" : "Next Turn"}
                 </GameButton>
               </div>
@@ -694,7 +694,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         </section>
 
         <section className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-6">
-          <h3 className="text-xl font-bold text-slate-100">Live Scoreboard</h3>
+          <h3 className="text-lg font-bold text-slate-100 md:text-xl">Live Scoreboard</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {playerNames.map((name, index) => {
               const playerAnswers = results.filter((result) => result.playerIndex === index);

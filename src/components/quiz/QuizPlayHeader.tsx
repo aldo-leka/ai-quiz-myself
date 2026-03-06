@@ -14,10 +14,23 @@ export function QuizPlayHeader({
   creatorImage,
 }: QuizPlayHeaderProps) {
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5 md:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-black tracking-tight text-slate-100 md:text-4xl">{title}</h1>
-        <QuizCreatorAttribution creatorName={creatorName} creatorImage={creatorImage} size="md" />
+    <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 md:p-6">
+      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:gap-3 md:space-y-0">
+        <h1 className="text-2xl leading-tight font-black tracking-tight text-slate-100 md:text-4xl">
+          {title}
+        </h1>
+        <QuizCreatorAttribution
+          creatorName={creatorName}
+          creatorImage={creatorImage}
+          size="sm"
+          className="w-fit md:hidden"
+        />
+        <QuizCreatorAttribution
+          creatorName={creatorName}
+          creatorImage={creatorImage}
+          size="md"
+          className="hidden md:inline-flex"
+        />
       </div>
     </section>
   );
