@@ -15,7 +15,7 @@ export function FilterPill({ isActive, onClick, children, className }: FilterPil
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-12 min-w-12 rounded-full border px-5 py-2 text-lg font-semibold transition",
+        "min-h-12 min-w-12 max-w-full min-w-0 overflow-hidden truncate rounded-full border px-5 py-2 text-lg font-semibold whitespace-nowrap transition",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
         isActive
           ? "border-cyan-400 bg-cyan-500/20 text-cyan-100"

@@ -534,7 +534,7 @@ function HomePageContent() {
   }
 
   return (
-    <div ref={pageRef} className="min-h-screen bg-slate-950 text-slate-100">
+    <div ref={pageRef} className="min-h-screen overflow-x-clip bg-slate-950 text-slate-100">
       <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-6 md:px-8 md:py-8">
         <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-2xl md:p-8">
           <div className="flex flex-col gap-6">
