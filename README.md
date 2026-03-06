@@ -552,4 +552,9 @@ Check:
 
 ## License
 
-No license file is currently included in this repository.
+This project is licensed under the GNU Affero General Public License v3.0.
+
+- License file: [LICENSE](./LICENSE)
+- SPDX identifier: `AGPL-3.0-only`
+
+This means hosted/networked modified versions must also make their source changes available under the same license.
