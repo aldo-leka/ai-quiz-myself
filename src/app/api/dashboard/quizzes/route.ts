@@ -86,7 +86,7 @@ export async function GET(request: Request) {
   const mode = normalizeGameMode(searchParams.get("gameMode"));
 
   const offset = (page - 1) * limit;
-  const quizFilters = [eq(quizzes.creatorId, session.user.id)];
+  const quizFilters = [eq(quizzes.creatorId, session.user.id), eq(quizzes.isHub, false)];
   if (mode !== "all") {
     quizFilters.push(eq(quizzes.gameMode, mode));
   }

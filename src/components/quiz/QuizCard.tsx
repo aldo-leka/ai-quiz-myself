@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock3, Gamepad2, ThumbsUp, Trophy, Tv, UserRound, Users } from "lucide-react";
+import { QuizCreatorAttribution } from "@/components/quiz/QuizCreatorAttribution";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ type QuizCardProps = {
   questionCount: number;
   playCount: number;
   likeRatio?: number | null;
+  creatorName?: string | null;
+  creatorImage?: string | null;
   statusLabel?: string;
   statusTone?: QuizCardStatusTone;
   interactive?: boolean;
@@ -68,6 +71,8 @@ function QuizCardBody({
   questionCount,
   playCount,
   likeRatio,
+  creatorName,
+  creatorImage,
   statusLabel,
   statusTone,
   showRating,
@@ -80,6 +85,7 @@ function QuizCardBody({
       <h3 className="line-clamp-2 text-2xl font-bold text-slate-100">{title}</h3>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <QuizCreatorAttribution creatorName={creatorName} creatorImage={creatorImage} />
         <Badge
           variant="outline"
           className="min-h-8 border-cyan-500/40 bg-cyan-500/10 px-3 text-sm text-cyan-100"

@@ -57,6 +57,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         eq(questions.id, questionId),
         eq(questions.quizId, quizId),
         eq(quizzes.creatorId, session.user.id),
+        eq(quizzes.isHub, false),
       ),
     )
     .limit(1);

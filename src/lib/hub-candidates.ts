@@ -83,11 +83,16 @@ export async function createHubCandidate(params: {
   return candidate;
 }
 
-export async function publishHubCandidateSnapshot(snapshot: HubCandidateSnapshot) {
+export async function publishHubCandidateSnapshot(
+  snapshot: HubCandidateSnapshot,
+  params?: {
+    creatorId?: string | null;
+  },
+) {
   const [publishedQuiz] = await db
     .insert(quizzes)
     .values({
-      creatorId: null,
+      creatorId: params?.creatorId ?? null,
       title: snapshot.title,
       description: null,
       theme: snapshot.theme,

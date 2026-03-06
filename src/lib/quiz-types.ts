@@ -35,6 +35,8 @@ export type PlayableQuestion = QuestionRecord & {
 };
 
 export type QuizWithQuestions = QuizRecord & {
+  creatorName?: string | null;
+  creatorImage?: string | null;
   questions: PlayableQuestion[];
 };
 

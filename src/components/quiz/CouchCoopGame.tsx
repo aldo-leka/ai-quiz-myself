@@ -5,6 +5,7 @@ import { CheckCircle2, Medal, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
+import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { authClient } from "@/lib/auth-client";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
@@ -399,6 +400,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
         <main className="mx-auto w-full max-w-4xl space-y-6">
+          <QuizPlayHeader
+            title={quiz.title}
+            creatorName={quiz.creatorName}
+            creatorImage={quiz.creatorImage}
+          />
           <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
             <div className="space-y-2 text-center">
               <h1 className="text-4xl font-black tracking-tight md:text-5xl">Who&apos;s playing?</h1>
@@ -522,6 +528,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
         <main className="mx-auto w-full max-w-5xl space-y-6">
+          <QuizPlayHeader
+            title={quiz.title}
+            creatorName={quiz.creatorName}
+            creatorImage={quiz.creatorImage}
+          />
           <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
             <div className="space-y-2 text-center">
               <h2 className="text-4xl font-black tracking-tight md:text-5xl">Leaderboard</h2>
@@ -597,6 +608,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
       <main className="mx-auto w-full max-w-6xl space-y-6">
+        <QuizPlayHeader
+          title={quiz.title}
+          creatorName={quiz.creatorName}
+          creatorImage={quiz.creatorImage}
+        />
         <section className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-lg font-semibold text-cyan-200 md:text-xl">

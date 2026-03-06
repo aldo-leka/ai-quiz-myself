@@ -42,7 +42,13 @@ export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
       isHub: quizzes.isHub,
     })
     .from(quizzes)
-    .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)))
+    .where(
+      and(
+        eq(quizzes.id, quizId),
+        eq(quizzes.creatorId, session.user.id),
+        eq(quizzes.isHub, false),
+      ),
+    )
     .limit(1);
 
   if (!quiz) {

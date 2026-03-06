@@ -7,6 +7,7 @@ import { AnimatedText } from "@/components/quiz/AnimatedText";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
+import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { useHostCommunication } from "@/hooks/useHostCommunication";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -692,8 +693,14 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
-      <main className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1fr_280px]">
-        <section className="space-y-5">
+      <main className="mx-auto w-full max-w-6xl space-y-6">
+        <QuizPlayHeader
+          title={quiz.title}
+          creatorName={quiz.creatorName}
+          creatorImage={quiz.creatorImage}
+        />
+        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+          <section className="space-y-5">
           <div className="overflow-hidden rounded-full border border-slate-700 bg-slate-900">
             <div
               className="h-4 bg-gradient-to-r from-cyan-400 to-amber-400 transition-all duration-1000"
@@ -796,9 +803,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           {hostMessage ? (
             <AnimatedText text={hostMessage} onCue={onHostCue} onComplete={hostMessageOnComplete} />
           ) : null}
-        </section>
+          </section>
 
-        <aside className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+          <aside className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-4">
           <h2 className="mb-2 text-lg font-bold text-amber-300">Money Ladder</h2>
           <div className="grid gap-2">
             {MONEY_LADDER.map((amount, index) => {
@@ -824,7 +831,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
               );
             })}
           </div>
-        </aside>
+          </aside>
+        </div>
       </main>
     </div>
   );

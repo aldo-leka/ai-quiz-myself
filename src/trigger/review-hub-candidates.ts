@@ -154,6 +154,7 @@ async function loadCandidate(candidateId: string) {
     .select({
       id: hubCandidates.id,
       status: hubCandidates.status,
+      submittedByUserId: hubCandidates.submittedByUserId,
       title: hubCandidates.title,
       theme: hubCandidates.theme,
       language: hubCandidates.language,
@@ -305,7 +306,9 @@ export const reviewHubCandidateTask = task({
         return { ok: true, candidateId, approved: false, reason: decision };
       }
 
-      const publishedQuizId = await publishHubCandidateSnapshot(snapshot);
+      const publishedQuizId = await publishHubCandidateSnapshot(snapshot, {
+        creatorId: candidate.submittedByUserId,
+      });
       await storeQuizEmbedding(publishedQuizId, embedding);
       await updateCandidateStatus(candidateId, {
         status: "approved",

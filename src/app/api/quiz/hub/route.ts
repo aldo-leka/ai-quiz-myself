@@ -1,9 +1,11 @@
-import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
+  hubCandidates,
   quizDifficultyEnum,
   quizGameModeEnum,
   quizzes,
+  user,
 } from "@/db/schema";
 import { db } from "@/db";
 
@@ -87,8 +89,12 @@ export async function GET(request: Request) {
       likes: quizzes.likes,
       dislikes: quizzes.dislikes,
       createdAt: quizzes.createdAt,
+      creatorName: user.name,
+      creatorImage: user.image,
+      creatorAvatarUrl: user.avatarUrl,
     })
     .from(quizzes)
+    .leftJoin(user, eq(quizzes.creatorId, user.id))
     .where(whereClause)
     .orderBy(
       sort === "popular" ? desc(quizzes.playCount) : desc(quizzes.createdAt),
@@ -97,8 +103,36 @@ export async function GET(request: Request) {
     .limit(limit)
     .offset(offset);
 
+  const missingCreatorQuizIds = rows
+    .filter((quiz) => quiz.creatorName === null)
+    .map((quiz) => quiz.id);
+
+  const fallbackCreators = missingCreatorQuizIds.length
+    ? await db
+        .select({
+          publishedQuizId: hubCandidates.publishedQuizId,
+          creatorName: user.name,
+          creatorImage: user.image,
+          creatorAvatarUrl: user.avatarUrl,
+        })
+        .from(hubCandidates)
+        .leftJoin(user, eq(hubCandidates.submittedByUserId, user.id))
+        .where(inArray(hubCandidates.publishedQuizId, missingCreatorQuizIds))
+    : [];
+
+  const fallbackCreatorMap = new Map(
+    fallbackCreators.map((row) => [
+      row.publishedQuizId,
+      {
+        creatorName: row.creatorName,
+        creatorImage: row.creatorAvatarUrl ?? row.creatorImage,
+      },
+    ]),
+  );
+
   const hubQuizzes = rows.map((quiz) => {
     const voteCount = quiz.likes + quiz.dislikes;
+    const fallbackCreator = fallbackCreatorMap.get(quiz.id) ?? null;
     return {
       id: quiz.id,
       title: quiz.title,
@@ -110,6 +144,12 @@ export async function GET(request: Request) {
       likes: quiz.likes,
       dislikes: quiz.dislikes,
       likeRatio: voteCount > 0 ? quiz.likes / voteCount : null,
+      creatorName: quiz.creatorName ?? fallbackCreator?.creatorName ?? null,
+      creatorImage:
+        quiz.creatorAvatarUrl ??
+        quiz.creatorImage ??
+        fallbackCreator?.creatorImage ??
+        null,
     };
   });
 

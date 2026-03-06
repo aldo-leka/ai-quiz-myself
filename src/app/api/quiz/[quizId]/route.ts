@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizzes } from "@/db/schema";
+import { hubCandidates, questions, quizzes, user } from "@/db/schema";
 
 type RouteContext = {
   params: Promise<{ quizId: string }>;
@@ -54,16 +54,48 @@ function shuffleQuestionOptions(
 export async function GET(_: Request, { params }: RouteContext) {
   const { quizId } = await params;
 
-  const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId)).limit(1);
+  const [quizRow] = await db
+    .select({
+      quiz: quizzes,
+      creatorName: user.name,
+      creatorImage: user.image,
+      creatorAvatarUrl: user.avatarUrl,
+    })
+    .from(quizzes)
+    .leftJoin(user, eq(quizzes.creatorId, user.id))
+    .where(eq(quizzes.id, quizId))
+    .limit(1);
 
-  if (!quiz) {
+  if (!quizRow) {
     return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+  }
+
+  let creatorName = quizRow.creatorName;
+  let creatorImage = quizRow.creatorAvatarUrl ?? quizRow.creatorImage ?? null;
+
+  if (!creatorName && quizRow.quiz.isHub) {
+    const [fallbackCreator] = await db
+      .select({
+        creatorName: user.name,
+        creatorImage: user.image,
+        creatorAvatarUrl: user.avatarUrl,
+      })
+      .from(hubCandidates)
+      .leftJoin(user, eq(hubCandidates.submittedByUserId, user.id))
+      .where(eq(hubCandidates.publishedQuizId, quizRow.quiz.id))
+      .limit(1);
+
+    creatorName = fallbackCreator?.creatorName ?? null;
+    creatorImage =
+      fallbackCreator?.creatorAvatarUrl ??
+      fallbackCreator?.creatorImage ??
+      creatorImage;
   }
 
   const rawQuestions = await db
     .select()
     .from(questions)
-    .where(eq(questions.quizId, quiz.id))
+    .where(eq(questions.quizId, quizRow.quiz.id))
     .orderBy(asc(questions.position));
 
   const normalizedQuestions = rawQuestions.map((question) => {
@@ -79,7 +111,9 @@ export async function GET(_: Request, { params }: RouteContext) {
 
   return NextResponse.json({
     quiz: {
-      ...quiz,
+      ...quizRow.quiz,
+      creatorName,
+      creatorImage,
       questions: normalizedQuestions,
     },
   });

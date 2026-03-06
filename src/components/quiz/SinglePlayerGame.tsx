@@ -5,6 +5,7 @@ import { CheckCircle2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
+import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { authClient } from "@/lib/auth-client";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
@@ -367,6 +368,11 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
       <main className="mx-auto w-full max-w-5xl space-y-6">
+        <QuizPlayHeader
+          title={quiz.title}
+          creatorName={quiz.creatorName}
+          creatorImage={quiz.creatorImage}
+        />
         {phase === "question" || phase === "reveal" ? (
           <section className="space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:p-7">
             <header className="space-y-4">

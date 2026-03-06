@@ -35,7 +35,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     .set({
       title: parsed.data.title,
     })
-    .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)))
+    .where(
+      and(
+        eq(quizzes.id, quizId),
+        eq(quizzes.creatorId, session.user.id),
+        eq(quizzes.isHub, false),
+      ),
+    )
     .returning({
       id: quizzes.id,
       title: quizzes.title,
@@ -60,7 +66,13 @@ export async function DELETE(_: Request, { params }: RouteContext) {
       id: quizzes.id,
     })
     .from(quizzes)
-    .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)))
+    .where(
+      and(
+        eq(quizzes.id, quizId),
+        eq(quizzes.creatorId, session.user.id),
+        eq(quizzes.isHub, false),
+      ),
+    )
     .limit(1);
 
   if (!existingQuiz) {
@@ -71,7 +83,13 @@ export async function DELETE(_: Request, { params }: RouteContext) {
 
   await db
     .delete(quizzes)
-    .where(and(eq(quizzes.id, quizId), eq(quizzes.creatorId, session.user.id)));
+    .where(
+      and(
+        eq(quizzes.id, quizId),
+        eq(quizzes.creatorId, session.user.id),
+        eq(quizzes.isHub, false),
+      ),
+    );
 
   return NextResponse.json({ success: true });
 }

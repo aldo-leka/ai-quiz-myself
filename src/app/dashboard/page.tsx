@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Play, Plus, Trophy } from "lucide-react";
 import { QuizCard } from "@/components/quiz/QuizCard";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ export default async function DashboardOverviewPage() {
         totalQuizzes: sql<number>`count(*)::int`,
       })
       .from(quizzes)
-      .where(eq(quizzes.creatorId, userId)),
+      .where(and(eq(quizzes.creatorId, userId), eq(quizzes.isHub, false))),
     db
       .select({
         totalGames: sql<number>`count(*)::int`,
@@ -62,7 +62,7 @@ export default async function DashboardOverviewPage() {
         dislikes: quizzes.dislikes,
       })
       .from(quizzes)
-      .where(eq(quizzes.creatorId, userId))
+      .where(and(eq(quizzes.creatorId, userId), eq(quizzes.isHub, false)))
       .orderBy(desc(quizzes.createdAt))
       .limit(5),
     db
@@ -160,6 +160,8 @@ export default async function DashboardOverviewPage() {
                   questionCount={quiz.questionCount}
                   playCount={quiz.playCount}
                   likeRatio={totalVotes > 0 ? quiz.likes / totalVotes : null}
+                  creatorName={session.user.name}
+                  creatorImage={session.user.avatarUrl ?? session.user.image ?? null}
                   statusLabel="Ready"
                 >
                   <Button

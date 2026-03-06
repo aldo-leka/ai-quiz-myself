@@ -25,6 +25,8 @@ type HubQuiz = {
   likes: number;
   dislikes: number;
   likeRatio: number | null;
+  creatorName: string | null;
+  creatorImage: string | null;
 };
 
 type HubResponse = {
@@ -593,6 +595,8 @@ function HomePageContent() {
                       questionCount={quiz.questionCount}
                       playCount={quiz.playCount}
                       likeRatio={quiz.likeRatio}
+                      creatorName={quiz.creatorName}
+                      creatorImage={quiz.creatorImage}
                       statusLabel="Ready"
                       onClick={() => router.push(`/play/${quiz.id}`)}
                       onKeyDown={(event) => handleCardKeyDown(event, index, quiz.id)}

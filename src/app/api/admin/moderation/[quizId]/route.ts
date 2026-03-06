@@ -29,6 +29,7 @@ export async function PATCH(_: Request, { params }: RouteContext) {
     .select({
       id: hubCandidates.id,
       status: hubCandidates.status,
+      submittedByUserId: hubCandidates.submittedByUserId,
       snapshot: hubCandidates.snapshot,
     })
     .from(hubCandidates)
@@ -52,7 +53,9 @@ export async function PATCH(_: Request, { params }: RouteContext) {
     );
   }
 
-  const publishedQuizId = await publishHubCandidateSnapshot(snapshot);
+  const publishedQuizId = await publishHubCandidateSnapshot(snapshot, {
+    creatorId: candidate.submittedByUserId,
+  });
   await storeQuizEmbedding(publishedQuizId, embedding);
 
   await db

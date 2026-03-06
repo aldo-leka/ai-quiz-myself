@@ -1,8 +1,9 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import {
+  hubCandidates,
   questionDifficultyEnum,
   questions,
   quizDifficultyEnum,
@@ -129,9 +130,45 @@ export async function GET(request: Request) {
   ]);
 
   const total = Number(countRows[0]?.total ?? 0);
+  const missingCreatorQuizIds = rows
+    .filter((quiz) => quiz.creatorName === null)
+    .map((quiz) => quiz.id);
+
+  const fallbackCreators = missingCreatorQuizIds.length
+    ? await db
+        .select({
+          publishedQuizId: hubCandidates.publishedQuizId,
+          creatorId: hubCandidates.submittedByUserId,
+          creatorName: user.name,
+          creatorEmail: user.email,
+        })
+        .from(hubCandidates)
+        .leftJoin(user, eq(hubCandidates.submittedByUserId, user.id))
+        .where(inArray(hubCandidates.publishedQuizId, missingCreatorQuizIds))
+    : [];
+
+  const fallbackCreatorMap = new Map(
+    fallbackCreators.map((row) => [
+      row.publishedQuizId,
+      {
+        creatorId: row.creatorId,
+        creatorName: row.creatorName,
+        creatorEmail: row.creatorEmail,
+      },
+    ]),
+  );
 
   return NextResponse.json({
-    quizzes: rows,
+    quizzes: rows.map((quiz) => {
+      const fallbackCreator = fallbackCreatorMap.get(quiz.id) ?? null;
+
+      return {
+        ...quiz,
+        creatorId: quiz.creatorId ?? fallbackCreator?.creatorId ?? null,
+        creatorName: quiz.creatorName ?? fallbackCreator?.creatorName ?? null,
+        creatorEmail: quiz.creatorEmail ?? fallbackCreator?.creatorEmail ?? null,
+      };
+    }),
     page,
     limit,
     total,
