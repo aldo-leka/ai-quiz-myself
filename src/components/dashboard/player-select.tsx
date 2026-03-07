@@ -35,9 +35,9 @@ export function PlayerSelect<T extends string>({
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-12 rounded-2xl border-slate-700 bg-slate-950/80 px-4 text-base text-slate-100 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] transition",
-          "data-[state=open]:border-cyan-400 data-[state=open]:shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_12px_36px_rgba(8,47,73,0.55)]",
-          "focus-visible:ring-cyan-400/60",
+          "h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] transition md:h-16 md:text-2xl",
+          "data-[state=open]:border-[#818cf8]/55 data-[state=open]:shadow-[0_0_0_1px_rgba(129,140,248,0.24),0_16px_40px_rgba(15,17,23,0.46)]",
+          "focus-visible:ring-[#818cf8]/55",
           widthClassName,
         )}
       >
@@ -45,7 +45,7 @@ export function PlayerSelect<T extends string>({
       </SelectTrigger>
       <SelectContent
         className={cn(
-          "rounded-2xl border-cyan-500/45 bg-slate-900/95 text-slate-100 shadow-2xl backdrop-blur-md",
+          "rounded-2xl border-[#6c8aff]/40 bg-[#1a1d2e]/96 text-[#e4e4e9] shadow-2xl backdrop-blur-md",
         )}
         position="popper"
         align="start"
@@ -54,7 +54,7 @@ export function PlayerSelect<T extends string>({
           <SelectItem
             key={option.value}
             value={option.value}
-            className="rounded-xl py-2.5 pr-8 pl-3 text-sm text-slate-100 focus:bg-cyan-500/20 focus:text-cyan-100 data-[state=checked]:bg-cyan-500/15"
+            className="rounded-xl py-3 pr-8 pl-4 text-base text-[#e4e4e9] focus:bg-[#6c8aff]/18 focus:text-[#e4e4e9] data-[state=checked]:bg-[#6c8aff]/14 md:text-lg"
           >
             {option.label}
           </SelectItem>

@@ -282,18 +282,18 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
-        <h2 className="text-3xl font-black tracking-tight text-slate-100 md:text-4xl">
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
+        <h2 className="text-[clamp(2.6rem,4vw,4.6rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
           Billing & Wallet
         </h2>
-        <p className="mt-2 text-lg text-slate-300">
+        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
           Manage credit balance, payment method, and auto recharge.
         </p>
       </section>
 
       {loading ? (
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+        <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 text-[#9394a5]">
           Loading billing data...
         </section>
       ) : null}
@@ -306,14 +306,14 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
 
       {!loading && data ? (
         <>
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+          <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
             <div className="flex flex-wrap items-start justify-between gap-5">
               <div className="space-y-2">
-                <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-base font-semibold uppercase tracking-wide text-[#9394a5] md:text-lg">
                   Credit balance
                 </p>
-                <p className="text-4xl font-black text-cyan-100">{centsToUsd(data.balanceCents)}</p>
-                <p className="text-sm text-slate-300">
+                <p className="text-5xl font-black text-[#e4e4e9] md:text-6xl">{centsToUsd(data.balanceCents)}</p>
+                <p className="text-base text-[#9394a5] md:text-lg">
                   Standard quiz cost: {centsToUsd(data.standardGenerationCostCents)} | PDF:{" "}
                   {centsToUsd(data.pdfGenerationCostCents)}
                 </p>
@@ -322,9 +322,9 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                 <Button
                   type="button"
                   onClick={() => setTopUpModalOpen(true)}
-                  className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+                  className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
                 >
-                  <Wallet className="mr-2 size-4" />
+                  <Wallet className="mr-2 size-5" />
                   Add to credit balance
                 </Button>
                 <Button
@@ -332,31 +332,31 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   variant="outline"
                   onClick={() => void openBillingPortal()}
                   disabled={portalLoading}
-                  className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+                  className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-6 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
                 >
-                  <CreditCard className="mr-2 size-4" />
+                  <CreditCard className="mr-2 size-5" />
                   {portalLoading ? "Opening..." : "Manage payment method"}
                 </Button>
               </div>
             </div>
             {!data.hasPaymentMethod ? (
-              <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+              <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
                 No saved payment method yet. Complete one top-up first, then auto recharge can run off-session.
               </p>
             ) : null}
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
-            <h3 className="text-2xl font-black text-slate-100">Auto recharge</h3>
-            <p className="mt-2 text-slate-300">
+          <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
+            <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Auto recharge</h3>
+            <p className="mt-3 text-lg text-[#9394a5] md:text-2xl">
               When enabled, we check balance every minute and recharge to your target amount.
             </p>
 
             <div className="mt-5 space-y-4">
-              <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-slate-100">
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 px-5 py-4 text-lg text-[#e4e4e9] md:text-xl">
                 <input
                   type="checkbox"
-                  className="size-4 accent-cyan-400"
+                  className="size-4 accent-[#6c8aff]"
                   checked={autoRechargeEnabled}
                   onChange={(event) => setAutoRechargeEnabled(event.target.checked)}
                 />
@@ -364,9 +364,9 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
               </label>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
-                  <p className="text-sm font-semibold text-slate-200">Trigger threshold ($5-$95)</p>
-                  <p className="text-xs text-slate-400">Auto recharge starts at or below this balance.</p>
+                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                  <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">Trigger threshold ($5-$95)</p>
+                  <p className="text-sm text-[#9394a5] md:text-base">Auto recharge starts at or below this balance.</p>
                   <div className="relative">
                     <Input
                       value={thresholdInput}
@@ -374,16 +374,16 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                       type="text"
                       inputMode="decimal"
                       placeholder="5.00"
-                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                      className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/92 pl-11 text-lg font-semibold text-[#e4e4e9] placeholder:text-[#6b6d7e] md:min-h-16 md:text-xl"
                     />
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#9394a5]">
                       $
                     </span>
                   </div>
                 </div>
-                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
-                  <p className="text-sm font-semibold text-slate-200">Target balance ($10-$100)</p>
-                  <p className="text-xs text-slate-400">Each recharge brings your wallet back to this amount.</p>
+                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                  <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">Target balance ($10-$100)</p>
+                  <p className="text-sm text-[#9394a5] md:text-base">Each recharge brings your wallet back to this amount.</p>
                   <div className="relative">
                     <Input
                       value={targetInput}
@@ -391,18 +391,18 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                       type="text"
                       inputMode="decimal"
                       placeholder="10.00"
-                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                      className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/92 pl-11 text-lg font-semibold text-[#e4e4e9] placeholder:text-[#6b6d7e] md:min-h-16 md:text-xl"
                     />
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#9394a5]">
                       $
                     </span>
                   </div>
                 </div>
-                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
-                  <p className="text-sm font-semibold text-slate-300">
+                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                  <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
                     Monthly cap ($10-$1000, optional)
                   </p>
-                  <p className="text-xs text-slate-400">Limit total auto recharges per calendar month.</p>
+                  <p className="text-sm text-[#9394a5] md:text-base">Limit total auto recharges per calendar month.</p>
                   <div className="relative">
                     <Input
                       value={monthlyCapInput}
@@ -410,9 +410,9 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                       type="text"
                       inputMode="decimal"
                       placeholder="No cap"
-                      className="min-h-12 border-slate-600 bg-slate-900/90 pl-10 text-base font-semibold text-slate-100 placeholder:text-slate-500"
+                      className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/92 pl-11 text-lg font-semibold text-[#e4e4e9] placeholder:text-[#6b6d7e] md:min-h-16 md:text-xl"
                     />
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#9394a5]">
                       $
                     </span>
                   </div>
@@ -420,9 +420,9 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
               </div>
 
               {willRechargeImmediately ? (
-                <div className="rounded-2xl border border-cyan-500/40 bg-cyan-500/10 p-4 text-cyan-100">
-                  <p className="text-lg font-bold">Recharge will happen immediately</p>
-                  <p className="mt-1 text-sm text-cyan-100/90">
+                <div className="rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-4 text-[#e4e4e9]">
+                  <p className="text-xl font-bold md:text-2xl">Recharge will happen immediately</p>
+                  <p className="mt-2 text-base text-[#e4e4e9]/90 md:text-lg">
                     Your credit balance is below the recharge threshold you&apos;ve set, so a
                     recharge will happen immediately after you save these settings.
                   </p>
@@ -434,43 +434,51 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   type="button"
                   onClick={() => void saveAutoRecharge()}
                   disabled={savingAutoRecharge}
-                  className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+                  className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
                 >
-                  <RefreshCcw className={cn("mr-2 size-4", savingAutoRecharge ? "animate-spin" : "")} />
+                  <RefreshCcw className={cn("mr-2 size-5", savingAutoRecharge ? "animate-spin" : "")} />
                   {savingAutoRecharge ? "Saving..." : "Save settings"}
                 </Button>
               </div>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
-            <h3 className="text-2xl font-black text-slate-100">Transaction history</h3>
-            <p className="mt-2 text-slate-300">Recent purchases, recharges, and generation charges.</p>
+          <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
+            <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Transaction history</h3>
+            <p className="mt-3 text-lg text-[#9394a5] md:text-2xl">
+              Recent purchases, recharges, and generation charges.
+            </p>
 
             <div className="mt-5 space-y-3">
               {data.transactions.length === 0 ? (
-                <p className="rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-slate-300">
+                <p className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 text-[#9394a5]">
                   No transactions yet.
                 </p>
               ) : (
                 data.transactions.map((transaction) => (
                   <div
                     key={transaction.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950/70 p-4"
+                    className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-5"
                   >
                     <div>
-                      <p className="font-semibold text-slate-100">{normalizeType(transaction.type)}</p>
-                      <p className="text-sm text-slate-400">{transaction.description}</p>
-                      <p className="text-xs text-slate-500">{formatDate(transaction.createdAt)}</p>
+                      <p className="text-xl font-semibold text-[#e4e4e9] md:text-2xl">
+                        {normalizeType(transaction.type)}
+                      </p>
+                      <p className="mt-1 text-base text-[#9394a5] md:text-lg">
+                        {transaction.description}
+                      </p>
+                      <p className="mt-1 text-sm text-[#6b6d7e] md:text-base">
+                        {formatDate(transaction.createdAt)}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className={cn("text-lg font-bold", amountClassName(transaction.amountCents))}>
+                      <p className={cn("text-2xl font-bold md:text-3xl", amountClassName(transaction.amountCents))}>
                         {transaction.amountCents >= 0 ? "+" : "-"}
                         {centsToUsd(Math.abs(transaction.amountCents))}
                       </p>
                       <p
                         className={cn(
-                          "text-xs uppercase tracking-wide",
+                          "text-sm uppercase tracking-wide",
                           transaction.status === "completed"
                             ? "text-emerald-300"
                             : transaction.status === "pending"
@@ -490,25 +498,25 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
       ) : null}
 
       {statusMessage ? (
-        <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-4 text-slate-100">
-          <p className="inline-flex items-center gap-2">
-            <AlertTriangle className="size-4 text-cyan-200" />
+        <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 text-[#e4e4e9]">
+          <p className="inline-flex items-center gap-2 text-base md:text-lg">
+            <AlertTriangle className="size-5 text-[#818cf8]" />
             {statusMessage}
           </p>
         </section>
       ) : null}
 
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
-        <DialogContent className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100">
+        <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-2xl font-black text-slate-100">Add to credit balance</DialogTitle>
-            <DialogDescription className="text-slate-300">
+            <DialogTitle className="text-2xl font-black text-[#e4e4e9]">Add to credit balance</DialogTitle>
+            <DialogDescription className="text-[#9394a5]">
               Choose a top-up amount. You will complete payment in Stripe checkout.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-300">Amount</p>
+            <p className="text-sm font-semibold text-[#9394a5]">Amount</p>
             <PlayerSelect
               value={topUpAmount}
               onValueChange={setTopUpAmount}
@@ -516,7 +524,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
               options={topUpSelectOptions}
               widthClassName="w-full"
             />
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-[#9394a5]">
               Current balance: {centsToUsd(data?.balanceCents ?? 0)}
             </p>
           </div>
@@ -525,7 +533,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+              className="min-h-11 border-[#252940] bg-[#1a1d2e]/86 text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]"
               disabled={topUpLoading}
               onClick={() => setTopUpModalOpen(false)}
             >
@@ -533,7 +541,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
             </Button>
             <Button
               type="button"
-              className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              className="min-h-11 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-[#e4e4e9] hover:bg-[#818cf8]/24"
               disabled={topUpLoading}
               onClick={() => void openTopUpCheckout()}
             >

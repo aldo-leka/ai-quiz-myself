@@ -72,11 +72,11 @@ const sortOptions: Array<{ value: SortFilter; label: string }> = [
 ];
 
 const playerButtonBaseClass =
-  "rounded-xl border transition focus-visible:ring-cyan-400/60";
+  "min-h-14 rounded-2xl border px-5 text-base transition focus-visible:ring-[#818cf8]/55 md:min-h-16 md:text-lg";
 const playerButtonCyanClass =
-  "border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30";
+  "border-[#6c8aff]/45 bg-[#6c8aff]/18 text-[#e4e4e9] hover:bg-[#818cf8]/24";
 const playerButtonSecondaryClass =
-  "border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/60 hover:bg-cyan-500/10 hover:text-cyan-100";
+  "border-[#252940] bg-[#1a1d2e]/86 text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]";
 const playerButtonDangerClass =
   "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100";
 
@@ -219,10 +219,12 @@ export function MyQuizzesPageClient({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+    <div className="space-y-8">
+      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-8">
         <div className="space-y-3">
-          <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
+          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
+            Game Mode
+          </h2>
           <div className="flex flex-wrap gap-3">
             {modeOptions.map((option) => (
               <FilterPill
@@ -240,7 +242,9 @@ export function MyQuizzesPageClient({
         </div>
 
         <div className="space-y-3">
-          <h2 className="text-2xl font-bold text-slate-100">Status</h2>
+          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
+            Status
+          </h2>
           <div className="flex flex-wrap gap-3">
             {statusOptions.map((option) => (
               <FilterPill
@@ -258,7 +262,9 @@ export function MyQuizzesPageClient({
         </div>
 
         <div className="space-y-3">
-          <h2 className="text-2xl font-bold text-slate-100">Sort</h2>
+          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
+            Sort
+          </h2>
           <div className="flex flex-wrap gap-3">
             {sortOptions.map((option) => (
               <FilterPill
@@ -276,14 +282,16 @@ export function MyQuizzesPageClient({
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-3xl font-black tracking-tight text-slate-100">My Quiz Library</h3>
-          <div className="flex items-center gap-3">
-            <p className="text-lg text-slate-300">{total} items</p>
+          <h3 className="text-[clamp(2.6rem,4vw,4.5rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
+            My Quiz Library
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xl text-[#9394a5] md:text-3xl">{total} items</p>
             <Button
               asChild
-              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonCyanClass}`}
+              className={playerButtonBaseClass + " " + playerButtonCyanClass}
             >
               <Link href="/dashboard/create">Create Quiz</Link>
             </Button>
@@ -291,25 +299,25 @@ export function MyQuizzesPageClient({
         </div>
 
         {error ? (
-          <p className="rounded-xl border border-rose-500/50 bg-rose-500/10 p-4 text-rose-200">
+          <p className="rounded-2xl border border-rose-500/50 bg-rose-500/10 p-4 text-base text-rose-200 md:text-lg">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 text-lg text-[#9394a5] md:text-2xl">
             Loading your quizzes...
           </div>
         ) : null}
 
         {!loading && rows.length === 0 && jobs.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center">
-            <p className="text-2xl font-semibold text-slate-200">
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-8 text-center md:p-10">
+            <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">
               No quizzes yet. Generate your first quiz!
             </p>
             <Button
               asChild
-              className={`mt-4 ${playerButtonBaseClass} ${playerButtonCyanClass}`}
+              className={"mt-5 " + playerButtonBaseClass + " " + playerButtonCyanClass}
             >
               <Link href="/dashboard/create">Create Quiz</Link>
             </Button>
@@ -325,28 +333,30 @@ export function MyQuizzesPageClient({
                 return (
                   <div
                     key={job.id}
-                    className="min-h-[320px] rounded-2xl border border-slate-700 bg-slate-900/90 p-5"
+                    className="min-h-[420px] rounded-3xl border border-[#252940] bg-[#1a1d2e]/92 p-6 md:p-7"
                   >
-                    <h4 className="text-2xl font-bold text-slate-100">{job.theme}</h4>
-                    <p className="mt-3 text-slate-300">Mode: {job.gameMode}</p>
-                    <p className="text-slate-300">Difficulty: {job.difficulty}</p>
-                    <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+                    <h4 className="text-3xl font-bold text-[#e4e4e9] md:text-4xl">{job.theme}</h4>
+                    <p className="mt-4 text-lg text-[#9394a5] md:text-2xl">Mode: {job.gameMode}</p>
+                    <p className="text-lg text-[#9394a5] md:text-2xl">Difficulty: {job.difficulty}</p>
+                    <div className="mt-6 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-5">
                       {isGenerating ? (
-                        <div className="flex items-center gap-2 text-amber-200">
-                          <Loader2 className="size-4 animate-spin" />
+                        <div className="flex items-center gap-3 text-lg text-amber-200 md:text-2xl">
+                          <Loader2 className="size-5 animate-spin" />
                           Generating...
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-rose-200">
-                            <AlertTriangle className="size-4" />
+                          <div className="flex items-center gap-3 text-lg text-rose-200 md:text-2xl">
+                            <AlertTriangle className="size-5" />
                             Failed
                           </div>
-                          <p className="text-sm text-rose-300">{job.errorMessage ?? "Generation failed."}</p>
+                          <p className="text-base text-rose-300 md:text-lg">
+                            {job.errorMessage ?? "Generation failed."}
+                          </p>
                         </div>
                       )}
                     </div>
-                    <p className="mt-4 text-sm text-slate-400">
+                    <p className="mt-5 text-base text-[#9394a5] md:text-lg">
                       Created {new Date(job.createdAt).toLocaleString()}
                     </p>
                   </div>
@@ -368,34 +378,32 @@ export function MyQuizzesPageClient({
                   creatorImage={creatorImage}
                   statusLabel="Ready"
                   statusTone="ready"
+                  size="large"
                 >
                   <div className="flex flex-wrap gap-2">
                     <Button
                       asChild
-                      size="sm"
-                      className={`${playerButtonBaseClass} ${playerButtonCyanClass}`}
+                      className={playerButtonBaseClass + " " + playerButtonCyanClass}
                     >
                       <Link href={`/play/${quiz.id}`}>
-                        <Play className="mr-1 size-4" />
+                        <Play className="mr-2 size-5" />
                         Play
                       </Link>
                     </Button>
                     <Button
                       asChild
-                      size="sm"
                       variant="outline"
-                      className={`${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+                      className={playerButtonBaseClass + " " + playerButtonSecondaryClass}
                     >
                       <Link href={`/dashboard/my-quizzes/${quiz.id}`}>View Details</Link>
                     </Button>
                     <Button
-                      size="sm"
                       variant="outline"
-                      className={`${playerButtonBaseClass} ${playerButtonDangerClass}`}
+                      className={playerButtonBaseClass + " " + playerButtonDangerClass}
                       onClick={() => setQuizPendingDelete(quiz)}
                       disabled={deletingQuizId === quiz.id}
                     >
-                      <Trash2 className="mr-1 size-4" />
+                      <Trash2 className="mr-2 size-5" />
                       {deletingQuizId === quiz.id ? "Deleting..." : "Delete"}
                     </Button>
                   </div>
@@ -410,7 +418,7 @@ export function MyQuizzesPageClient({
             <Button
               type="button"
               variant="outline"
-              className="border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
               onClick={() => setPage((previous) => previous + 1)}
             >
               Load More
@@ -428,13 +436,13 @@ export function MyQuizzesPageClient({
         }}
       >
         <AlertDialogContent
-          className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100 shadow-2xl"
+          className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9] shadow-2xl"
         >
           <AlertDialogHeader className="place-items-start text-left">
-            <AlertDialogTitle className="text-2xl font-black tracking-tight text-slate-100">
+            <AlertDialogTitle className="text-3xl font-black tracking-tight text-[#e4e4e9]">
               Delete Quiz
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-base leading-relaxed text-slate-300">
+            <AlertDialogDescription className="text-lg leading-relaxed text-[#9394a5]">
               {quizPendingDelete
                 ? `Delete "${quizPendingDelete.title}" and all related sessions? This cannot be undone.`
                 : "This action cannot be undone."}
@@ -443,13 +451,13 @@ export function MyQuizzesPageClient({
           <AlertDialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <AlertDialogCancel
               disabled={Boolean(deletingQuizId)}
-              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonSecondaryClass}`}
+              className={playerButtonBaseClass + " " + playerButtonSecondaryClass}
             >
               Cancel
             </AlertDialogCancel>
             <Button
               variant="outline"
-              className={`min-h-11 ${playerButtonBaseClass} ${playerButtonDangerClass}`}
+              className={playerButtonBaseClass + " " + playerButtonDangerClass}
               disabled={Boolean(deletingQuizId)}
               onClick={() => void deleteQuiz(quizPendingDelete)}
             >

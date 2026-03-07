@@ -8,7 +8,7 @@ type QuizCreatorAttributionProps = {
   creatorName?: string | null;
   creatorImage?: string | null;
   className?: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   label?: string;
 };
 
@@ -35,44 +35,47 @@ export function QuizCreatorAttribution({
   }
 
   const isCompact = size === "sm";
+  const isLarge = size === "lg";
 
   return (
     <div
       className={cn(
-        "relative inline-flex items-center rounded-full border text-slate-200",
+        "relative inline-flex items-center rounded-full border text-[#e4e4e9]",
         isCompact
-          ? "min-h-8 gap-1.5 border-cyan-500/40 bg-cyan-500/10 pl-3 pr-9 text-sm"
-          : "min-h-10 gap-2 border-cyan-500/45 bg-cyan-500/12 pl-4 pr-12 text-base",
+          ? "min-h-8 gap-1.5 border-[#6c8aff]/35 bg-[#6c8aff]/12 pl-3 pr-9 text-sm"
+          : isLarge
+            ? "min-h-12 gap-2.5 border-[#6c8aff]/40 bg-[#6c8aff]/12 pl-5 pr-14 text-base md:min-h-14 md:text-xl"
+            : "min-h-10 gap-2 border-[#6c8aff]/40 bg-[#6c8aff]/12 pl-4 pr-12 text-base",
         className,
       )}
     >
       <Sparkles
         className={cn(
-          "shrink-0 text-cyan-200 drop-shadow-[0_0_10px_rgba(103,232,249,0.28)]",
-          isCompact ? "size-5" : "size-6",
+          "shrink-0 text-[#818cf8]",
+          isCompact ? "size-5" : isLarge ? "size-6 md:size-7" : "size-6",
         )}
         strokeWidth={1.8}
       />
-      <span className="font-medium text-cyan-100">{label}</span>
+      <span className="font-medium text-[#9394a5]">{label}</span>
       <span
         className={cn(
-          "truncate text-slate-100",
-          isCompact ? "max-w-[10rem]" : "max-w-[17rem]",
+          "truncate text-[#e4e4e9]",
+          isCompact ? "max-w-[10rem]" : isLarge ? "max-w-[20rem]" : "max-w-[17rem]",
         )}
       >
         {creatorName}
       </span>
       <Avatar
         className={cn(
-          "absolute top-1/2 -translate-y-1/2 overflow-hidden border border-cyan-400/35 bg-slate-900/80 shadow-[0_0_14px_rgba(34,211,238,0.18)]",
-          isCompact ? "right-1 size-6" : "right-1.5 size-7",
+          "absolute top-1/2 -translate-y-1/2 overflow-hidden border border-[#818cf8]/35 bg-[#1a1d2e]/86 shadow-none",
+          isCompact ? "right-1 size-6" : isLarge ? "right-2 size-8 md:size-9" : "right-1.5 size-7",
         )}
       >
         <AvatarImage src={creatorImage ?? undefined} alt={creatorName} className="object-cover" />
         <AvatarFallback
           className={cn(
-            "bg-slate-800 font-semibold text-cyan-100",
-            isCompact ? "text-[10px]" : "text-[11px]",
+            "bg-[#252940] font-semibold text-[#e4e4e9]",
+            isCompact ? "text-[10px]" : isLarge ? "text-xs md:text-sm" : "text-[11px]",
           )}
         >
           {creatorInitials(creatorName)}

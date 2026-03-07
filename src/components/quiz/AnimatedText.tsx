@@ -249,14 +249,14 @@ export function AnimatedText({ text, onComplete, onCue }: AnimatedTextProps) {
     <button
       type="button"
       onClick={onTap}
-      className="w-full rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-left text-base leading-relaxed text-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+      className="w-full rounded-2xl border border-[#252940] bg-[#1a1d2e]/78 p-5 text-left text-[clamp(2rem,3vw,3.25rem)] leading-tight text-[#e4e4e9] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/70 md:p-6"
     >
       <span className="font-bold text-amber-300">Host:</span>{" "}
       <span>
         {displayedText}
         {!isComplete ? <span className="animate-pulse">▌</span> : null}
       </span>
-      <span className="mt-2 block text-sm text-slate-400">
+      <span className="mt-4 block text-base text-[#9394a5] md:text-lg">
         Press to {isComplete ? "continue" : "skip"}
       </span>
     </button>

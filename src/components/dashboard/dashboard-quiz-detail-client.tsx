@@ -35,10 +35,10 @@ type DashboardQuizDetailClientProps = {
 };
 
 const pillClassName =
-  "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "inline-flex min-h-14 items-center gap-2 rounded-full border px-5 py-2.5 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117] md:px-6 md:text-lg";
 
 const fieldClassName =
-  "rounded-2xl border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 caret-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.12)] placeholder:text-slate-500 selection:bg-cyan-300 selection:text-slate-950 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/60";
+  "rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 py-4 text-lg text-[#e4e4e9] caret-[#818cf8] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] placeholder:text-[#6b6d7e] selection:bg-[#818cf8] selection:text-[#0f1117] focus-visible:border-[#818cf8]/55 focus-visible:ring-[#818cf8]/55 md:text-xl";
 
 const selectOptions = [
   { value: "0", label: "Option A" },
@@ -198,35 +198,37 @@ export function DashboardQuizDetailClient({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             {editMode ? (
               <div className="space-y-3">
-                <label className="block text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300/80">
+                <label className="block text-base font-semibold uppercase tracking-[0.24em] text-[#818cf8]/75">
                   Quiz Title
                 </label>
                 <Input
                   value={quizTitle}
                   onChange={(event) => setQuizTitle(event.target.value)}
-                  className={cn("h-14 text-2xl font-black md:text-3xl", fieldClassName)}
+                  className={cn("h-16 text-3xl font-black md:h-20 md:text-5xl", fieldClassName)}
                   placeholder="Quiz title"
                 />
               </div>
             ) : (
-              <h2 className="text-3xl font-black text-slate-100 md:text-4xl">{quizTitle}</h2>
+              <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
+                {quizTitle}
+              </h2>
             )}
 
-            <p className="mt-3 text-slate-300">{metaText}</p>
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-4 text-lg text-[#9394a5] md:text-2xl">{metaText}</p>
+            <p className="mt-3 text-base text-[#9394a5] md:text-lg">
               Hub Submission: {isPublishedToHub ? "Approved" : hubReviewStatus ?? "Not submitted"}
             </p>
             {hubReviewReason ? (
-              <p className="mt-1 text-sm text-slate-400">Reason: {hubReviewReason}</p>
+              <p className="mt-1 text-base text-[#9394a5] md:text-lg">Reason: {hubReviewReason}</p>
             ) : null}
             {editMode ? (
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-base text-[#9394a5] md:text-lg">
                 {titleStatus || "Change the title or any question, then save the parts you updated."}
               </p>
             ) : null}
@@ -237,7 +239,7 @@ export function DashboardQuizDetailClient({
               href="/dashboard/my-quizzes"
               className={cn(
                 pillClassName,
-                "border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20",
+                "border-[#6c8aff]/45 bg-[#6c8aff]/12 text-[#e4e4e9] hover:bg-[#6c8aff]/18",
               )}
             >
               <ArrowLeft className="size-4" />
@@ -252,7 +254,7 @@ export function DashboardQuizDetailClient({
                   disabled={isSavingTitle || quizTitle.trim() === savedTitle}
                   className={cn(
                     pillClassName,
-                    "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60",
+                    "border-[#6c8aff]/45 bg-[#6c8aff]/14 text-[#e4e4e9] hover:bg-[#6c8aff]/22 disabled:cursor-not-allowed disabled:opacity-60",
                   )}
                 >
                   {isSavingTitle ? "Saving..." : "Save Title"}
@@ -262,7 +264,7 @@ export function DashboardQuizDetailClient({
                   onClick={handleCancelEditing}
                   className={cn(
                     pillClassName,
-                    "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800",
+                    "border-[#252940] bg-[#1a1d2e] text-[#e4e4e9] hover:bg-[#252940]",
                   )}
                 >
                   <X className="size-4" />
@@ -275,7 +277,7 @@ export function DashboardQuizDetailClient({
                 onClick={() => setEditMode(true)}
                 className={cn(
                   pillClassName,
-                  "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+                  "border-[#6c8aff]/45 bg-[#6c8aff]/14 text-[#e4e4e9] hover:bg-[#6c8aff]/22",
                 )}
               >
                 <PencilLine className="size-4" />
@@ -290,9 +292,9 @@ export function DashboardQuizDetailClient({
         {questions.map((question) => (
           <article
             key={question.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5"
+            className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-7"
           >
-            <p className="text-sm text-slate-400">
+            <p className="text-base text-[#9394a5] md:text-lg">
               Question {question.position} · {question.difficulty}
             </p>
 
@@ -309,7 +311,7 @@ export function DashboardQuizDetailClient({
                       ),
                     )
                   }
-                  className={cn("min-h-28 text-base text-slate-100", fieldClassName)}
+                  className={cn("min-h-36 text-lg text-[#e4e4e9] md:text-2xl", fieldClassName)}
                   placeholder="Question text"
                 />
 
@@ -317,9 +319,9 @@ export function DashboardQuizDetailClient({
                   {question.options.map((option, optionIndex) => (
                     <div
                       key={`${question.id}-option-${optionIndex}`}
-                      className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4"
+                      className="rounded-2xl border border-[#252940] bg-[#0f1117]/72 p-4"
                     >
-                      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300/80">
+                      <p className="mb-3 text-base font-semibold uppercase tracking-[0.2em] text-[#818cf8]/75">
                         Option {String.fromCharCode(65 + optionIndex)}
                       </p>
                       <Input
@@ -337,7 +339,7 @@ export function DashboardQuizDetailClient({
                             }),
                           )
                         }
-                        className={cn("h-12 text-sm text-slate-100", fieldClassName)}
+                        className={cn("h-14 text-base text-[#e4e4e9] md:h-16 md:text-xl", fieldClassName)}
                         placeholder="Option text"
                       />
                       <Textarea
@@ -355,7 +357,7 @@ export function DashboardQuizDetailClient({
                             }),
                           )
                         }
-                        className={cn("mt-3 min-h-24 text-sm text-slate-100", fieldClassName)}
+                        className={cn("mt-3 min-h-28 text-base text-[#e4e4e9] md:text-lg", fieldClassName)}
                         placeholder="Explanation"
                       />
                     </div>
@@ -379,7 +381,7 @@ export function DashboardQuizDetailClient({
                     widthClassName="w-full sm:w-56"
                   />
                   <div className="flex items-center gap-3">
-                    <p className="text-sm text-slate-400">
+                    <p className="text-base text-[#9394a5] md:text-lg">
                       {statusByQuestionId[question.id] ?? "Not saved yet"}
                     </p>
                     <button
@@ -388,7 +390,7 @@ export function DashboardQuizDetailClient({
                       onClick={() => void saveQuestion(question.id)}
                       className={cn(
                         pillClassName,
-                        "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60",
+                        "border-[#6c8aff]/45 bg-[#6c8aff]/14 text-[#e4e4e9] hover:bg-[#6c8aff]/22 disabled:cursor-not-allowed disabled:opacity-60",
                       )}
                     >
                       {savingQuestionId === question.id ? "Saving..." : "Save Question"}
@@ -398,23 +400,25 @@ export function DashboardQuizDetailClient({
               </div>
             ) : (
               <>
-                <h3 className="mt-2 text-xl font-semibold text-slate-100">{question.questionText}</h3>
+                <h3 className="mt-3 text-2xl font-semibold text-[#e4e4e9] md:text-4xl">
+                  {question.questionText}
+                </h3>
                 {question.subject ? (
-                  <p className="mt-1 text-sm text-slate-400">Subject: {question.subject}</p>
+                  <p className="mt-2 text-base text-[#9394a5] md:text-lg">Subject: {question.subject}</p>
                 ) : null}
                 <ul className="mt-4 space-y-2">
                   {question.options.map((option, index) => (
                     <li
                       key={`${question.id}-${index}`}
                       className={cn(
-                        "rounded-lg border p-3",
+                        "rounded-2xl border p-4",
                         index === question.correctOptionIndex
                           ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-100"
-                          : "border-slate-700 bg-slate-950/60 text-slate-200",
+                          : "border-[#252940] bg-[#0f1117]/72 text-[#e4e4e9]",
                       )}
                     >
-                      <p className="font-medium">{option.text}</p>
-                      <p className="mt-1 text-sm opacity-90">{option.explanation}</p>
+                      <p className="text-lg font-medium md:text-xl">{option.text}</p>
+                      <p className="mt-2 text-base opacity-90 md:text-lg">{option.explanation}</p>
                     </li>
                   ))}
                 </ul>

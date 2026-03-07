@@ -8,8 +8,10 @@ import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
+import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { useHostCommunication } from "@/hooks/useHostCommunication";
 import { authClient } from "@/lib/auth-client";
+import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import {
   ASK_HOST_FALLBACK_MESSAGES,
   CHECKPOINTS,
@@ -132,6 +134,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     usedLifelines.askHost,
     usedLifelines.fiftyFifty,
   ]);
+
+  useEffect(() => {
+    rememberRecentQuiz("wwtbam", quiz.id);
+  }, [quiz.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -601,14 +607,17 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   async function playRandomAgain() {
     try {
-      const response = await fetch("/api/quiz/random?mode=wwtbam", { cache: "no-store" });
-      if (!response.ok) {
+      const nextQuizId = await getNextRandomQuizId({
+        mode: "wwtbam",
+        currentQuizId: quiz.id,
+      });
+
+      if (!nextQuizId) {
         router.push("/");
         return;
       }
 
-      const payload = (await response.json()) as { quiz: { id: string } };
-      router.push(`/play/${payload.quiz.id}`);
+      router.push(`/play/${nextQuizId}`);
     } catch {
       router.push("/");
     }
@@ -654,10 +663,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   if (!currentQuestion) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-        <div className="max-w-xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
+        <div className="max-w-xl space-y-6 rounded-2xl border border-[#252940] bg-[#1a1d2e] p-8 text-center">
           <h1 className="text-3xl font-bold">Quiz unavailable</h1>
-          <p className="text-lg text-slate-300">Could not load this quiz.</p>
+          <p className="text-lg text-[#9394a5]">Could not load this quiz.</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={() => router.refresh()}>Retry</CircularButton>
             <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
@@ -669,19 +678,66 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   if (gameOver) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-        <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
-          <h1 className="text-3xl font-bold md:text-4xl">
-            {wonAmount > 0 ? "Round Complete" : "Game Over"}
-          </h1>
-          <p className="text-xl text-slate-200 md:text-2xl">
-            You leave with <span className="font-extrabold text-emerald-400">{formatMoney(wonAmount)}</span>
-          </p>
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
-            <CircularButton onClick={() => void playRandomAgain()}>Random</CircularButton>
-          </div>
-        </div>
+      <div className="min-h-screen bg-[#0f1117] px-6 py-7 text-[#e4e4e9] md:px-10">
+        <main className="mx-auto w-full max-w-6xl space-y-7">
+          <QuizPlayHeader
+            title={quiz.title}
+            creatorName={quiz.creatorName}
+            creatorImage={quiz.creatorImage}
+          />
+          <section className="space-y-8 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-8 md:p-12">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+              <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 text-center md:p-8 xl:text-left">
+                <p className="text-base font-semibold uppercase tracking-[0.28em] text-amber-300 md:text-lg">
+                  Final Result
+                </p>
+                <h1 className="mt-4 text-[clamp(3.4rem,5vw,6rem)] leading-[0.92] font-black tracking-tight text-[#e4e4e9]">
+                  {wonAmount > 0 ? "Round Complete" : "Game Over"}
+                </h1>
+                <p className="mt-5 text-[clamp(2.5rem,4.4vw,4.75rem)] leading-none font-black text-emerald-300">
+                  {formatMoney(wonAmount)}
+                </p>
+                <p className="mt-4 text-2xl text-[#9394a5] md:text-3xl">
+                  You leave the ladder with this amount secured.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">
+                    Questions Reached
+                  </p>
+                  <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">
+                    {currentQuestionIndex + 1}
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">Status</p>
+                  <p className="mt-3 text-3xl font-black text-amber-300 md:text-4xl">
+                    {wonAmount > 0 ? "Cashed Out" : "Missed It"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <GameButton
+                centered
+                className="min-h-20 text-2xl md:text-3xl"
+                onClick={() => router.push("/")}
+              >
+                Back to Hub
+              </GameButton>
+              <GameButton
+                centered
+                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl text-[#e4e4e9] md:text-3xl"
+                onClick={() => void playRandomAgain()}
+              >
+                Play Random Quiz
+              </GameButton>
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
@@ -692,124 +748,137 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
 
   return (
-    <div className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-6 sm:py-6 md:px-10">
-      <main className="mx-auto w-full max-w-6xl space-y-4 md:space-y-6">
+    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-7xl space-y-5 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
-        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-          <section className="space-y-4 md:space-y-5">
-          <div className="overflow-hidden rounded-full border border-slate-700 bg-slate-900">
-            <div
-              className="h-3 bg-gradient-to-r from-cyan-400 to-amber-400 transition-all duration-1000 md:h-4"
-              style={{ width: `${Math.max(0, timerPercentage)}%` }}
-            />
-          </div>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="space-y-5 md:space-y-6">
+            <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
+              <SlantedBar
+                value={Math.max(0, timerPercentage)}
+                className="h-3 border-x-0 border-t-0 md:h-4"
+                fillClassName="bg-gradient-to-r from-[#818cf8] to-[#fbbf24]"
+              />
 
-          <article className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:space-y-5 md:p-7">
-            <header className="space-y-2 md:space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-wide text-amber-300 md:text-lg">
-                Question {currentQuestionIndex + 1} of {questions.length}
-              </p>
-              <h1 className="text-xl leading-tight font-bold md:text-3xl">
-                {currentQuestion.questionText}
-              </h1>
-            </header>
+              <div className="space-y-5 p-5 md:space-y-6 md:p-8">
+                <header className="space-y-2 md:space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <p className="text-base font-semibold uppercase tracking-wide text-amber-300 md:text-xl">
+                      Question {currentQuestionIndex + 1} of {questions.length}
+                    </p>
+                  </div>
+                  <h1 className="text-[clamp(2rem,3vw,3.25rem)] leading-tight font-bold">
+                    {currentQuestion.questionText}
+                  </h1>
+                </header>
 
-            <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-              {[0, 1, 2, 3].map((index) => {
-                const option = currentQuestion.options[index];
-                const isEliminated = eliminatedOptions.includes(index);
-                const isVisible = visibleOptions >= index + 1 && !isEliminated;
-                const selected = selectedAnswerIndex === index;
-                const isCorrect = revealedAnswer && correctAnswerIndex === index;
-                const isWrongSelected = revealedAnswer && selected && !isCorrect;
+                <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+                  {[0, 1, 2, 3].map((index) => {
+                    const option = currentQuestion.options[index];
+                    const isEliminated = eliminatedOptions.includes(index);
+                    const isVisible = visibleOptions >= index + 1 && !isEliminated;
+                    const selected = selectedAnswerIndex === index;
+                    const isCorrect = revealedAnswer && correctAnswerIndex === index;
+                    const isWrongSelected = revealedAnswer && selected && !isCorrect;
 
-                return (
+                    return (
+                      <GameButton
+                        key={index}
+                        className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3vw,3.25rem)] [&>span>span]:leading-tight"
+                        disabled={optionsDisabled || isEliminated || !isVisible}
+                        focused={focusedControl === `answer-${index}`}
+                        state={
+                          isCorrect
+                            ? "correct"
+                            : isWrongSelected || (selected && finalAnswerLocked && !revealedAnswer)
+                              ? "orange"
+                              : selected
+                                ? "selected"
+                                : "default"
+                        }
+                        onClick={() => setSelectedAnswerIndex(index)}
+                      >
+                        {isVisible ? `${String.fromCharCode(65 + index)}: ${option?.text ?? ""}` : ""}
+                      </GameButton>
+                    );
+                  })}
+                </div>
+
+                {selectedAnswerIndex !== null && !revealedAnswer ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
+                      Lock in your final answer?
+                    </p>
+                    <CircularButton
+                      focused={focusedControl === "final"}
+                      selected={finalAnswerLocked}
+                      disabled={finalAnswerLocked}
+                      onClick={() => void confirmFinalAnswer()}
+                    >
+                      Final
+                    </CircularButton>
+                  </div>
+                ) : null}
+
+                {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
+                  <div className="flex items-center justify-end">
+                    <CircularButton focused={focusedControl === "cashout"} onClick={cashOut}>
+                      Cash Out
+                    </CircularButton>
+                  </div>
+                ) : null}
+
+                {revealedAnswer ? (
+                  <div className="flex items-center justify-center">
+                    <CircularButton focused={focusedControl === "continue"} onClick={continueAfterReveal}>
+                      Continue
+                    </CircularButton>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
-                    key={index}
-                    className="min-h-16 text-base md:min-h-16 md:text-lg"
-                    disabled={optionsDisabled || isEliminated || !isVisible}
-                    focused={focusedControl === `answer-${index}`}
-                    state={
-                      isCorrect
-                        ? "correct"
-                        : isWrongSelected || (selected && finalAnswerLocked && !revealedAnswer)
-                          ? "orange"
-                          : selected
-                            ? "selected"
-                            : "default"
-                    }
-                    onClick={() => setSelectedAnswerIndex(index)}
+                    centered
+                    className="min-h-16 text-lg md:text-xl"
+                    focused={focusedControl === "lifeline-5050"}
+                    disabled={usedLifelines.fiftyFifty || optionsDisabled || revealedAnswer}
+                    onClick={() => void handleFiftyFifty()}
                   >
-                    {isVisible ? `${String.fromCharCode(65 + index)}: ${option?.text ?? ""}` : ""}
+                    50:50
                   </GameButton>
-                );
-              })}
-            </div>
-
-            {selectedAnswerIndex !== null && !revealedAnswer ? (
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-base font-semibold text-slate-300 md:text-lg">Lock in your final answer?</p>
-                <CircularButton
-                  focused={focusedControl === "final"}
-                  selected={finalAnswerLocked}
-                  disabled={finalAnswerLocked}
-                  onClick={() => void confirmFinalAnswer()}
-                >
-                  Final
-                </CircularButton>
+                  <GameButton
+                    centered
+                    icon={<User size={20} />}
+                    className="min-h-16 text-lg md:text-xl"
+                    focused={focusedControl === "lifeline-ask-host"}
+                    disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
+                    onClick={() => void handleAskHost()}
+                  >
+                    Ask the Host
+                  </GameButton>
+                </div>
               </div>
-            ) : null}
 
-            {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
-              <div className="flex items-center justify-end">
-                <CircularButton focused={focusedControl === "cashout"} onClick={cashOut}>
-                  Cash Out
-                </CircularButton>
+              <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+                <SlantedBar
+                  value={((currentQuestionIndex + 1) / questions.length) * 100}
+                  className="h-3 md:h-4"
+                  fillClassName="bg-gradient-to-r from-[#818cf8] to-[#6c8aff]"
+                />
               </div>
+            </article>
+
+            {hostMessage ? (
+              <AnimatedText text={hostMessage} onCue={onHostCue} onComplete={hostMessageOnComplete} />
             ) : null}
-
-            {revealedAnswer ? (
-              <div className="flex items-center justify-center">
-                <CircularButton focused={focusedControl === "continue"} onClick={continueAfterReveal}>
-                  Continue
-                </CircularButton>
-              </div>
-            ) : null}
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <GameButton
-                centered
-                className="min-h-14 text-base md:text-lg"
-                focused={focusedControl === "lifeline-5050"}
-                disabled={usedLifelines.fiftyFifty || optionsDisabled || revealedAnswer}
-                onClick={() => void handleFiftyFifty()}
-              >
-                50:50
-              </GameButton>
-              <GameButton
-                centered
-                icon={<User size={20} />}
-                className="min-h-14 text-base md:text-lg"
-                focused={focusedControl === "lifeline-ask-host"}
-                disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
-                onClick={() => void handleAskHost()}
-              >
-                Ask the Host
-              </GameButton>
-            </div>
-          </article>
-
-          {hostMessage ? (
-            <AnimatedText text={hostMessage} onCue={onHostCue} onComplete={hostMessageOnComplete} />
-          ) : null}
           </section>
 
-          <aside className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 md:p-4">
-          <h2 className="mb-2 text-base font-bold text-amber-300 md:text-lg">Money Ladder</h2>
+          <aside className="space-y-3 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-4 md:p-5">
+          <h2 className="mb-3 text-xl font-bold text-amber-300 md:text-2xl">Money Ladder</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             {MONEY_LADDER.map((amount, index) => {
               const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
@@ -820,12 +889,12 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 <div
                   key={amount}
                   className={[
-                    "min-h-12 rounded-lg border px-3 py-2 text-sm font-semibold md:min-h-16 md:text-base",
+                    "min-h-14 rounded-xl border px-4 py-3 text-base font-semibold md:min-h-20 md:text-lg",
                     isCurrent
                       ? "border-amber-300 bg-amber-400/20 text-amber-200"
                       : isPassed
                         ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
-                        : "border-slate-700 bg-slate-950 text-slate-200",
+                        : "border-[#252940] bg-[#0f1117] text-[#e4e4e9]",
                     isCheckpoint ? "shadow-[0_0_0_2px_rgba(250,204,21,0.35)]" : "",
                   ].join(" ")}
                 >

@@ -33,10 +33,10 @@ export function LoadingScreen() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
       <div className="flex max-w-xl flex-col items-center gap-8 text-center">
         <h2 className="text-3xl font-bold tracking-wide md:text-4xl">Preparing the Studio</h2>
-        <p className="min-h-8 text-lg text-slate-300 md:text-xl">{loadingAction}</p>
+        <p className="min-h-8 text-lg text-[#9394a5] md:text-xl">{loadingAction}</p>
         <CircularButton selected={isPulseOn} onClick={onPulse} aria-label="Pulse button">
           Pulse
         </CircularButton>

@@ -89,17 +89,19 @@ export function DashboardSettingsPageClient({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <h2 className="text-3xl font-black text-slate-100">Preferences</h2>
-        <p className="mt-2 text-slate-300">
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
+          Preferences
+        </h2>
+        <p className="mt-3 max-w-3xl text-xl text-[#9394a5] md:text-2xl">
           Control your generation defaults and language preferences.
         </p>
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-300">Preferred Language</p>
+      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <div className="space-y-3">
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Preferred Language</p>
           <PlayerSelect
             value={locale}
             onValueChange={setLocale}
@@ -108,8 +110,10 @@ export function DashboardSettingsPageClient({
           />
         </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-300">Preferred AI Provider</p>
+        <div className="space-y-3">
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
+            Preferred AI Provider
+          </p>
           <PlayerSelect
             value={preferredProvider}
             onValueChange={(value: ProviderOption | "none") => setPreferredProvider(value)}
@@ -121,7 +125,7 @@ export function DashboardSettingsPageClient({
             )}
           />
           {selectableProviders.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-base text-[#9394a5] md:text-lg">
               Add an API key first in API Keys before selecting a preferred provider.
             </p>
           ) : null}
@@ -130,11 +134,11 @@ export function DashboardSettingsPageClient({
         <Button
           onClick={() => void saveSettings()}
           disabled={saving}
-          className="border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+          className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
         >
           {saving ? "Saving..." : "Save Settings"}
         </Button>
-        {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+        {status ? <p className="text-base text-[#9394a5] md:text-lg">{status}</p> : null}
       </section>
     </div>
   );

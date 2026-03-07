@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
+import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { authClient } from "@/lib/auth-client";
+import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +19,9 @@ type SinglePlayerGameProps = {
 type GamePhase = "question" | "reveal" | "complete";
 type VoteType = "like" | "dislike";
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "anonymous";
+type CompleteActionId = "play-next" | "play-again" | "back-to-hub";
+type CompleteActionTarget = `${"top" | "bottom"}-${CompleteActionId}`;
+type CompleteFocusTarget = CompleteActionTarget | `breakdown-${number}` | "like" | "dislike" | "sign-in";
 
 type QuestionResult = {
   questionId: string;
@@ -54,6 +59,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [phase, setPhase] = useState<GamePhase>("question");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
+  const [focusedCompleteTarget, setFocusedCompleteTarget] = useState<CompleteFocusTarget | null>(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
   const [score, setScore] = useState(0);
@@ -65,9 +71,14 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
   const [isVoting, setIsVoting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
+  const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
+  const answerButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const nextQuestionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const revealPanelRef = useRef<HTMLDivElement | null>(null);
+  const completeFocusRefs = useRef<Record<string, HTMLElement | null>>({});
   const questionStartedAtRef = useRef(0);
   const quizStartedAtRef = useRef<Date | null>(new Date());
   const quizFinishedAtRef = useRef<Date | null>(null);
@@ -79,6 +90,10 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const totalQuestions = quiz.questions.length;
   const currentQuestion = quiz.questions[currentQuestionIndex];
   const currentCorrectOptionIndex = currentQuestion?.correctOptionIndex ?? null;
+  const accuracyPercentage =
+    totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+  const shouldShowSaveStatusCard =
+    saveStatus === "saving" || saveStatus === "error" || saveStatus === "anonymous";
 
   const timerPercentage = useMemo(() => {
     return Math.max(0, (remainingSeconds / QUESTION_TIME_SECONDS) * 100);
@@ -93,6 +108,21 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     currentQuestion && currentCorrectOptionIndex !== null
       ? currentQuestion.options[currentCorrectOptionIndex]?.explanation
       : "";
+  const completeFocusRows = useMemo<CompleteFocusTarget[][]>(() => {
+    const rows: CompleteFocusTarget[][] = [
+      ["top-play-next", "top-play-again"],
+      ["top-back-to-hub"],
+      ...Array.from({ length: results.length }, (_, index) => [`breakdown-${index}` as const]),
+      ["like", "dislike"],
+    ];
+
+    if (saveStatus === "anonymous") {
+      rows.push(["sign-in"]);
+    }
+
+    rows.push(["bottom-play-next", "bottom-play-again"], ["bottom-back-to-hub"]);
+    return rows;
+  }, [results.length, saveStatus]);
 
   useEffect(() => {
     setLikes(quiz.likes);
@@ -101,19 +131,23 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setVoteError(null);
   }, [quiz.currentVote, quiz.dislikes, quiz.id, quiz.likes]);
 
-  function stopCountdown() {
+  useEffect(() => {
+    rememberRecentQuiz("single", quiz.id);
+  }, [quiz.id]);
+
+  const stopCountdown = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  }
+  }, []);
 
-  function clearAutoAdvance() {
+  const clearAutoAdvance = useCallback(() => {
     if (autoAdvanceRef.current) {
       clearTimeout(autoAdvanceRef.current);
       autoAdvanceRef.current = null;
     }
-  }
+  }, []);
 
   const moveToNextQuestion = useCallback(() => {
     clearAutoAdvance();
@@ -134,7 +168,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setSelectedAnswerIndex(null);
     setFocusedAnswerIndex(null);
     setPhase("question");
-  }, [currentQuestionIndex, totalQuestions]);
+  }, [clearAutoAdvance, currentQuestionIndex, totalQuestions]);
 
   const finalizeAnswer = useCallback(
     (selectedIndex: number | null) => {
@@ -178,7 +212,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         moveToNextQuestion();
       }, AUTO_ADVANCE_MS);
     },
-    [currentQuestion, currentQuestionIndex, moveToNextQuestion, phase],
+    [clearAutoAdvance, currentQuestion, currentQuestionIndex, moveToNextQuestion, phase, stopCountdown],
   );
 
   useEffect(() => {
@@ -204,7 +238,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     }, 1000);
 
     return () => stopCountdown();
-  }, [currentQuestionIndex, finalizeAnswer, phase]);
+  }, [currentQuestionIndex, finalizeAnswer, phase, stopCountdown]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -249,11 +283,82 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   }, [finalizeAnswer, focusedAnswerIndex, phase]);
 
   useEffect(() => {
+    if (phase === "complete") {
+      setFocusedCompleteTarget((previous) => {
+        if (previous && completeFocusRows.some((row) => row.includes(previous))) {
+          return previous;
+        }
+
+        return completeFocusRows[0]?.[0] ?? null;
+      });
+      return;
+    }
+
+    setFocusedCompleteTarget(null);
+  }, [completeFocusRows, phase]);
+
+  useEffect(() => {
+    if (phase !== "reveal") return;
+
+    const frame = window.requestAnimationFrame(() => {
+      nextQuestionButtonRef.current?.focus({ preventScroll: true });
+      revealPanelRef.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentQuestionIndex, phase]);
+
+  const registerCompleteFocusRef = useCallback(
+    (target: CompleteFocusTarget) => (node: HTMLElement | null) => {
+      if (node) {
+        completeFocusRefs.current[target] = node;
+        return;
+      }
+
+      delete completeFocusRefs.current[target];
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (phase !== "question" || focusedAnswerIndex === null) return;
+
+    const node = answerButtonRefs.current[focusedAnswerIndex];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      node.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedAnswerIndex, phase]);
+
+  useEffect(() => {
+    if (phase !== "complete" || !focusedCompleteTarget) return;
+
+    const node = completeFocusRefs.current[focusedCompleteTarget];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      node.focus({ preventScroll: true });
+      node.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedCompleteTarget, phase]);
+
+  useEffect(() => {
     return () => {
       stopCountdown();
       clearAutoAdvance();
     };
-  }, []);
+  }, [clearAutoAdvance, stopCountdown]);
 
   useEffect(() => {
     if (phase !== "complete") return;
@@ -300,7 +405,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       });
   }, [phase, quiz.id, sessionData?.user]);
 
-  function playAgain() {
+  const playAgain = useCallback(() => {
     clearAutoAdvance();
     stopCountdown();
 
@@ -313,6 +418,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     setCurrentQuestionIndex(0);
     setFocusedAnswerIndex(null);
+    setFocusedCompleteTarget(null);
     setSelectedAnswerIndex(null);
     setRemainingSeconds(QUESTION_TIME_SECONDS);
     setScore(0);
@@ -320,9 +426,32 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setCompletedDurationMs(0);
     setSaveStatus("idle");
     setPhase("question");
-  }
+  }, [clearAutoAdvance, stopCountdown]);
 
-  async function submitVote(nextVote: VoteType) {
+  const playNext = useCallback(async () => {
+    if (isLoadingNextQuiz) return;
+
+    setIsLoadingNextQuiz(true);
+    try {
+      const nextQuizId = await getNextRandomQuizId({
+        mode: "single",
+        currentQuizId: quiz.id,
+      });
+
+      if (!nextQuizId) {
+        router.push("/");
+        return;
+      }
+
+      router.push(`/play/${nextQuizId}`);
+    } catch {
+      router.push("/");
+    } finally {
+      setIsLoadingNextQuiz(false);
+    }
+  }, [isLoadingNextQuiz, quiz.id, router]);
+
+  const submitVote = useCallback(async (nextVote: VoteType) => {
     if (isVoting) return;
 
     setIsVoting(true);
@@ -355,14 +484,113 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     } finally {
       setIsVoting(false);
     }
-  }
+  }, [isVoting, quiz.id]);
+
+  const getNextCompleteTarget = useCallback((
+    currentTarget: CompleteFocusTarget | null,
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+  ) => {
+    const initialTarget = completeFocusRows[0]?.[0] ?? null;
+    if (!initialTarget) return null;
+
+    if (!currentTarget) {
+      return initialTarget;
+    }
+
+    const rowIndex = completeFocusRows.findIndex((row) => row.includes(currentTarget));
+    if (rowIndex === -1) {
+      return initialTarget;
+    }
+
+    const currentRow = completeFocusRows[rowIndex] ?? [];
+    const columnIndex = Math.max(0, currentRow.indexOf(currentTarget));
+
+    if (key === "ArrowLeft") {
+      return currentRow[Math.max(0, columnIndex - 1)] ?? currentTarget;
+    }
+
+    if (key === "ArrowRight") {
+      return currentRow[Math.min(currentRow.length - 1, columnIndex + 1)] ?? currentTarget;
+    }
+
+    const nextRowIndex =
+      key === "ArrowUp"
+        ? Math.max(0, rowIndex - 1)
+        : Math.min(completeFocusRows.length - 1, rowIndex + 1);
+
+    const nextRow = completeFocusRows[nextRowIndex] ?? currentRow;
+    return nextRow[Math.min(columnIndex, nextRow.length - 1)] ?? currentTarget;
+  }, [completeFocusRows]);
+
+  useEffect(() => {
+    if (phase !== "complete") return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Enter") {
+        if (!focusedCompleteTarget) return;
+
+        if (focusedCompleteTarget === "like") {
+          void submitVote("like");
+          return;
+        }
+
+        if (focusedCompleteTarget === "dislike") {
+          void submitVote("dislike");
+          return;
+        }
+
+        if (focusedCompleteTarget === "sign-in") {
+          router.push("/sign-in?callbackURL=/dashboard");
+          return;
+        }
+
+        if (focusedCompleteTarget.startsWith("breakdown-")) {
+          return;
+        }
+
+        if (focusedCompleteTarget.endsWith("play-next")) {
+          void playNext();
+          return;
+        }
+
+        if (focusedCompleteTarget.endsWith("play-again")) {
+          playAgain();
+          return;
+        }
+
+        router.push("/");
+        return;
+      }
+
+      setFocusedCompleteTarget((previous) =>
+        getNextCompleteTarget(
+          previous,
+          event.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+        ),
+      );
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusedCompleteTarget, getNextCompleteTarget, phase, playAgain, playNext, router, submitVote]);
 
   if (!currentQuestion && phase !== "complete") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-        <div className="max-w-xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
+        <div className="max-w-xl space-y-6 rounded-2xl border border-[#252940] bg-[#1a1d2e] p-8 text-center">
           <h1 className="text-3xl font-bold">Quiz unavailable</h1>
-          <p className="text-lg text-slate-300">Could not load this quiz.</p>
+          <p className="text-lg text-[#9394a5]">Could not load this quiz.</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={playAgain}>Retry</CircularButton>
             <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
@@ -372,131 +600,212 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     );
   }
 
+  function renderCompleteActions(position: "top" | "bottom") {
+    const playNextTarget = `${position}-play-next` as const;
+    const playAgainTarget = `${position}-play-again` as const;
+    const backToHubTarget = `${position}-back-to-hub` as const;
+
+    return (
+      <div
+        className={cn(
+          "mx-auto w-full space-y-4",
+          position === "top" ? "xl:max-w-4xl" : "",
+        )}
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <GameButton
+            ref={registerCompleteFocusRef(playNextTarget)}
+            centered
+            disabled={isLoadingNextQuiz}
+            className="min-h-20 text-2xl md:text-3xl"
+            focused={focusedCompleteTarget === playNextTarget}
+            onClick={() => void playNext()}
+          >
+            {isLoadingNextQuiz ? "Loading..." : "Play Next"}
+          </GameButton>
+          <GameButton
+            ref={registerCompleteFocusRef(playAgainTarget)}
+            centered
+            className="min-h-20 text-2xl md:text-3xl"
+            focused={focusedCompleteTarget === playAgainTarget}
+            onClick={playAgain}
+          >
+            Play Again
+          </GameButton>
+        </div>
+        <div className="flex justify-center">
+          <GameButton
+            ref={registerCompleteFocusRef(backToHubTarget)}
+            centered
+            className="min-h-20 w-full border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl text-[#e4e4e9] md:w-[calc(50%-0.5rem)] md:text-3xl"
+            focused={focusedCompleteTarget === backToHubTarget}
+            onClick={() => router.push("/")}
+          >
+            Back to Hub
+          </GameButton>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-6 sm:py-6 md:px-10">
-      <main className="mx-auto w-full max-w-5xl space-y-4 md:space-y-6">
+    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-6xl space-y-5 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
         {phase === "question" || phase === "reveal" ? (
-          <section className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:space-y-5 md:p-7">
-            <header className="space-y-3 md:space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-base font-semibold text-cyan-200 md:text-xl">
-                  Question {currentQuestionIndex + 1} of {totalQuestions}
-                </p>
-                <p className="text-base font-bold text-emerald-300 md:text-xl">Score: {score}</p>
+          <section className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
+            <SlantedBar
+              value={timerPercentage}
+              className="h-3 border-x-0 border-t-0 md:h-4"
+              fillClassName={cn("bg-gradient-to-r", timerBarClass(remainingSeconds))}
+            />
+
+            <div className="space-y-5 p-5 md:space-y-6 md:p-8">
+              <header className="space-y-3 md:space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-lg font-semibold text-[#818cf8] md:text-2xl">
+                    Question {currentQuestionIndex + 1} of {totalQuestions}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <p className="text-lg font-bold text-emerald-300 md:text-2xl">
+                      Score: {score}
+                    </p>
+                  </div>
+                </div>
+
+                <h2 className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight font-bold text-[#e4e4e9]">
+                  {currentQuestion?.questionText}
+                </h2>
+              </header>
+
+              <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+                {[0, 1, 2, 3].map((index) => {
+                  const option = currentQuestion?.options[index];
+                  const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
+                  const isWrongSelection =
+                    phase === "reveal" && selectedAnswerIndex === index && index !== currentCorrectOptionIndex;
+
+                  return (
+                    <GameButton
+                      key={index}
+                      ref={(node) => {
+                        answerButtonRefs.current[index] = node;
+                      }}
+                      className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3.2vw,3.5rem)] [&>span>span]:leading-tight"
+                      state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
+                      focused={phase === "question" && focusedAnswerIndex === index}
+                      disabled={phase !== "question"}
+                      onClick={() => finalizeAnswer(index)}
+                    >
+                      {`${String.fromCharCode(65 + index)}: ${option?.text ?? ""}`}
+                    </GameButton>
+                  );
+                })}
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-3">
+              {phase === "reveal" ? (
                 <div
-                  className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 transition-all"
-                  style={{ width: `${progressPercentage}%` }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm font-semibold text-slate-300 md:text-base">
-                  <span>Time left</span>
-                  <span>{remainingSeconds}s</span>
+                  ref={revealPanelRef}
+                  className="space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5"
+                >
+                  <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">
+                    {selectedAnswerIndex === null
+                      ? "Time is up."
+                      : selectedAnswerIndex === currentCorrectOptionIndex
+                        ? "Correct answer!"
+                        : "Incorrect answer."}
+                  </p>
+                  <p className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight text-[#9394a5]">
+                    {correctExplanation || "No explanation provided for this question."}
+                  </p>
+                  <div className="flex justify-center">
+                    <GameButton
+                      ref={nextQuestionButtonRef}
+                      centered
+                      className="min-h-16 max-w-sm text-lg md:min-h-20 md:text-xl"
+                      onClick={moveToNextQuestion}
+                    >
+                      Next Question
+                    </GameButton>
+                  </div>
                 </div>
-                <div className="h-3 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-4">
-                  <div
-                    className={cn(
-                      "h-full bg-gradient-to-r transition-all duration-1000",
-                      timerBarClass(remainingSeconds),
-                    )}
-                    style={{ width: `${timerPercentage}%` }}
-                  />
-                </div>
-              </div>
-
-              <h2 className="text-xl leading-tight font-bold text-slate-100 md:text-4xl">
-                {currentQuestion?.questionText}
-              </h2>
-            </header>
-
-            <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-              {[0, 1, 2, 3].map((index) => {
-                const option = currentQuestion?.options[index];
-                const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
-                const isWrongSelection =
-                  phase === "reveal" && selectedAnswerIndex === index && index !== currentCorrectOptionIndex;
-
-                return (
-                  <GameButton
-                    key={index}
-                    className="min-h-16 text-base md:min-h-20 md:text-xl"
-                    state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
-                    focused={phase === "question" && focusedAnswerIndex === index}
-                    disabled={phase !== "question"}
-                    onClick={() => finalizeAnswer(index)}
-                  >
-                    {`${String.fromCharCode(65 + index)}: ${option?.text ?? ""}`}
-                  </GameButton>
-                );
-              })}
+              ) : null}
             </div>
 
-            {phase === "reveal" ? (
-              <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/70 p-3 md:space-y-4 md:p-4">
-                <p className="text-base font-semibold text-slate-100 md:text-xl">
-                  {selectedAnswerIndex === null
-                    ? "Time is up."
-                    : selectedAnswerIndex === currentCorrectOptionIndex
-                      ? "Correct answer!"
-                      : "Incorrect answer."}
-                </p>
-                <p className="text-sm leading-relaxed text-slate-300 md:text-lg">
-                  {correctExplanation || "No explanation provided for this question."}
-                </p>
-                <div className="flex justify-center">
-                  <GameButton
-                    centered
-                    className="min-h-12 max-w-xs text-base md:min-h-14 md:text-lg"
-                    onClick={moveToNextQuestion}
-                  >
-                    Next Question
-                  </GameButton>
-                </div>
-              </div>
-            ) : null}
+            <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+              <SlantedBar
+                value={progressPercentage}
+                className="h-3 md:h-4"
+                fillClassName="bg-gradient-to-r from-[#818cf8] to-[#6c8aff]"
+              />
+            </div>
           </section>
         ) : null}
 
         {phase === "complete" ? (
-          <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
-            <div className="space-y-2 text-center">
-              <h2 className="text-4xl font-black tracking-tight text-slate-100 md:text-5xl">Quiz Complete</h2>
-              <p className="text-2xl font-bold text-cyan-200 md:text-3xl">
-                {score} out of {totalQuestions} correct
-              </p>
-              <p className="text-lg text-slate-300 md:text-xl">
-                Total time: {formatSecondsFromMs(completedDurationMs)}
-              </p>
+          <section className="space-y-8 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-8 md:p-12">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+              <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-8">
+                <p className="text-base font-semibold uppercase tracking-[0.28em] text-[#818cf8] md:text-lg">
+                  Final Result
+                </p>
+                <h2 className="mt-4 text-[clamp(3.4rem,5vw,6rem)] leading-[0.92] font-black tracking-tight text-[#e4e4e9]">
+                  Quiz Complete
+                </h2>
+                <p className="mt-5 text-[clamp(2.5rem,4.4vw,4.75rem)] leading-none font-black text-[#e4e4e9]">
+                  {score} / {totalQuestions}
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">Accuracy</p>
+                  <p className="mt-3 text-5xl font-black text-emerald-300 md:text-6xl">
+                    {accuracyPercentage}%
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">Total Time</p>
+                  <p className="mt-3 text-4xl font-black text-[#e4e4e9] md:text-5xl">
+                    {formatSecondsFromMs(completedDurationMs)}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-              <h3 className="text-xl font-bold text-slate-100">Question Breakdown</h3>
-              <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+            {renderCompleteActions("top")}
+
+            <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+              <h3 className="text-3xl font-bold text-[#e4e4e9] md:text-4xl">Question Breakdown</h3>
+              <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1">
                 {results.map((result, index) => (
                   <div
                     key={`${result.questionId}-${index}`}
-                    className="flex items-start justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900/80 p-3"
+                    ref={registerCompleteFocusRef(`breakdown-${index}`)}
+                    tabIndex={-1}
+                    className={cn(
+                      "flex items-start justify-between gap-4 rounded-3xl border border-[#252940] bg-[#1a1d2e]/86 p-5 transition",
+                      focusedCompleteTarget === `breakdown-${index}` ? "border-amber-300 ring-4 ring-[#818cf8]/70" : "",
+                    )}
+                    aria-selected={focusedCompleteTarget === `breakdown-${index}`}
                   >
                     <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100 md:text-lg">{index + 1}. {result.questionText}</p>
-                      <p className="text-sm text-slate-400 md:text-base">
+                      <p className="text-2xl font-semibold text-[#e4e4e9] md:text-3xl">
+                        {index + 1}. {result.questionText}
+                      </p>
+                      <p className="text-lg text-[#9394a5] md:text-xl">
                         Time: {formatSecondsFromMs(result.timeTakenMs)}
                       </p>
                     </div>
                     <div className="pt-1">
                       {result.isCorrect ? (
-                        <CheckCircle2 className="size-6 text-emerald-400" aria-label="Correct" />
+                        <CheckCircle2 className="size-7 text-emerald-400" aria-label="Correct" />
                       ) : (
-                        <XCircle className="size-6 text-rose-400" aria-label="Incorrect" />
+                        <XCircle className="size-7 text-rose-400" aria-label="Incorrect" />
                       )}
                     </div>
                   </div>
@@ -504,66 +813,66 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-              <p className="text-lg font-semibold text-slate-100">Rate this quiz</p>
+            <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+              <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>
               <div className="flex flex-wrap gap-3">
                 <GameButton
+                  ref={registerCompleteFocusRef("like")}
                   centered
                   icon={<ThumbsUp size={20} />}
                   onClick={() => void submitVote("like")}
                   disabled={isVoting}
+                  focused={focusedCompleteTarget === "like"}
                   state={vote === "like" ? "selected" : "default"}
-                  className="min-h-14 max-w-56 text-lg"
+                  className="min-h-20 max-w-72 text-2xl md:text-3xl"
                 >
                   Like ({likes})
                 </GameButton>
                 <GameButton
+                  ref={registerCompleteFocusRef("dislike")}
                   centered
                   icon={<ThumbsDown size={20} />}
                   onClick={() => void submitVote("dislike")}
                   disabled={isVoting}
+                  focused={focusedCompleteTarget === "dislike"}
                   state={vote === "dislike" ? "selected" : "default"}
-                  className="min-h-14 max-w-56 text-lg"
+                  className="min-h-20 max-w-72 text-2xl md:text-3xl"
                 >
                   Dislike ({dislikes})
                 </GameButton>
               </div>
-              <p className="text-base text-slate-300">{computeLikeRatioLabel(likes, dislikes)}</p>
-              {voteError ? <p className="text-sm text-rose-300">{voteError}</p> : null}
+              <p className="text-xl text-[#9394a5] md:text-2xl">
+                {computeLikeRatioLabel(likes, dislikes)}
+              </p>
+              {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
             </div>
 
-            <div className="space-y-1">
-              {saveStatus === "saving" ? <p className="text-base text-slate-300">Saving score...</p> : null}
-              {saveStatus === "saved" ? <p className="text-base text-emerald-300">Score saved!</p> : null}
-              {saveStatus === "error" ? (
-                <p className="text-base text-rose-300">Could not save score. Please try again later.</p>
-              ) : null}
-              {saveStatus === "anonymous" ? (
-                <p className="text-base text-slate-300">
-                  Create an account to save your scores.
-                  <button
-                    type="button"
-                    onClick={() => router.push("/sign-in?callbackURL=/dashboard")}
-                    className="ml-2 font-semibold text-cyan-300 underline underline-offset-2"
-                  >
-                    Sign in
-                  </button>
-                </p>
-              ) : null}
-            </div>
+            {shouldShowSaveStatusCard ? (
+              <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                {saveStatus === "saving" ? <p className="text-xl text-[#9394a5]">Saving score...</p> : null}
+                {saveStatus === "error" ? (
+                  <p className="text-xl text-rose-300">Could not save score. Please try again later.</p>
+                ) : null}
+                {saveStatus === "anonymous" ? (
+                  <p className="text-xl text-[#9394a5]">
+                    Create an account to save your scores.
+                    <button
+                      ref={registerCompleteFocusRef("sign-in")}
+                      type="button"
+                      onClick={() => router.push("/sign-in?callbackURL=/dashboard")}
+                      className={cn(
+                        "ml-2 font-semibold text-[#818cf8] underline underline-offset-2",
+                        focusedCompleteTarget === "sign-in" ? "rounded-md ring-4 ring-[#818cf8]/70" : "",
+                      )}
+                    >
+                      Sign in
+                    </button>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <GameButton centered className="min-h-14 max-w-xs text-lg" onClick={playAgain}>
-                Play Again
-              </GameButton>
-              <GameButton
-                centered
-                className="min-h-14 max-w-xs border-cyan-500/50 bg-cyan-500/10 text-lg text-cyan-100"
-                onClick={() => router.push("/")}
-              >
-                Back to Hub
-              </GameButton>
-            </div>
+            {renderCompleteActions("bottom")}
           </section>
         ) : null}
       </main>

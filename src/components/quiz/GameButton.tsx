@@ -1,21 +1,22 @@
 "use client";
 
+import { forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const gameButtonVariants = cva(
-  "min-h-16 w-full rounded-xl border-2 px-4 py-3 text-left text-base leading-tight font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300",
+  "min-h-[4.5rem] w-full rounded-2xl border-2 px-5 py-4 text-left text-lg leading-tight font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/70 md:min-h-20 md:text-xl",
   {
     variants: {
       state: {
-        default: "border-slate-700 bg-slate-900 text-slate-100",
-        selected: "border-slate-400 bg-slate-700 text-white",
-        orange: "border-orange-300 bg-orange-500 text-white",
-        correct: "border-emerald-300 bg-emerald-600 text-white",
-        wrong: "border-rose-300 bg-rose-600 text-white",
+        default: "border-[#252940] bg-[#1a1d2e] text-[#e4e4e9]",
+        selected: "border-[#818cf8]/60 bg-[#6c8aff]/18 text-[#e4e4e9]",
+        orange: "border-[#fbbf24]/60 bg-[#fbbf24]/18 text-[#e4e4e9]",
+        correct: "border-[#4ade80]/60 bg-[#4ade80]/16 text-[#e4e4e9]",
+        wrong: "border-[#f87171]/60 bg-[#f87171]/16 text-[#e4e4e9]",
       },
       focused: {
-        true: "ring-4 ring-amber-300",
+        true: "ring-4 ring-[#818cf8]/70",
         false: "",
       },
       centered: {
@@ -36,21 +37,28 @@ type GameButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
     icon?: React.ReactNode;
   };
 
-export function GameButton({
-  className,
-  state,
-  focused,
-  centered,
-  icon,
-  children,
-  ...props
-}: GameButtonProps) {
+export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(function GameButton(
+  {
+    className,
+    state,
+    focused,
+    centered,
+    icon,
+    children,
+    ...props
+  },
+  ref,
+) {
   return (
-    <button className={cn(gameButtonVariants({ state, focused, centered }), className)} {...props}>
+    <button
+      ref={ref}
+      className={cn(gameButtonVariants({ state, focused, centered }), className)}
+      {...props}
+    >
       <span className={cn("flex items-center gap-2", centered && "justify-center")}>
         {icon ? <span className="shrink-0">{icon}</span> : null}
         <span>{children}</span>
       </span>
     </button>
   );
-}
+});

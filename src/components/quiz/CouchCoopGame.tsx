@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
+import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { authClient } from "@/lib/auth-client";
+import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +106,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   }, [currentQuestionIndex, totalQuestions]);
 
   const totalCorrect = useMemo(() => scores.reduce((sum, score) => sum + score, 0), [scores]);
+  const teamAccuracyPercentage =
+    totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
 
   const leaderboard = useMemo(() => {
     return playerNames
@@ -131,6 +135,10 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         return a.name.localeCompare(b.name);
       });
   }, [playerNames, results, scores]);
+
+  useEffect(() => {
+    rememberRecentQuiz("couch_coop", quiz.id);
+  }, [quiz.id]);
 
   function stopCountdown() {
     if (timerRef.current) {
@@ -373,24 +381,17 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   async function pickAnotherCouchQuiz() {
     try {
-      const withExclude = await fetch(`/api/quiz/random?mode=couch_coop&exclude=${quiz.id}`, {
-        cache: "no-store",
+      const nextQuizId = await getNextRandomQuizId({
+        mode: "couch_coop",
+        currentQuizId: quiz.id,
       });
 
-      if (withExclude.ok) {
-        const payload = (await withExclude.json()) as { quiz: { id: string } };
-        router.push(`/play/${payload.quiz.id}`);
-        return;
-      }
-
-      const fallback = await fetch("/api/quiz/random?mode=couch_coop", { cache: "no-store" });
-      if (!fallback.ok) {
+      if (!nextQuizId) {
         router.push("/");
         return;
       }
 
-      const payload = (await fallback.json()) as { quiz: { id: string } };
-      router.push(`/play/${payload.quiz.id}`);
+      router.push(`/play/${nextQuizId}`);
     } catch {
       router.push("/");
     }
@@ -398,27 +399,29 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   if (phase === "setup") {
     return (
-      <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
-        <main className="mx-auto w-full max-w-4xl space-y-6">
+      <div className="min-h-screen bg-[#0f1117] px-4 py-6 text-[#e4e4e9] sm:px-6 md:px-10">
+        <main className="mx-auto w-full max-w-5xl space-y-7">
           <QuizPlayHeader
             title={quiz.title}
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
           />
-          <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
+          <section className="space-y-7 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-7 md:p-9">
             <div className="space-y-2 text-center">
-              <h1 className="text-4xl font-black tracking-tight md:text-5xl">Who&apos;s playing?</h1>
-              <p className="text-lg text-slate-300 md:text-xl">
+              <h1 className="text-[clamp(3rem,4.5vw,5rem)] font-black tracking-tight">
+                Who&apos;s playing?
+              </h1>
+              <p className="text-xl text-[#9394a5] md:text-2xl">
                 Enter 2 to 6 players, then start your couch co-op round.
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {setupNames.map((name, index) => (
                 <div key={`player-input-${index}`} className="flex items-center gap-3">
                   <label
                     htmlFor={`player-name-${index}`}
-                    className="w-24 text-sm font-semibold text-slate-300 md:text-base"
+                    className="w-28 text-base font-semibold text-[#9394a5] md:text-lg"
                   >
                     Player {index + 1}
                   </label>
@@ -437,14 +440,14 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                     }}
                     placeholder={`Player ${index + 1}`}
                     className={cn(
-                      "min-h-12 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 text-base text-slate-100",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400/50",
+                      "min-h-14 w-full rounded-2xl border border-[#252940] bg-[#0f1117] px-5 text-lg text-[#e4e4e9] md:min-h-16 md:text-xl",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/50",
                     )}
                   />
                   <GameButton
                     centered
                     disabled={setupNames.length <= MIN_PLAYERS}
-                    className="min-h-12 max-w-32"
+                    className="min-h-14 max-w-36 text-base md:text-lg"
                     onClick={() =>
                       setSetupNames((previous) =>
                         previous.length <= MIN_PLAYERS
@@ -463,7 +466,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               <GameButton
                 centered
                 disabled={setupNames.length >= MAX_PLAYERS}
-                className="min-h-12 max-w-44"
+                className="min-h-14 max-w-52 text-base md:text-lg"
                 onClick={() =>
                   setSetupNames((previous) =>
                     previous.length >= MAX_PLAYERS ? previous : [...previous, ""],
@@ -475,7 +478,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               <GameButton
                 centered
                 state={timerEnabled ? "selected" : "default"}
-                className="min-h-12 max-w-44"
+                className="min-h-14 max-w-52 text-base md:text-lg"
                 onClick={() => setTimerEnabled((previous) => !previous)}
               >
                 Timer: {timerEnabled ? "ON" : "OFF"}
@@ -483,7 +486,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             </div>
 
             {setupError ? (
-              <p className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-center text-rose-200">
+              <p className="rounded-2xl border border-rose-500/50 bg-rose-500/10 p-4 text-center text-base text-rose-200 md:text-lg">
                 {setupError}
               </p>
             ) : null}
@@ -491,14 +494,14 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <GameButton
                 centered
-                className="min-h-14 max-w-xs border-cyan-500/50 bg-cyan-500/20 text-lg text-cyan-100"
+                className="min-h-16 max-w-sm border-[#6c8aff]/45 bg-[#6c8aff]/18 text-lg text-[#e4e4e9] md:text-xl"
                 onClick={startGameFromSetup}
               >
                 Start Couch Co-op
               </GameButton>
               <GameButton
                 centered
-                className="min-h-14 max-w-xs"
+                className="min-h-16 max-w-sm text-lg md:text-xl"
                 onClick={() => router.push("/")}
               >
                 Back to Hub
@@ -512,10 +515,10 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   if (!currentQuestion) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-        <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
+        <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-[#252940] bg-[#1a1d2e] p-8 text-center">
           <h1 className="text-3xl font-bold md:text-4xl">Quiz unavailable</h1>
-          <p className="text-lg text-slate-300 md:text-xl">Could not load this couch co-op quiz.</p>
+          <p className="text-lg text-[#9394a5] md:text-xl">Could not load this couch co-op quiz.</p>
           <div className="flex justify-center">
             <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
           </div>
@@ -526,73 +529,98 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   if (phase === "complete") {
     return (
-      <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 md:px-10">
-        <main className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="min-h-screen bg-[#0f1117] px-4 py-6 text-[#e4e4e9] sm:px-6 md:px-10">
+        <main className="mx-auto w-full max-w-6xl space-y-7">
           <QuizPlayHeader
             title={quiz.title}
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
           />
-          <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
-            <div className="space-y-2 text-center">
-              <h2 className="text-4xl font-black tracking-tight md:text-5xl">Leaderboard</h2>
-              <p className="text-xl text-cyan-200 md:text-2xl">
-                Team score: {totalCorrect} / {totalQuestions}
-              </p>
+          <section className="space-y-8 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-8 md:p-12">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+              <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-8">
+                <p className="text-base font-semibold uppercase tracking-[0.28em] text-[#818cf8] md:text-lg">
+                  Team Result
+                </p>
+                <h2 className="mt-4 text-[clamp(3.4rem,5vw,6rem)] leading-[0.92] font-black tracking-tight text-[#e4e4e9]">
+                  Leaderboard
+                </h2>
+                <p className="mt-5 text-[clamp(2.5rem,4.4vw,4.75rem)] leading-none font-black text-[#e4e4e9]">
+                  {totalCorrect} / {totalQuestions}
+                </p>
+                <p className="mt-4 text-2xl text-[#9394a5] md:text-3xl">
+                  Team accuracy landed at {teamAccuracyPercentage}%.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">Players</p>
+                  <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">
+                    {playerNames.length}
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
+                  <p className="text-base font-semibold text-[#9394a5] md:text-lg">Top Player</p>
+                  <p className="mt-3 text-3xl font-black text-emerald-300 md:text-4xl">
+                    {leaderboard[0]?.name ?? "Team"}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {leaderboard.map((entry, index) => (
                 <div
                   key={`${entry.name}-${index}`}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-700 bg-slate-950/70 p-4"
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-6"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="inline-flex size-9 items-center justify-center rounded-full border border-slate-600 bg-slate-900 text-base font-bold">
+                    <span className="inline-flex size-14 items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e] text-xl font-bold">
                       {index + 1}
                     </span>
                     <div className="space-y-1">
-                      <p className="text-lg font-bold text-slate-100">
+                      <p className="text-3xl font-bold text-[#e4e4e9] md:text-4xl">
                         {entry.name}
-                        {index < 3 ? <Medal className="ml-2 inline size-4 text-amber-300" /> : null}
+                        {index < 3 ? <Medal className="ml-2 inline size-5 text-amber-300" /> : null}
                       </p>
-                      <p className="text-sm text-slate-400">
+                      <p className="text-lg text-[#9394a5] md:text-xl">
                         {entry.correctRate.toFixed(1)}% correct | Avg time {formatSecondsFromMs(entry.avgTimeMs)}
                       </p>
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-emerald-300">{entry.score}</p>
+                  <p className="text-5xl font-black text-emerald-300">{entry.score}</p>
                 </div>
               ))}
             </div>
 
-            <div className="space-y-1">
+            <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
               {saveStatus === "saving" ? (
-                <p className="text-base text-slate-300">Saving session...</p>
+                <p className="text-xl text-[#9394a5]">Saving session...</p>
               ) : null}
               {saveStatus === "saved" ? (
-                <p className="text-base text-emerald-300">Session saved!</p>
+                <p className="text-xl text-emerald-300">Session saved!</p>
               ) : null}
               {saveStatus === "error" ? (
-                <p className="text-base text-rose-300">Could not save this session.</p>
+                <p className="text-xl text-rose-300">Could not save this session.</p>
               ) : null}
               {saveStatus === "anonymous" ? (
-                <p className="text-base text-slate-300">Played in guest mode.</p>
+                <p className="text-xl text-[#9394a5]">Played in guest mode.</p>
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <GameButton centered className="min-h-14 max-w-xs text-lg" onClick={rematch}>
+            <div className="grid gap-4 md:grid-cols-3">
+              <GameButton centered className="min-h-20 text-2xl md:text-3xl" onClick={rematch}>
                 Rematch
               </GameButton>
               <GameButton
                 centered
-                className="min-h-14 max-w-xs border-cyan-500/50 bg-cyan-500/20 text-lg text-cyan-100"
+                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
                 onClick={() => void pickAnotherCouchQuiz()}
               >
                 Pick Another Couch Quiz
               </GameButton>
-              <GameButton centered className="min-h-14 max-w-xs text-lg" onClick={() => router.push("/")}>
+              <GameButton centered className="min-h-20 text-2xl md:text-3xl" onClick={() => router.push("/")}>
                 Back to Hub
               </GameButton>
             </div>
@@ -606,95 +634,92 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     currentCorrectOptionIndex !== null ? currentQuestion.options[currentCorrectOptionIndex]?.explanation : "";
 
   return (
-    <div className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-6 sm:py-6 md:px-10">
-      <main className="mx-auto w-full max-w-6xl space-y-4 md:space-y-6">
+    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-7xl space-y-5 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
-        <section className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-base font-semibold text-cyan-200 md:text-xl">
-              Question {currentQuestionIndex + 1} of {totalQuestions}
-            </p>
-            <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-100 md:px-4 md:text-base">
-              {currentPlayerName}&apos;s turn
-            </span>
+        <section className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
+          {timerEnabled ? (
+            <SlantedBar
+              value={timerPercentage}
+              className="h-3 border-x-0 border-t-0 md:h-4"
+              fillClassName={cn("bg-gradient-to-r", timerBarClass(remainingSeconds))}
+            />
+          ) : null}
+
+          <div className="space-y-5 p-5 md:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-lg font-semibold text-[#818cf8] md:text-2xl">
+                Question {currentQuestionIndex + 1} of {totalQuestions}
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-base font-bold text-amber-100 md:px-5 md:text-lg">
+                  {currentPlayerName}&apos;s turn
+                </span>
+              </div>
+            </div>
+
+            <h2 className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight font-bold">
+              {currentQuestion.questionText}
+            </h2>
+
+            <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+              {[0, 1, 2, 3].map((index) => {
+                const option = currentQuestion.options[index];
+                const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
+                const isWrongSelection =
+                  phase === "reveal" && selectedAnswerIndex === index && index !== currentCorrectOptionIndex;
+
+                return (
+                  <GameButton
+                    key={index}
+                    className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3.2vw,3.5rem)] [&>span>span]:leading-tight"
+                    state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
+                    focused={phase === "question" && focusedAnswerIndex === index}
+                    disabled={phase !== "question"}
+                    onClick={() => finalizeAnswer(index)}
+                  >
+                    {`${String.fromCharCode(65 + index)}: ${option?.text ?? ""}`}
+                  </GameButton>
+                );
+              })}
+            </div>
+
+            {phase === "reveal" ? (
+              <div className="space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5">
+                <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">
+                  {selectedAnswerIndex === null
+                    ? `${currentPlayerName} ran out of time.`
+                    : selectedAnswerIndex === currentCorrectOptionIndex
+                      ? `${currentPlayerName} is correct!`
+                      : `${currentPlayerName} is incorrect.`}
+                </p>
+                <p className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight text-[#9394a5]">
+                  {correctExplanation || "No explanation provided for this question."}
+                </p>
+                <div className="flex justify-center">
+                  <GameButton centered className="min-h-16 max-w-sm text-lg md:text-xl" onClick={moveToNextTurn}>
+                    {currentQuestionIndex + 1 >= totalQuestions ? "Show Leaderboard" : "Next Turn"}
+                  </GameButton>
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="h-2 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-3">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 transition-all"
-              style={{ width: `${progressPercentage}%` }}
+          <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+            <SlantedBar
+              value={progressPercentage}
+              className="h-3 md:h-4"
+              fillClassName="bg-gradient-to-r from-[#818cf8] to-[#6c8aff]"
             />
           </div>
-
-          {timerEnabled ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm font-semibold text-slate-300 md:text-base">
-                <span>Time left</span>
-                <span>{remainingSeconds}s</span>
-              </div>
-              <div className="h-3 overflow-hidden rounded-full border border-slate-700 bg-slate-950 md:h-4">
-                <div
-                  className={cn(
-                    "h-full bg-gradient-to-r transition-all duration-1000",
-                    timerBarClass(remainingSeconds),
-                  )}
-                  style={{ width: `${timerPercentage}%` }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <h2 className="text-xl leading-tight font-bold md:text-4xl">{currentQuestion.questionText}</h2>
-
-          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-            {[0, 1, 2, 3].map((index) => {
-              const option = currentQuestion.options[index];
-              const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
-              const isWrongSelection =
-                phase === "reveal" && selectedAnswerIndex === index && index !== currentCorrectOptionIndex;
-
-              return (
-                <GameButton
-                  key={index}
-                  className="min-h-16 text-base md:min-h-20 md:text-xl"
-                  state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
-                  focused={phase === "question" && focusedAnswerIndex === index}
-                  disabled={phase !== "question"}
-                  onClick={() => finalizeAnswer(index)}
-                >
-                  {`${String.fromCharCode(65 + index)}: ${option?.text ?? ""}`}
-                </GameButton>
-              );
-            })}
-          </div>
-
-          {phase === "reveal" ? (
-            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/70 p-3 md:space-y-4 md:p-4">
-              <p className="text-base font-semibold text-slate-100 md:text-xl">
-                {selectedAnswerIndex === null
-                  ? `${currentPlayerName} ran out of time.`
-                  : selectedAnswerIndex === currentCorrectOptionIndex
-                    ? `${currentPlayerName} is correct!`
-                    : `${currentPlayerName} is incorrect.`}
-              </p>
-              <p className="text-sm leading-relaxed text-slate-300 md:text-lg">
-                {correctExplanation || "No explanation provided for this question."}
-              </p>
-              <div className="flex justify-center">
-                <GameButton centered className="min-h-12 max-w-xs text-base md:min-h-14 md:text-lg" onClick={moveToNextTurn}>
-                  {currentQuestionIndex + 1 >= totalQuestions ? "Show Leaderboard" : "Next Turn"}
-                </GameButton>
-              </div>
-            </div>
-          ) : null}
         </section>
 
-        <section className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-6">
-          <h3 className="text-lg font-bold text-slate-100 md:text-xl">Live Scoreboard</h3>
+        <section className="space-y-4 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-5 md:p-7">
+          <h3 className="text-2xl font-bold text-[#e4e4e9] md:text-3xl">Live Scoreboard</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {playerNames.map((name, index) => {
               const playerAnswers = results.filter((result) => result.playerIndex === index);
@@ -704,17 +729,17 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 <div
                   key={`${name}-${index}`}
                   className={cn(
-                    "space-y-2 rounded-xl border bg-slate-950/60 p-4",
+                    "space-y-3 rounded-2xl border bg-[#0f1117]/72 p-5",
                     index === currentPlayerIndex && phase === "question"
-                      ? "border-cyan-400/60"
-                      : "border-slate-700",
+                      ? "border-[#818cf8]/55"
+                      : "border-[#252940]",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-lg font-bold text-slate-100">{name}</p>
-                    <p className="text-2xl font-black text-emerald-300">{scores[index] ?? 0}</p>
+                    <p className="text-2xl font-bold text-[#e4e4e9] md:text-3xl">{name}</p>
+                    <p className="text-4xl font-black text-emerald-300">{scores[index] ?? 0}</p>
                   </div>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-base text-[#9394a5] md:text-lg">
                     {playerAnswers.length} answered
                     {playerAnswers.length > 0
                       ? ` | Avg ${formatSecondsFromMs(
@@ -726,18 +751,18 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                   <div className="pt-1">
                     {latestAnswer ? (
                       latestAnswer.isCorrect ? (
-                        <span className="inline-flex items-center gap-1 text-sm text-emerald-300">
-                          <CheckCircle2 className="size-4" />
+                        <span className="inline-flex items-center gap-1 text-base text-emerald-300 md:text-lg">
+                          <CheckCircle2 className="size-5" />
                           Last: Correct
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-sm text-rose-300">
-                          <XCircle className="size-4" />
+                        <span className="inline-flex items-center gap-1 text-base text-rose-300 md:text-lg">
+                          <XCircle className="size-5" />
                           Last: Incorrect
                         </span>
                       )
                     ) : (
-                      <span className="text-sm text-slate-500">No answers yet</span>
+                      <span className="text-base text-[#6b6d7e] md:text-lg">No answers yet</span>
                     )}
                   </div>
                 </div>

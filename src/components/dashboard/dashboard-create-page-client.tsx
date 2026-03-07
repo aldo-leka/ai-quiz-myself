@@ -492,28 +492,28 @@ export function DashboardCreatePageClient({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
-        <h2 className="text-3xl font-black tracking-tight text-slate-100 md:text-4xl">
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
+        <h2 className="text-[clamp(2.6rem,4vw,4.6rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
           Create Quiz
         </h2>
-        <p className="mt-2 text-lg text-slate-300">
+        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
           Pick a source, tune the game mode, and launch generation.
         </p>
       </section>
 
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 md:p-6">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Wallet</p>
-            <p className="text-3xl font-black text-cyan-100">{formatUsd(walletBalanceCents)}</p>
-            <p className="text-sm text-slate-300">
+            <p className="text-base font-semibold uppercase tracking-wide text-[#9394a5] md:text-lg">Wallet</p>
+            <p className="text-5xl font-black text-[#e4e4e9] md:text-6xl">{formatUsd(walletBalanceCents)}</p>
+            <p className="text-base text-[#9394a5] md:text-lg">
               Cost per generation: {formatUsd(generationCostCents)}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-200">
-              <Wallet className="size-4 text-cyan-200" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#252940] bg-[#0f1117]/82 px-4 py-2.5 text-base text-[#e4e4e9] md:text-lg">
+              <Wallet className="size-5 text-[#818cf8]" />
               Mode:{" "}
               {sourceType === "pdf"
                 ? "Platform credits"
@@ -525,16 +525,16 @@ export function DashboardCreatePageClient({
               type="button"
               variant="outline"
               onClick={() => setTopUpModalOpen(true)}
-              className="border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
             >
-              <CreditCard className="mr-2 size-4" />
+              <CreditCard className="mr-2 size-5" />
               Add to credit balance
             </Button>
             <Button
               asChild
               type="button"
               variant="outline"
-              className="border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-6 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
             >
               <Link href="/dashboard/billing">Billing & Auto Recharge</Link>
             </Button>
@@ -542,7 +542,7 @@ export function DashboardCreatePageClient({
         </div>
 
         {!platformBillingAvailable ? (
-          <p className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
             Platform billing is not configured yet (`OPENAI_API_KEY` missing), so only BYOK mode is available.
           </p>
         ) : null}
@@ -558,26 +558,26 @@ export function DashboardCreatePageClient({
               type="button"
               onClick={() => applySourceType(card.value)}
               className={cn(
-                "rounded-3xl border p-5 text-left transition",
+                "rounded-3xl border p-6 text-left transition md:p-7",
                 active
-                  ? "border-cyan-400 bg-cyan-500/15 shadow-[0_0_0_1px_rgba(34,211,238,0.45)]"
-                  : "border-slate-800 bg-slate-900/70 hover:border-cyan-500/40 hover:bg-cyan-500/5",
+                  ? "border-[#818cf8]/55 bg-[#6c8aff]/14 shadow-[0_0_0_1px_rgba(129,140,248,0.28)]"
+                  : "border-[#252940] bg-[#1a1d2e]/78 hover:border-[#6c8aff]/35 hover:bg-[#6c8aff]/8",
               )}
             >
-              <div className="inline-flex rounded-2xl border border-cyan-500/40 bg-cyan-500/10 p-2">
-                <Icon className="size-5 text-cyan-200" />
+              <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
+                <Icon className="size-7 text-[#818cf8]" />
               </div>
-              <p className="mt-3 text-xl font-bold text-slate-100">{card.title}</p>
-              <p className="mt-1 text-sm text-slate-300">{card.description}</p>
+              <p className="mt-4 text-3xl font-bold text-[#e4e4e9] md:text-4xl">{card.title}</p>
+              <p className="mt-2 text-base text-[#9394a5] md:text-xl">{card.description}</p>
             </button>
           );
         })}
       </section>
 
-      <section className="space-y-5 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 md:p-8">
+      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
         {showBillingToggle ? (
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-300">Billing Mode</p>
+            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Billing Mode</p>
             <div className="flex flex-wrap gap-3">
               <FilterPill
                 isActive={effectiveBillingMode === "platform_credits"}
@@ -594,7 +594,7 @@ export function DashboardCreatePageClient({
             </div>
           </div>
         ) : sourceType !== "pdf" && !canUseByok ? (
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-100">
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
             No API key found, so this will run in platform credits mode.
             {" "}
             <Link href="/dashboard/api-keys" className="font-semibold underline">
@@ -604,7 +604,7 @@ export function DashboardCreatePageClient({
         ) : null}
 
         {effectiveBillingMode === "platform_credits" && !hasEnoughBalance ? (
-          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-100">
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-base text-rose-100 md:text-lg">
             Insufficient balance for this generation.
             {" "}
             Required: {formatUsd(generationCostCents)}. Current: {formatUsd(walletBalanceCents)}.
@@ -622,16 +622,16 @@ export function DashboardCreatePageClient({
         {sourceType === "theme" ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-300">Theme</p>
+              <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Theme</p>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 disabled={(!hasApiKey && !platformBillingAvailable) || surpriseLoading}
-                className="border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                className="min-h-14 rounded-2xl border-[#6c8aff]/35 bg-[#6c8aff]/12 px-5 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
                 onClick={() => void surpriseMeTheme()}
               >
-                <Sparkles className="mr-1 size-4" />
+                <Sparkles className="mr-2 size-5" />
                 {surpriseLoading ? "Thinking..." : "Surprise Me"}
               </Button>
             </div>
@@ -639,24 +639,26 @@ export function DashboardCreatePageClient({
               value={theme}
               onChange={(event) => setTheme(event.target.value)}
               placeholder="e.g. Ancient Civilizations, Ocean Creatures, Space Exploration"
+              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
             />
           </div>
         ) : null}
 
         {sourceType === "url" ? (
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-300">Article URL</p>
+            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Article URL</p>
             <Input
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               placeholder="https://example.com/article"
+              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
             />
           </div>
         ) : null}
 
         {sourceType === "pdf" ? (
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-300">
+            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
               PDF file (max {formatBytes(pdfMaxFileSizeBytes)})
             </p>
             <div
@@ -672,18 +674,18 @@ export function DashboardCreatePageClient({
                 setPdfFileFromInput(file);
               }}
               className={cn(
-                "rounded-2xl border border-dashed p-6 text-center transition",
+                "rounded-3xl border border-dashed p-7 text-center transition md:p-8",
                 isDragActive
-                  ? "border-cyan-400 bg-cyan-500/10"
-                  : "border-slate-700 bg-slate-950/70",
+                  ? "border-[#818cf8]/55 bg-[#6c8aff]/12"
+                  : "border-[#252940] bg-[#0f1117]/82",
               )}
             >
-              <p className="text-slate-200">
+              <p className="text-lg text-[#e4e4e9] md:text-2xl">
                 Drag & drop a PDF here, or{" "}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="font-semibold text-cyan-200 underline"
+                  className="font-semibold text-[#818cf8] underline"
                 >
                   choose file
                 </button>
@@ -699,17 +701,17 @@ export function DashboardCreatePageClient({
                 }}
               />
               {pdfFile ? (
-                <p className="mt-2 text-sm text-cyan-100">
+                <p className="mt-3 text-base text-[#e4e4e9] md:text-lg">
                   {formatPdfFileName(pdfFile.name)} ({formatBytes(pdfFile.size)})
                 </p>
               ) : null}
             </div>
             {r2UploadAvailable ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-sm text-[#9394a5] md:text-base">
                 Large PDFs upload to cloud storage first, then the generation task downloads them asynchronously.
               </p>
             ) : (
-              <p className="text-xs text-slate-400">
+              <p className="text-sm text-[#9394a5] md:text-base">
                 R2 is not configured, so PDF uploads use the smaller direct-upload fallback.
               </p>
             )}
@@ -717,7 +719,7 @@ export function DashboardCreatePageClient({
         ) : null}
 
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-slate-300">Game Mode</p>
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Game Mode</p>
           <div className="flex flex-wrap gap-3">
             {modeOptions.map((option) => (
               <FilterPill
@@ -732,7 +734,7 @@ export function DashboardCreatePageClient({
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-slate-300">Difficulty</p>
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Difficulty</p>
           <div className="flex flex-wrap gap-3">
             {isWwtbam ? (
               <FilterPill isActive onClick={() => undefined}>
@@ -751,14 +753,14 @@ export function DashboardCreatePageClient({
             )}
           </div>
           {isWwtbam ? (
-            <p className="text-xs text-slate-400">
+            <p className="text-sm text-[#9394a5] md:text-base">
               WWTBAM always uses escalating difficulty.
             </p>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-300">Language</p>
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Language</p>
           <PlayerSelect
             value={language}
             onValueChange={setLanguage}
@@ -773,7 +775,7 @@ export function DashboardCreatePageClient({
             type="button"
             disabled={!canGenerate}
             onClick={() => void generateQuiz()}
-            className="min-h-11 border-cyan-500/50 bg-cyan-500/20 px-6 text-cyan-100 hover:bg-cyan-500/30"
+            className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-7 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
           >
             {submitting
               ? "Starting..."
@@ -784,7 +786,7 @@ export function DashboardCreatePageClient({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+            className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-7 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
             onClick={() => router.push("/dashboard/my-quizzes")}
           >
             Back to My Quizzes
@@ -792,23 +794,23 @@ export function DashboardCreatePageClient({
         </div>
 
         {statusMessage ? (
-          <p className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
+          <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-base text-rose-200 md:text-lg">
             {statusMessage}
           </p>
         ) : null}
       </section>
 
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
-        <DialogContent className="max-w-md rounded-3xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-slate-100">
+        <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-2xl font-black text-slate-100">Add to credit balance</DialogTitle>
-            <DialogDescription className="text-slate-300">
+            <DialogTitle className="text-3xl font-black text-[#e4e4e9]">Add to credit balance</DialogTitle>
+            <DialogDescription className="text-lg text-[#9394a5]">
               Choose a top-up amount. You will complete payment in Stripe checkout.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-300">Amount</p>
+            <p className="text-lg font-semibold text-[#9394a5]">Amount</p>
             <PlayerSelect
               value={topUpAmount}
               onValueChange={setTopUpAmount}
@@ -816,7 +818,7 @@ export function DashboardCreatePageClient({
               options={topUpSelectOptions}
               widthClassName="w-full"
             />
-            <p className="text-sm text-slate-300">
+            <p className="text-base text-[#9394a5]">
               Current balance: {formatUsd(walletBalanceCents)}
             </p>
           </div>
@@ -825,7 +827,7 @@ export function DashboardCreatePageClient({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 border-slate-600 bg-slate-900/80 text-slate-100 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:text-cyan-100"
+              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-5 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]"
               disabled={topUpLoading}
               onClick={() => setTopUpModalOpen(false)}
             >
@@ -833,7 +835,7 @@ export function DashboardCreatePageClient({
             </Button>
             <Button
               type="button"
-              className="min-h-11 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-5 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24"
               disabled={topUpLoading}
               onClick={() => void openTopUpCheckout()}
             >

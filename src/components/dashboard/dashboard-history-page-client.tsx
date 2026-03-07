@@ -169,10 +169,12 @@ export function DashboardHistoryPageClient() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+    <div className="space-y-8">
+      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-8">
         <div className="space-y-3">
-          <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
+          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
+            Game Mode
+          </h2>
           <div className="flex flex-wrap gap-3">
             {modeOptions.map((option) => (
               <FilterPill
@@ -190,7 +192,9 @@ export function DashboardHistoryPageClient() {
         </div>
 
         <div className="space-y-3">
-          <h2 className="text-2xl font-bold text-slate-100">Sort</h2>
+          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
+            Sort
+          </h2>
           <div className="flex flex-wrap gap-3">
             {sortOptions.map((option) => (
               <FilterPill
@@ -208,37 +212,41 @@ export function DashboardHistoryPageClient() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-3xl font-black tracking-tight text-slate-100">Play History</h3>
-          <p className="text-lg text-slate-300">{total} sessions</p>
+          <h3 className="text-[clamp(2.6rem,4vw,4.5rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
+            Play History
+          </h3>
+          <p className="text-xl text-[#9394a5] md:text-3xl">{total} sessions</p>
         </div>
 
         {error ? (
-          <p className="rounded-xl border border-rose-500/50 bg-rose-500/10 p-4 text-rose-200">
+          <p className="rounded-2xl border border-rose-500/50 bg-rose-500/10 p-4 text-base text-rose-200 md:text-lg">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 text-lg text-[#9394a5] md:text-2xl">
             Loading history...
           </div>
         ) : null}
 
         {!loading && rows.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center">
-            <p className="text-2xl font-semibold text-slate-200">No games played yet. Browse the hub!</p>
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-8 text-center md:p-10">
+            <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">
+              No games played yet. Browse the hub!
+            </p>
             <Button
               asChild
-              className="mt-4 border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+              className="mt-5 min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
             >
               <Link href="/">Back to Hub</Link>
             </Button>
           </div>
         ) : null}
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {rows.map((row) => {
             const meta = modeMeta(row.gameMode);
             const isExpanded = expandedSessionId === row.id;
@@ -247,7 +255,7 @@ export function DashboardHistoryPageClient() {
             return (
               <article
                 key={row.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4"
+                className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 md:p-6"
               >
                 <button
                   type="button"
@@ -255,57 +263,61 @@ export function DashboardHistoryPageClient() {
                   className="flex w-full flex-wrap items-center justify-between gap-3 text-left"
                 >
                   <div>
-                    <p className="text-lg font-semibold text-slate-100">{row.quizTitle}</p>
-                    <p className="mt-1 inline-flex items-center gap-2 text-sm text-slate-400">
-                      <span className="text-cyan-300">{meta.icon}</span>
+                    <p className="text-2xl font-semibold text-[#e4e4e9] md:text-3xl">
+                      {row.quizTitle}
+                    </p>
+                    <p className="mt-2 inline-flex items-center gap-2 text-base text-[#9394a5] md:text-lg">
+                      <span className="text-[#818cf8]">{meta.icon}</span>
                       {meta.label}
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-sm text-slate-200">
-                      <Trophy className="size-4 text-cyan-300" />
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-base text-[#e4e4e9] md:text-lg">
+                      <Trophy className="size-5 text-[#818cf8]" />
                       Score {row.totalScore}
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-sm text-slate-200">
-                      <Clock3 className="size-4 text-cyan-300" />
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-base text-[#e4e4e9] md:text-lg">
+                      <Clock3 className="size-5 text-[#818cf8]" />
                       {row.durationMs !== null ? `${Math.round(row.durationMs / 1000)}s` : "In progress"}
                     </div>
-                    <span className="text-slate-400">
-                      {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                    <span className="text-[#9394a5]">
+                      {isExpanded ? <ChevronUp className="size-6" /> : <ChevronDown className="size-6" />}
                     </span>
                   </div>
                 </button>
 
                 {isExpanded ? (
-                  <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
+                  <div className="mt-5 space-y-3 border-t border-[#252940] pt-5">
                     {detailLoading === row.id ? (
-                      <p className="text-sm text-slate-400">Loading answers...</p>
+                      <p className="text-base text-[#9394a5] md:text-lg">Loading answers...</p>
                     ) : details && details.length > 0 ? (
                       details.map((answer) => (
                         <div
                           key={answer.id}
-                          className={`rounded-lg border p-3 ${
+                          className={`rounded-2xl border p-4 ${
                             answer.isCorrect
                               ? "border-emerald-500/50 bg-emerald-500/10"
                               : "border-rose-500/50 bg-rose-500/10"
                           }`}
                         >
-                          <p className="text-sm font-semibold text-slate-100">
+                          <p className="text-base font-semibold text-[#e4e4e9] md:text-xl">
                             Q{answer.position}: {answer.questionText}
                           </p>
-                          <p className="mt-1 text-sm text-slate-300">
+                          <p className="mt-1 text-base text-[#9394a5] md:text-lg">
                             {answer.isCorrect ? "Correct" : "Wrong"} · {Math.round(answer.timeTakenMs / 1000)}s
                           </p>
-                          <div className="mt-2 space-y-1 text-sm">
-                            <p className="text-cyan-200">
+                          <div className="mt-2 space-y-1 text-base md:text-lg">
+                            <p className="text-[#818cf8]">
                               Correct answer: {getCorrectAnswerText(answer)}
                             </p>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-slate-400">No answer breakdown available.</p>
+                      <p className="text-base text-[#9394a5] md:text-lg">
+                        No answer breakdown available.
+                      </p>
                     )}
                   </div>
                 ) : null}
@@ -318,7 +330,7 @@ export function DashboardHistoryPageClient() {
           <div className="flex justify-center">
             <Button
               variant="outline"
-              className="border-cyan-500/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
               onClick={() => setPage((previous) => previous + 1)}
             >
               Load More

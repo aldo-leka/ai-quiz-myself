@@ -72,6 +72,8 @@ const SORT_OPTIONS: Array<{ value: HubSort; label: string }> = [
   { value: "newest", label: "Newest" },
 ];
 
+const hubFilterPillClassName = "min-h-16 px-6 text-2xl md:min-h-20 md:px-8 md:text-3xl";
+
 function normalizeSort(value: string | null): HubSort {
   return value === "newest" ? "newest" : "popular";
 }
@@ -126,22 +128,22 @@ function QuizSkeletonGrid() {
       {Array.from({ length: 12 }).map((_, index) => (
         <div
           key={`skeleton-${index}`}
-          className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5"
+          className="rounded-2xl border border-[#252940] bg-[#1a1d2e]/86 p-5"
         >
-          <Skeleton className="h-8 w-3/4 bg-slate-800" />
+          <Skeleton className="h-8 w-3/4 bg-[#252940]" />
           <div className="mt-4 flex gap-2">
-            <Skeleton className="h-7 w-24 rounded-full bg-slate-800" />
-            <Skeleton className="h-7 w-20 rounded-full bg-slate-800" />
+            <Skeleton className="h-7 w-24 rounded-full bg-[#252940]" />
+            <Skeleton className="h-7 w-20 rounded-full bg-[#252940]" />
           </div>
           <div className="mt-5 space-y-3">
-            <Skeleton className="h-6 w-full bg-slate-800" />
-            <Skeleton className="h-6 w-5/6 bg-slate-800" />
+            <Skeleton className="h-6 w-full bg-[#252940]" />
+            <Skeleton className="h-6 w-5/6 bg-[#252940]" />
           </div>
           <div className="mt-6 grid grid-cols-2 gap-2">
-            <Skeleton className="h-10 bg-slate-800" />
-            <Skeleton className="h-10 bg-slate-800" />
-            <Skeleton className="h-10 bg-slate-800" />
-            <Skeleton className="h-10 bg-slate-800" />
+            <Skeleton className="h-10 bg-[#252940]" />
+            <Skeleton className="h-10 bg-[#252940]" />
+            <Skeleton className="h-10 bg-[#252940]" />
+            <Skeleton className="h-10 bg-[#252940]" />
           </div>
         </div>
       ))}
@@ -534,13 +536,13 @@ function HomePageContent() {
   }
 
   return (
-    <div ref={pageRef} className="min-h-screen overflow-x-clip bg-slate-950 text-slate-100">
+    <div ref={pageRef} className="min-h-screen overflow-x-clip bg-[#0f1117] text-[#e4e4e9]">
       <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-6 md:px-8 md:py-8">
-        <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-2xl md:p-8">
-          <div className="flex flex-col gap-6">
+        <section className="rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 shadow-2xl md:p-8">
+          <div className="flex flex-col gap-8">
             <div>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-6xl">
+              <div className="flex flex-wrap items-start justify-between gap-5">
+                <h1 className="text-6xl font-black tracking-tight text-[#e4e4e9] md:text-8xl xl:text-[6.5rem]">
                   QuizPlus Hub
                 </h1>
                 {sessionData?.user ? (
@@ -548,16 +550,16 @@ function HomePageContent() {
                     type="button"
                     onClick={() => router.push("/dashboard")}
                     className={cn(
-                      "inline-flex min-h-11 select-none items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-slate-100 transition",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                      "inline-flex min-h-16 select-none items-center gap-4 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-5 py-3 text-2xl font-semibold text-[#e4e4e9] transition md:min-h-20 md:px-7 md:text-3xl xl:text-4xl",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
-                    <Avatar size="lg" className="border border-slate-700">
+                    <Avatar size="lg" className="size-12 border border-[#252940] md:size-14">
                       <AvatarImage
                         src={sessionData.user.image ?? undefined}
                         alt={sessionData.user.name}
                       />
-                      <AvatarFallback className="bg-slate-800 text-cyan-100">
+                      <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
                         {userInitials(sessionData.user.name)}
                       </AvatarFallback>
                     </Avatar>
@@ -570,15 +572,15 @@ function HomePageContent() {
                     type="button"
                     onClick={() => router.push("/dashboard")}
                     className={cn(
-                      "min-h-11 select-none rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                      "min-h-16 select-none rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 py-3 text-2xl font-semibold whitespace-nowrap text-[#e4e4e9] transition md:min-h-20 md:px-8 md:text-3xl xl:text-4xl",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
                     Not logged in
                   </button>
                 )}
               </div>
-              <p className="mt-3 text-lg text-slate-300 md:text-2xl">
+              <p className="mt-5 max-w-[18ch] text-4xl leading-[1.08] text-[#9394a5] md:text-5xl xl:text-6xl">
                 Browse hub quizzes, filter by mode and difficulty, then jump straight into play.
               </p>
             </div>
@@ -586,10 +588,10 @@ function HomePageContent() {
             <div className="flex flex-col gap-4 xl:flex-row xl:justify-end">
               <GameButton
                 centered
-                className="min-h-14 w-full max-w-full border-cyan-500/50 bg-cyan-500/20 text-lg text-cyan-100 xl:w-auto xl:min-w-64"
+                className="min-h-20 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-3xl text-[#e4e4e9] xl:w-auto xl:min-w-80 xl:text-5xl"
                 onClick={() => void handleSurpriseMe()}
                 disabled={isSurpriseLoading}
-                icon={<Shuffle className="size-6" />}
+                icon={<Shuffle className="size-10 md:size-12" />}
               >
                 {isSurpriseLoading ? "Finding Quiz..." : "Surprise Me"}
               </GameButton>
@@ -597,17 +599,17 @@ function HomePageContent() {
           </div>
         </section>
 
-        <section className="space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
-          <div className="rounded-2xl border border-cyan-500/35 bg-gradient-to-r from-cyan-500/12 to-slate-900/80 p-4 md:p-5">
+        <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-4 md:p-6">
+          <div className="rounded-2xl border border-[#6c8aff]/30 bg-gradient-to-r from-[#6c8aff]/14 to-[#1a1d2e]/92 p-4 md:p-5">
             <div className="flex flex-wrap items-start gap-3">
-              <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/35 bg-cyan-500/15 text-cyan-200">
-                <Shuffle className="size-5" />
+              <div className="inline-flex size-16 shrink-0 items-center justify-center rounded-2xl border border-[#6c8aff]/30 bg-[#6c8aff]/14 text-[#818cf8] md:size-20">
+                <Shuffle className="size-8 md:size-10" />
               </div>
               <div className="space-y-1">
-                <p className="text-lg font-bold text-cyan-100 md:text-xl">
+                <p className="text-4xl leading-tight font-bold text-[#e4e4e9] md:text-5xl">
                   Pick your filters, then hit Surprise Me
                 </p>
-                <p className="text-sm text-slate-300 md:text-base">
+                <p className="max-w-[26ch] text-2xl leading-tight text-[#9394a5] md:text-4xl">
                   Select a game mode, optionally lock in a popular theme and difficulty, then
                   QuizPlus will launch a random matching quiz instantly.
                 </p>
@@ -616,12 +618,13 @@ function HomePageContent() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Game Mode</h2>
+            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Game Mode</h2>
             <div className="flex flex-wrap gap-3">
               {MODE_OPTIONS.map((option) => (
                 <FilterPill
                   key={option.value}
                   isActive={filters.mode === option.value}
+                  className={hubFilterPillClassName}
                   onClick={() => updateQueryParams({ mode: option.value, theme: null, page: 1 })}
                 >
                   {option.label}
@@ -631,10 +634,11 @@ function HomePageContent() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Popular Themes</h2>
+            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Popular Themes</h2>
             <div className="flex flex-wrap gap-3">
               <FilterPill
                 isActive={filters.theme === null}
+                className={hubFilterPillClassName}
                 onClick={() => updateQueryParams({ theme: null, page: 1 })}
               >
                 All Themes
@@ -643,6 +647,7 @@ function HomePageContent() {
                 <FilterPill
                   key={entry.theme}
                   isActive={filters.theme === entry.theme}
+                  className={hubFilterPillClassName}
                   onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
                 >
                   {entry.theme}
@@ -652,12 +657,13 @@ function HomePageContent() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Difficulty</h2>
+            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Difficulty</h2>
             <div className="flex flex-wrap gap-3">
               {DIFFICULTY_OPTIONS.map((option) => (
                 <FilterPill
                   key={option.value}
                   isActive={filters.difficulty === option.value}
+                  className={hubFilterPillClassName}
                   onClick={() => updateQueryParams({ difficulty: option.value, page: 1 })}
                 >
                   {option.label}
@@ -667,12 +673,13 @@ function HomePageContent() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-slate-100">Sort</h2>
+            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Sort</h2>
             <div className="flex flex-wrap gap-3">
               {SORT_OPTIONS.map((option) => (
                 <FilterPill
                   key={option.value}
                   isActive={filters.sort === option.value}
+                  className={hubFilterPillClassName}
                   onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
                 >
                   {option.label}
@@ -684,14 +691,16 @@ function HomePageContent() {
 
         <section className="space-y-5">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-3xl font-black tracking-tight text-slate-100">Browse & Play</h2>
-            <p className="text-lg text-slate-300">
+            <h2 className="text-5xl font-black tracking-tight text-[#e4e4e9] md:text-7xl">
+              Browse & Play
+            </h2>
+            <p className="text-3xl text-[#9394a5] md:text-5xl">
               {total} quiz{total === 1 ? "" : "es"}
             </p>
           </div>
 
           {hubError ? (
-            <p className="rounded-xl border border-rose-500/50 bg-rose-500/10 p-4 text-lg text-rose-200">
+            <p className="rounded-xl border border-rose-500/50 bg-rose-500/10 p-4 text-2xl text-rose-200 md:text-4xl">
               {hubError}
             </p>
           ) : null}
@@ -699,8 +708,8 @@ function HomePageContent() {
           {isLoading ? <QuizSkeletonGrid /> : null}
 
           {!isLoading && hubQuizzes.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center">
-              <p className="text-2xl font-semibold text-slate-200">
+            <div className="rounded-2xl border border-[#252940] bg-[#1a1d2e]/78 p-8 text-center">
+              <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">
                 No quizzes found. Try different filters.
               </p>
             </div>
@@ -726,6 +735,7 @@ function HomePageContent() {
                       likeRatio={quiz.likeRatio}
                       creatorName={quiz.creatorName}
                       creatorImage={quiz.creatorImage}
+                      size="large"
                       statusLabel="Ready"
                       onClick={() => router.push(`/play/${quiz.id}`)}
                       onKeyDown={(event) => handleCardKeyDown(event, index, quiz.id)}
@@ -741,7 +751,7 @@ function HomePageContent() {
                     onClick={() => updateQueryParams({ page: filters.page + 1 }, true)}
                     disabled={isLoadingMore}
                     variant="outline"
-                    className="min-h-14 min-w-56 border-cyan-500/50 bg-cyan-500/10 px-8 text-lg font-semibold text-cyan-100 hover:bg-cyan-500/20 focus-visible:ring-cyan-400/60"
+                    className="min-h-20 min-w-72 border-[#6c8aff]/45 bg-[#6c8aff]/12 px-8 text-3xl font-semibold text-[#e4e4e9] hover:bg-[#6c8aff]/18 focus-visible:ring-[#818cf8]/55 md:text-4xl"
                   >
                     {isLoadingMore ? "Loading More..." : "Load More"}
                   </Button>
@@ -757,7 +767,7 @@ function HomePageContent() {
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#0f1117]" />}>
       <HomePageContent />
     </Suspense>
   );

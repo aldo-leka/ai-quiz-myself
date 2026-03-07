@@ -15,11 +15,11 @@ export function FilterPill({ isActive, onClick, children, className }: FilterPil
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-12 min-w-12 max-w-full min-w-0 overflow-hidden truncate rounded-full border px-5 py-2 text-lg font-semibold whitespace-nowrap transition",
-        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+        "min-h-14 min-w-12 max-w-full min-w-0 overflow-hidden truncate rounded-full border px-6 py-2.5 text-lg font-semibold whitespace-nowrap transition md:min-h-16 md:px-7 md:text-2xl",
+        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
         isActive
-          ? "border-cyan-400 bg-cyan-500/20 text-cyan-100"
-          : "border-slate-700 bg-slate-900 text-slate-200",
+          ? "border-[#818cf8]/55 bg-[#6c8aff]/18 text-[#e4e4e9]"
+          : "border-[#252940] bg-[#1a1d2e] text-[#e4e4e9]",
         className,
       )}
     >

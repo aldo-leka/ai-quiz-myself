@@ -66,10 +66,10 @@ export default function PlayQuizPage() {
 
   if (loadError || !quiz) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-        <div className="max-w-xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
+        <div className="max-w-xl space-y-6 rounded-2xl border border-[#252940] bg-[#1a1d2e] p-8 text-center">
           <h1 className="text-3xl font-bold">Quiz unavailable</h1>
-          <p className="text-lg text-slate-300">{loadError ?? "Could not load this quiz."}</p>
+          <p className="text-lg text-[#9394a5]">{loadError ?? "Could not load this quiz."}</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={() => router.refresh()}>Retry</CircularButton>
             <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
@@ -92,10 +92,10 @@ export default function PlayQuizPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-      <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center">
+    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-6 text-[#e4e4e9]">
+      <div className="w-full max-w-2xl space-y-6 rounded-2xl border border-[#252940] bg-[#1a1d2e] p-8 text-center">
         <h1 className="text-3xl font-bold md:text-4xl">Couch Co-op</h1>
-        <p className="text-lg text-slate-300 md:text-xl">Coming soon. This mode is next in the queue.</p>
+        <p className="text-lg text-[#9394a5] md:text-xl">Coming soon. This mode is next in the queue.</p>
         <div className="flex justify-center">
           <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
         </div>

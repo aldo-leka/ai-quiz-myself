@@ -31,47 +31,49 @@ export function DashboardOverviewContent({
   renderQuizAction,
 }: DashboardOverviewContentProps) {
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 md:p-8">
-        <h2 className="text-3xl font-black tracking-tight text-slate-100 md:text-4xl">
+    <div className="space-y-10">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-7 md:p-10">
+        <h2 className="text-[clamp(2.8rem,5vw,5rem)] leading-[0.95] font-black tracking-tight text-[#e4e4e9]">
           Welcome back, {user.name || "Player"}
         </h2>
-        <p className="mt-2 text-lg text-slate-300">
+        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-3xl">
           Track your progress, review recent games, and manage your quiz library.
         </p>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm font-semibold text-slate-400">Total Quizzes Created</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">{overview.totalQuizzes}</p>
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-7">
+          <p className="text-base font-semibold text-[#9394a5] md:text-xl">Total Quizzes Created</p>
+          <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">{overview.totalQuizzes}</p>
         </div>
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm font-semibold text-slate-400">Total Games Played</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">{overview.totalGames}</p>
+        <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-7">
+          <p className="text-base font-semibold text-[#9394a5] md:text-xl">Total Games Played</p>
+          <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">{overview.totalGames}</p>
         </div>
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm font-semibold text-slate-400">Average Accuracy</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">
+        <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-7">
+          <p className="text-base font-semibold text-[#9394a5] md:text-xl">Average Accuracy</p>
+          <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">
             {overview.avgAccuracy.toFixed(1)}%
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm font-semibold text-slate-400">Credits Balance</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">
+        <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-7">
+          <p className="text-base font-semibold text-[#9394a5] md:text-xl">Credits Balance</p>
+          <p className="mt-3 text-5xl font-black text-[#e4e4e9] md:text-6xl">
             ${(overview.creditTotalCents / 100).toFixed(2)}
           </p>
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-2xl font-black text-slate-100">Recent Quizzes</h3>
+          <h3 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-5xl">
+            Recent Quizzes
+          </h3>
           {recentQuizzesAction}
         </div>
 
         {overview.recentQuizzes.length === 0 ? (
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 text-lg text-[#9394a5] md:text-2xl">
             <p>No quizzes yet. Generate your first quiz!</p>
             {emptyQuizzesAction ? <div className="mt-4">{emptyQuizzesAction}</div> : null}
           </div>
@@ -92,6 +94,7 @@ export function DashboardOverviewContent({
                   creatorName={user.name}
                   creatorImage={user.avatarUrl ?? user.image ?? null}
                   statusLabel="Ready"
+                  size="large"
                 >
                   {renderQuizAction ? renderQuizAction(quiz) : null}
                 </QuizCard>
@@ -101,14 +104,16 @@ export function DashboardOverviewContent({
         )}
       </section>
 
-      <section className="space-y-4">
-        <h3 className="text-2xl font-black text-slate-100">Recent Games</h3>
+      <section className="space-y-5">
+        <h3 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-5xl">
+          Recent Games
+        </h3>
         {overview.recentGames.length === 0 ? (
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 text-slate-300">
+          <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 text-lg text-[#9394a5] md:text-2xl">
             No games played yet.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {overview.recentGames.map((game) => {
               const durationMs =
                 game.finishedAt && game.startedAt
@@ -118,18 +123,22 @@ export function DashboardOverviewContent({
               return (
                 <div
                   key={game.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4"
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 md:p-6"
                 >
                   <div>
-                    <p className="text-lg font-semibold text-slate-100">{game.quizTitle}</p>
-                    <p className="text-sm text-slate-400">{formatDate(game.startedAt)}</p>
+                    <p className="text-2xl font-semibold text-[#e4e4e9] md:text-3xl">
+                      {game.quizTitle}
+                    </p>
+                    <p className="mt-1 text-base text-[#9394a5] md:text-lg">
+                      {formatDate(game.startedAt)}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4 text-slate-200">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-sm">
-                      <Trophy className="size-4 text-cyan-300" />
+                  <div className="flex flex-wrap items-center gap-4 text-[#e4e4e9]">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-base md:text-lg">
+                      <Trophy className="size-5 text-[#818cf8]" />
                       Score {game.totalScore}
                     </div>
-                    <div className="text-sm text-slate-400">
+                    <div className="text-base text-[#9394a5] md:text-lg">
                       {durationMs !== null ? `${Math.round(durationMs / 1000)}s` : "In progress"}
                     </div>
                   </div>

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 export type QuizCardDifficulty = "easy" | "medium" | "hard" | "mixed" | "escalating";
 export type QuizCardMode = "single" | "wwtbam" | "couch_coop";
 export type QuizCardStatusTone = "ready" | "generating" | "failed" | "neutral";
+export type QuizCardSize = "default" | "large";
 
 type QuizCardProps = {
   title: string;
@@ -28,6 +29,7 @@ type QuizCardProps = {
   className?: string;
   children?: React.ReactNode;
   showRating?: boolean;
+  size?: QuizCardSize;
 };
 
 function formatLikeRatio(likeRatio: number | null | undefined): string {
@@ -40,14 +42,14 @@ function difficultyBadgeClass(difficulty: QuizCardDifficulty): string {
   if (difficulty === "medium") return "border-amber-500/50 bg-amber-500/20 text-amber-200";
   if (difficulty === "hard") return "border-rose-500/50 bg-rose-500/20 text-rose-200";
   if (difficulty === "escalating") return "border-violet-500/50 bg-violet-500/20 text-violet-200";
-  return "border-cyan-500/50 bg-cyan-500/20 text-cyan-200";
+  return "border-[#6c8aff]/45 bg-[#6c8aff]/18 text-[#818cf8]";
 }
 
 function statusTextClass(tone: QuizCardStatusTone): string {
-  if (tone === "ready") return "text-cyan-200";
+  if (tone === "ready") return "text-[#4ade80]";
   if (tone === "generating") return "text-amber-200";
   if (tone === "failed") return "text-rose-200";
-  return "text-slate-200";
+  return "text-[#e4e4e9]";
 }
 
 function gameModeMeta(mode: QuizCardMode): {
@@ -76,66 +78,120 @@ function QuizCardBody({
   statusLabel,
   statusTone,
   showRating = true,
+  size = "default",
   children,
 }: Omit<QuizCardProps, "interactive" | "onClick" | "onKeyDown" | "cardRef" | "className">) {
   const modeMeta = gameModeMeta(gameMode);
+  const isLarge = size === "large";
 
   return (
     <div className="flex flex-1 flex-col">
-      <h3 className="line-clamp-2 text-2xl font-bold text-slate-100">{title}</h3>
+      <h3
+        className={cn(
+          "line-clamp-2 font-bold text-[#e4e4e9]",
+          isLarge ? "text-4xl leading-[0.95] md:text-5xl" : "text-2xl",
+        )}
+      >
+        {title}
+      </h3>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <QuizCreatorAttribution creatorName={creatorName} creatorImage={creatorImage} />
+      <div className={cn("mt-4 flex flex-wrap gap-2", isLarge ? "gap-3" : "")}>
+        <QuizCreatorAttribution
+          creatorName={creatorName}
+          creatorImage={creatorImage}
+          size={isLarge ? "md" : "sm"}
+        />
         <Badge
           variant="outline"
-          className="min-h-8 border-cyan-500/40 bg-cyan-500/10 px-3 text-sm text-cyan-100"
+          className={cn(
+            "border-[#6c8aff]/35 bg-[#6c8aff]/12 text-[#e4e4e9]",
+            isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
+          )}
         >
           {theme}
         </Badge>
         <Badge
           variant="outline"
-          className={cn("min-h-8 px-3 text-sm", difficultyBadgeClass(difficulty))}
+          className={cn(
+            difficultyBadgeClass(difficulty),
+            isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
+          )}
         >
           {difficulty === "escalating" ? "Escalating" : difficulty}
         </Badge>
       </div>
 
-      <div className="mt-auto space-y-4 pt-5">
-        <div className="flex items-center gap-2 text-lg text-slate-200">
-          <span className="text-cyan-300">{modeMeta.icon}</span>
+      <div className={cn("mt-auto space-y-4 pt-5", isLarge ? "space-y-5 pt-7" : "")}>
+        <div
+          className={cn(
+            "flex items-center gap-2 text-[#e4e4e9]",
+            isLarge ? "text-2xl md:text-4xl" : "text-lg",
+          )}
+        >
+          <span className="text-[#818cf8]">{modeMeta.icon}</span>
           <span>{modeMeta.label}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-base text-slate-300">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Gamepad2 className="size-4" />
+        <div className={cn("grid grid-cols-2 gap-3 text-[#9394a5]", isLarge ? "gap-4" : "text-base")}>
+          <div className={cn("rounded-lg border border-[#252940] bg-[#0f1117]/82", isLarge ? "p-4" : "p-3")}>
+            <div
+              className={cn(
+                "flex items-center gap-2 text-[#9394a5]",
+                isLarge ? "text-lg md:text-xl" : "",
+              )}
+            >
+              <Gamepad2 className={cn(isLarge ? "size-5 md:size-6" : "size-4")} />
               Questions
             </div>
-            <div className="mt-1 text-2xl font-bold text-slate-100">{questionCount}</div>
+            <div className={cn("mt-1 font-bold text-[#e4e4e9]", isLarge ? "text-4xl md:text-5xl" : "text-2xl")}>
+              {questionCount}
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Trophy className="size-4" />
+          <div className={cn("rounded-lg border border-[#252940] bg-[#0f1117]/82", isLarge ? "p-4" : "p-3")}>
+            <div
+              className={cn(
+                "flex items-center gap-2 text-[#9394a5]",
+                isLarge ? "text-lg md:text-xl" : "",
+              )}
+            >
+              <Trophy className={cn(isLarge ? "size-5 md:size-6" : "size-4")} />
               Plays
             </div>
-            <div className="mt-1 text-2xl font-bold text-slate-100">{playCount}</div>
+            <div className={cn("mt-1 font-bold text-[#e4e4e9]", isLarge ? "text-4xl md:text-5xl" : "text-2xl")}>
+              {playCount}
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-            <div className="flex items-center gap-2 text-slate-400">
-              <ThumbsUp className="size-4" />
+          <div className={cn("rounded-lg border border-[#252940] bg-[#0f1117]/82", isLarge ? "p-4" : "p-3")}>
+            <div
+              className={cn(
+                "flex items-center gap-2 text-[#9394a5]",
+                isLarge ? "text-lg md:text-xl" : "",
+              )}
+            >
+              <ThumbsUp className={cn(isLarge ? "size-5 md:size-6" : "size-4")} />
               Rating
             </div>
-            <div className="mt-1 text-xl font-bold text-slate-100">
+            <div className={cn("mt-1 font-bold text-[#e4e4e9]", isLarge ? "text-3xl md:text-4xl" : "text-xl")}>
               {showRating ? formatLikeRatio(likeRatio) : "—"}
             </div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Clock3 className="size-4" />
+          <div className={cn("rounded-lg border border-[#252940] bg-[#0f1117]/82", isLarge ? "p-4" : "p-3")}>
+            <div
+              className={cn(
+                "flex items-center gap-2 text-[#9394a5]",
+                isLarge ? "text-lg md:text-xl" : "",
+              )}
+            >
+              <Clock3 className={cn(isLarge ? "size-5 md:size-6" : "size-4")} />
               Status
             </div>
-            <div className={cn("mt-1 text-xl font-bold", statusTextClass(statusTone ?? "ready"))}>
+            <div
+              className={cn(
+                "mt-1 font-bold",
+                statusTextClass(statusTone ?? "ready"),
+                isLarge ? "text-3xl md:text-4xl" : "text-xl",
+              )}
+            >
               {statusLabel ?? "Ready"}
             </div>
           </div>
@@ -156,9 +212,10 @@ export function QuizCard({
   ...props
 }: QuizCardProps) {
   const classes = cn(
-    "flex min-h-[320px] flex-col rounded-2xl border border-slate-700 bg-slate-900/90 p-5 text-left transition",
+    "flex min-h-[320px] flex-col rounded-2xl border border-[#252940] bg-[#1a1d2e]/92 p-5 text-left transition",
+    props.size === "large" ? "min-h-[460px] p-6 md:min-h-[520px] md:p-7" : "",
     interactive &&
-      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
     className,
   );
 

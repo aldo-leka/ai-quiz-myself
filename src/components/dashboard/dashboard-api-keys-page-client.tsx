@@ -102,16 +102,18 @@ export function DashboardApiKeysPageClient() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <h2 className="text-3xl font-black text-slate-100">API Keys</h2>
-        <p className="mt-2 text-slate-300">
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
+          API Keys
+        </h2>
+        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
           Keys are encrypted at rest and used for your generation and gameplay assistants.
         </p>
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <h3 className="text-2xl font-bold text-slate-100">Add or Update Key</h3>
+      <section className="space-y-5 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Add or Update Key</h3>
         <div className="grid gap-3 md:grid-cols-3">
           <PlayerSelect
             value={provider}
@@ -128,41 +130,43 @@ export function DashboardApiKeysPageClient() {
             placeholder="Label (optional)"
             value={label}
             onChange={(event) => setLabel(event.target.value)}
+            className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-xl"
           />
           <Input
             placeholder="API key"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
             type="password"
+            className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-xl"
           />
         </div>
         <Button
           disabled={saving || apiKey.trim().length < 10}
           onClick={() => void saveKey()}
-          className="border-cyan-500/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
+          className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
         >
           {saving ? "Saving..." : "Save Key"}
         </Button>
-        {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+        {status ? <p className="text-base text-[#9394a5] md:text-lg">{status}</p> : null}
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <h3 className="text-2xl font-bold text-slate-100">Saved Keys</h3>
-        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-        {loading ? <p className="text-slate-300">Loading keys...</p> : null}
+      <section className="space-y-5 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Saved Keys</h3>
+        {error ? <p className="text-base text-rose-300 md:text-lg">{error}</p> : null}
+        {loading ? <p className="text-lg text-[#9394a5] md:text-2xl">Loading keys...</p> : null}
         {!loading && rows.length === 0 ? (
-          <p className="text-slate-300">No API keys saved yet.</p>
+          <p className="text-lg text-[#9394a5] md:text-2xl">No API keys saved yet.</p>
         ) : null}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((row) => (
             <article
               key={row.id}
-              className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4"
+              className="rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-5 md:p-6"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="inline-flex items-center gap-2 text-lg font-semibold text-slate-100">
-                  <KeyRound className="size-4 text-cyan-300" />
+                <p className="inline-flex items-center gap-2 text-2xl font-semibold text-[#e4e4e9]">
+                  <KeyRound className="size-5 text-[#818cf8]" />
                   {row.provider}
                 </p>
                 <Button
@@ -171,12 +175,12 @@ export function DashboardApiKeysPageClient() {
                   className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
                   onClick={() => void deleteKey(row.id)}
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-5" />
                 </Button>
               </div>
-              <p className="mt-2 text-sm text-slate-400">{row.label ?? "No label"}</p>
-              <p className="mt-1 text-sm text-cyan-100">{row.maskedKey}</p>
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-base text-[#9394a5] md:text-lg">{row.label ?? "No label"}</p>
+              <p className="mt-2 text-base text-[#e4e4e9] md:text-lg">{row.maskedKey}</p>
+              <p className="mt-4 text-sm text-[#6b6d7e] md:text-base">
                 Updated {new Date(row.createdAt).toLocaleString()}
               </p>
             </article>

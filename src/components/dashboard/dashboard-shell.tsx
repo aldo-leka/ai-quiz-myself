@@ -98,16 +98,16 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-6 md:px-8 md:py-8">
+    <div className="min-h-screen bg-[#0f1117] text-[#e4e4e9]">
+      <main className="mx-auto w-full max-w-[1820px] space-y-10 px-4 py-6 md:px-10 md:py-10">
         {impersonation ? (
-          <section className="rounded-3xl border border-amber-400/40 bg-amber-500/10 p-4 shadow-lg">
+          <section className="rounded-3xl border border-amber-400/40 bg-amber-500/10 p-5 shadow-lg md:p-6">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-200">
+              <div className="space-y-2">
+                <p className="text-sm font-black uppercase tracking-[0.28em] text-amber-200 md:text-base">
                   Admin Impersonation
                 </p>
-                <p className="text-sm text-amber-50">
+                <p className="text-base text-amber-50 md:text-xl">
                   Viewing {impersonation.targetName} ({impersonation.targetEmail}) in the real
                   dashboard as signed-in admin {impersonation.adminLabel}.
                 </p>
@@ -117,11 +117,11 @@ export function DashboardShell({
                 <Link
                   href={`/admin/users/${impersonation.targetUserId}`}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-4 py-2 text-sm font-semibold text-slate-100 transition",
-                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    "inline-flex min-h-14 items-center gap-2 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-5 py-2.5 text-base font-semibold text-[#e4e4e9] transition md:px-6 md:text-lg",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                   )}
                 >
-                  <ShieldCheck className="size-4" />
+                  <ShieldCheck className="size-5" />
                   Back to Admin
                 </Link>
                 <form action="/api/admin/impersonation" method="post">
@@ -134,8 +134,8 @@ export function DashboardShell({
                   <button
                     type="submit"
                     className={cn(
-                      "inline-flex min-h-11 items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 transition hover:bg-amber-500/30",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                      "inline-flex min-h-14 items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-5 py-2.5 text-base font-semibold text-amber-50 transition hover:bg-amber-500/30 md:px-6 md:text-lg",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
                     Stop Impersonating
@@ -146,21 +146,21 @@ export function DashboardShell({
           </section>
         ) : null}
 
-        <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-2xl md:p-8">
+        <section className="rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 shadow-2xl md:p-10">
           <div className="flex flex-col gap-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-3">
                 <Link
                   href="/"
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-500/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition",
-                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    "inline-flex min-h-14 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-5 py-2.5 text-base font-semibold text-[#e4e4e9] transition md:px-6 md:text-lg",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                   )}
                 >
-                  <ArrowLeft className="size-4" />
+                  <ArrowLeft className="size-5" />
                   Back to Hub
                 </Link>
-                <h1 className="text-4xl font-black tracking-tight text-slate-100 md:text-5xl">
+                <h1 className="text-[clamp(3.5rem,6vw,6.5rem)] leading-[0.92] font-black tracking-tight text-[#e4e4e9]">
                   Player Dashboard
                 </h1>
               </div>
@@ -170,13 +170,13 @@ export function DashboardShell({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex min-h-11 select-none items-center gap-3 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-slate-100 transition",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                      "inline-flex min-h-14 select-none items-center gap-4 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-3 text-base font-semibold text-[#e4e4e9] transition md:px-5 md:text-xl",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
-                    <Avatar size="lg" className="border border-slate-700">
+                    <Avatar size="lg" className="border border-[#252940]">
                       <AvatarImage src={userImage ?? undefined} alt={user.name} />
-                      <AvatarFallback className="bg-slate-800 text-cyan-100">
+                      <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
                         {userInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
@@ -185,12 +185,12 @@ export function DashboardShell({
                 </PopoverTrigger>
                 <PopoverContent
                   align="end"
-                  className="w-[var(--radix-popover-trigger-width)] rounded-2xl border-slate-700 bg-slate-950/95 p-2 text-slate-100"
+                  className="w-[var(--radix-popover-trigger-width)] rounded-2xl border-[#252940] bg-[#0f1117]/96 p-2 text-[#e4e4e9]"
                 >
                   {canAccessAdmin ? (
                     <Link
                       href="/admin"
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-cyan-100 transition hover:bg-cyan-500/20 hover:text-cyan-100"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-base text-[#e4e4e9] transition hover:bg-[#6c8aff]/18 hover:text-[#e4e4e9]"
                     >
                       <ShieldCheck className="size-4" />
                       Admin
@@ -201,7 +201,7 @@ export function DashboardShell({
                     onClick={() => void handleSignOut()}
                     disabled={isSigningOut}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70",
+                      "flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-base text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70",
                       canAccessAdmin ? "mt-1" : "",
                     )}
                   >
@@ -221,16 +221,16 @@ export function DashboardShell({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "inline-flex min-h-12 items-center gap-2 rounded-full border px-5 py-2 text-lg font-semibold transition",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                      "inline-flex min-h-14 items-center gap-3 rounded-full border px-6 py-3 text-xl font-semibold transition md:min-h-16 md:px-7 md:text-[1.8rem]",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                       isActive
-                        ? "border-cyan-400 bg-cyan-500/20 text-cyan-100"
+                        ? "border-[#818cf8]/55 bg-[#6c8aff]/18 text-[#e4e4e9]"
                         : item.accent
-                          ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
-                          : "border-slate-700 bg-slate-900 text-slate-200",
+                          ? "border-[#6c8aff]/45 bg-[#6c8aff]/14 text-[#e4e4e9] hover:bg-[#6c8aff]/22"
+                          : "border-[#252940] bg-[#1a1d2e] text-[#e4e4e9]",
                     )}
-                  >
-                    <Icon className="size-5" />
+                    >
+                    <Icon className="size-6" />
                     {item.label}
                   </Link>
                 );
