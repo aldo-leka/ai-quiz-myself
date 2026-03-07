@@ -109,7 +109,7 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
     db
       .select({
         totalGames: sql<number>`count(*)::int`,
-        avgScore: sql<number>`coalesce(avg(${quizSessions.totalScore})::float, 0)`,
+        avgAccuracy: sql<number>`coalesce(avg(${quizSessions.normalizedScore})::float, 0)`,
         lastGameAt: sql<Date | null>`max(${quizSessions.startedAt})`,
       })
       .from(quizSessions)
@@ -193,7 +193,7 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
   const balanceCents = Number(creditBalanceRows[0]?.balanceCents ?? 0);
   const totalQuizzes = Number(quizStatsRows[0]?.totalQuizzes ?? 0);
   const totalGames = Number(gameStatsRows[0]?.totalGames ?? 0);
-  const avgScore = Number(gameStatsRows[0]?.avgScore ?? 0);
+  const avgAccuracy = Number(gameStatsRows[0]?.avgAccuracy ?? 0);
   const lastGameAt = gameStatsRows[0]?.lastGameAt ?? null;
   const apiKeyCount = Number(apiKeyCountRows[0]?.apiKeyCount ?? 0);
   const activeSessionCount = Number(sessionStatsRows[0]?.activeSessionCount ?? 0);
@@ -255,9 +255,9 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">Avg Score / Purchases</p>
+          <p className="text-sm font-semibold text-slate-500">Avg Accuracy / Purchases</p>
           <p className="mt-2 text-2xl font-black text-slate-900">
-            {avgScore.toFixed(1)} / ${(totalSpentCents / 100).toFixed(2)}
+            {avgAccuracy.toFixed(1)}% / ${(totalSpentCents / 100).toFixed(2)}
           </p>
         </div>
       </section>

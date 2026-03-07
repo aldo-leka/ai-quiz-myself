@@ -32,6 +32,20 @@ const payloadSchema = z.object({
   ),
 });
 
+function computeNormalizedScore(
+  totalQuestions: number,
+  answers: Array<{ isCorrect: boolean }>,
+): number {
+  if (totalQuestions <= 0) return 0;
+
+  const correctAnswers = answers.reduce(
+    (count, answer) => count + (answer.isCorrect ? 1 : 0),
+    0,
+  );
+
+  return Number(((correctAnswers / totalQuestions) * 100).toFixed(1));
+}
+
 export async function POST(request: Request) {
   let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null;
   try {
@@ -58,7 +72,14 @@ export async function POST(request: Request) {
   const userId = session?.user?.id ?? null;
   const userName = session?.user?.name ?? "Guest";
 
-  const [quiz] = await db.select({ id: quizzes.id }).from(quizzes).where(eq(quizzes.id, payload.quizId)).limit(1);
+  const [quiz] = await db
+    .select({
+      id: quizzes.id,
+      questionCount: quizzes.questionCount,
+    })
+    .from(quizzes)
+    .where(eq(quizzes.id, payload.quizId))
+    .limit(1);
 
   if (!quiz) {
     return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
@@ -68,6 +89,7 @@ export async function POST(request: Request) {
 
   if (userId) {
     const fallbackPlayerName = payload.players?.[0]?.name ?? userName;
+    const normalizedScore = computeNormalizedScore(quiz.questionCount, payload.answers);
 
     const [createdSession] = await db
       .insert(quizSessions)
@@ -77,6 +99,7 @@ export async function POST(request: Request) {
         gameMode: payload.gameMode,
         players: payload.players ?? [{ name: fallbackPlayerName, isOwner: true }],
         totalScore: payload.score,
+        normalizedScore,
         startedAt: new Date(payload.startedAt),
         finishedAt: new Date(payload.finishedAt),
       })

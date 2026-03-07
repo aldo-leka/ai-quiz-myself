@@ -51,8 +51,10 @@ export function DashboardOverviewContent({
           <p className="mt-2 text-4xl font-black text-cyan-100">{overview.totalGames}</p>
         </div>
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm font-semibold text-slate-400">Average Score</p>
-          <p className="mt-2 text-4xl font-black text-cyan-100">{overview.avgScore.toFixed(1)}</p>
+          <p className="text-sm font-semibold text-slate-400">Average Accuracy</p>
+          <p className="mt-2 text-4xl font-black text-cyan-100">
+            {overview.avgAccuracy.toFixed(1)}%
+          </p>
         </div>
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm font-semibold text-slate-400">Credits Balance</p>

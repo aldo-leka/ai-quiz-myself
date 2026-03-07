@@ -7,6 +7,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -184,6 +185,7 @@ export const quizSessions = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     totalScore: integer("total_score").notNull().default(0),
+    normalizedScore: real("normalized_score").notNull().default(0),
     startedAt: timestamp("started_at").notNull().defaultNow(),
     finishedAt: timestamp("finished_at"),
   },

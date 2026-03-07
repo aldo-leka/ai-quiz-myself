@@ -5,7 +5,7 @@ import { credits, quizSessions, quizzes } from "@/db/schema";
 export type DashboardOverviewData = {
   totalQuizzes: number;
   totalGames: number;
-  avgScore: number;
+  avgAccuracy: number;
   creditTotalCents: number;
   recentQuizzes: Array<{
     id: string;
@@ -39,7 +39,7 @@ export async function getDashboardOverviewData(userId: string): Promise<Dashboar
     db
       .select({
         totalGames: sql<number>`count(*)::int`,
-        avgScore: sql<number>`coalesce(avg(${quizSessions.totalScore})::float, 0)`,
+        avgAccuracy: sql<number>`coalesce(avg(${quizSessions.normalizedScore})::float, 0)`,
       })
       .from(quizSessions)
       .where(eq(quizSessions.userId, userId)),
@@ -85,7 +85,7 @@ export async function getDashboardOverviewData(userId: string): Promise<Dashboar
   return {
     totalQuizzes: Number(quizStats[0]?.totalQuizzes ?? 0),
     totalGames: Number(sessionStats[0]?.totalGames ?? 0),
-    avgScore: Number(sessionStats[0]?.avgScore ?? 0),
+    avgAccuracy: Number(sessionStats[0]?.avgAccuracy ?? 0),
     creditTotalCents: Number(creditBalance[0]?.balanceCents ?? 0),
     recentQuizzes,
     recentGames: recentGames.map((game) => ({
