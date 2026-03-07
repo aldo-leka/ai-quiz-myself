@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Flag, KeyRound, LayoutDashboard, NotebookPen, UserRound, Wallet } from "lucide-react";
+import { Flag, KeyRound, LayoutDashboard, NotebookPen, UserRound, Users, Wallet } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +26,7 @@ type AdminShellProps = {
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/quizzes", label: "Quizzes", icon: NotebookPen },
   { href: "/admin/api-keys", label: "API Keys", icon: KeyRound },
   { href: "/admin/moderation", label: "Moderation", icon: Flag },

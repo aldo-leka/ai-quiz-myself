@@ -15,7 +15,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
 
 type UserQuizRow = {
   id: string;
@@ -81,8 +80,15 @@ const playerButtonSecondaryClass =
 const playerButtonDangerClass =
   "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100";
 
-export function MyQuizzesPageClient() {
-  const { data: sessionData } = authClient.useSession();
+type MyQuizzesPageClientProps = {
+  creatorImage: string | null;
+  creatorName: string | null;
+};
+
+export function MyQuizzesPageClient({
+  creatorImage,
+  creatorName,
+}: MyQuizzesPageClientProps) {
   const [rows, setRows] = useState<UserQuizRow[]>([]);
   const [jobs, setJobs] = useState<GenerationJobRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -358,8 +364,8 @@ export function MyQuizzesPageClient() {
                   questionCount={quiz.questionCount}
                   playCount={quiz.playCount}
                   likeRatio={quiz.likeRatio}
-                  creatorName={sessionData?.user.name ?? null}
-                  creatorImage={sessionData?.user.image ?? null}
+                  creatorName={creatorName}
+                  creatorImage={creatorImage}
                   statusLabel="Ready"
                   statusTone="ready"
                 >

@@ -31,8 +31,8 @@ type QuizCardProps = {
 };
 
 function formatLikeRatio(likeRatio: number | null | undefined): string {
-  if (likeRatio === null || likeRatio === undefined) return "No votes";
-  return `${Math.round(likeRatio * 100)}% likes`;
+  if (likeRatio === null || likeRatio === undefined) return "—";
+  return `${Math.round(likeRatio * 100)}%`;
 }
 
 function difficultyBadgeClass(difficulty: QuizCardDifficulty): string {
@@ -75,13 +75,13 @@ function QuizCardBody({
   creatorImage,
   statusLabel,
   statusTone,
-  showRating,
+  showRating = true,
   children,
 }: Omit<QuizCardProps, "interactive" | "onClick" | "onKeyDown" | "cardRef" | "className">) {
   const modeMeta = gameModeMeta(gameMode);
 
   return (
-    <>
+    <div className="flex flex-1 flex-col">
       <h3 className="line-clamp-2 text-2xl font-bold text-slate-100">{title}</h3>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -100,48 +100,50 @@ function QuizCardBody({
         </Badge>
       </div>
 
-      <div className="mt-5 flex items-center gap-2 text-lg text-slate-200">
-        <span className="text-cyan-300">{modeMeta.icon}</span>
-        <span>{modeMeta.label}</span>
-      </div>
+      <div className="mt-auto space-y-4 pt-5">
+        <div className="flex items-center gap-2 text-lg text-slate-200">
+          <span className="text-cyan-300">{modeMeta.icon}</span>
+          <span>{modeMeta.label}</span>
+        </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 text-base text-slate-300">
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-          <div className="flex items-center gap-2 text-slate-400">
-            <Gamepad2 className="size-4" />
-            Questions
+        <div className="grid grid-cols-2 gap-3 text-base text-slate-300">
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <Gamepad2 className="size-4" />
+              Questions
+            </div>
+            <div className="mt-1 text-2xl font-bold text-slate-100">{questionCount}</div>
           </div>
-          <div className="mt-1 text-2xl font-bold text-slate-100">{questionCount}</div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <Trophy className="size-4" />
+              Plays
+            </div>
+            <div className="mt-1 text-2xl font-bold text-slate-100">{playCount}</div>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <ThumbsUp className="size-4" />
+              Rating
+            </div>
+            <div className="mt-1 text-xl font-bold text-slate-100">
+              {showRating ? formatLikeRatio(likeRatio) : "—"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <Clock3 className="size-4" />
+              Status
+            </div>
+            <div className={cn("mt-1 text-xl font-bold", statusTextClass(statusTone ?? "ready"))}>
+              {statusLabel ?? "Ready"}
+            </div>
+          </div>
         </div>
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-          <div className="flex items-center gap-2 text-slate-400">
-            <Trophy className="size-4" />
-            Plays
-          </div>
-          <div className="mt-1 text-2xl font-bold text-slate-100">{playCount}</div>
-        </div>
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-          <div className="flex items-center gap-2 text-slate-400">
-            <ThumbsUp className="size-4" />
-            Rating
-          </div>
-          <div className="mt-1 text-xl font-bold text-slate-100">
-            {showRating ? formatLikeRatio(likeRatio) : "—"}
-          </div>
-        </div>
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-          <div className="flex items-center gap-2 text-slate-400">
-            <Clock3 className="size-4" />
-            Status
-          </div>
-          <div className={cn("mt-1 text-xl font-bold", statusTextClass(statusTone ?? "ready"))}>
-            {statusLabel ?? "Ready"}
-          </div>
-        </div>
-      </div>
 
-      {children ? <div className="mt-4">{children}</div> : null}
-    </>
+        {children ? <div>{children}</div> : null}
+      </div>
+    </div>
   );
 }
 
@@ -154,7 +156,7 @@ export function QuizCard({
   ...props
 }: QuizCardProps) {
   const classes = cn(
-    "min-h-[320px] rounded-2xl border border-slate-700 bg-slate-900/90 p-5 text-left transition",
+    "flex min-h-[320px] flex-col rounded-2xl border border-slate-700 bg-slate-900/90 p-5 text-left transition",
     interactive &&
       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
     className,

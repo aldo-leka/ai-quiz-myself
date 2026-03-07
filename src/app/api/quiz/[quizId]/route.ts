@@ -1,7 +1,11 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { hubCandidates, questions, quizzes, user } from "@/db/schema";
+import { hubCandidates, questions, quizzes, quizVotes, user } from "@/db/schema";
+import { auth } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 type RouteContext = {
   params: Promise<{ quizId: string }>;
@@ -53,6 +57,19 @@ function shuffleQuestionOptions(
 
 export async function GET(_: Request, { params }: RouteContext) {
   const { quizId } = await params;
+
+  let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null;
+  try {
+    session = await auth.api.getSession({
+      headers: new Headers(await headers()),
+    });
+  } catch {
+    session = null;
+  }
+
+  const cookieStore = await cookies();
+  const userId = session?.user?.id ?? null;
+  const anonId = userId ? null : cookieStore.get("quizplus_anon_id")?.value ?? null;
 
   const [quizRow] = await db
     .select({
@@ -109,12 +126,35 @@ export async function GET(_: Request, { params }: RouteContext) {
     };
   });
 
-  return NextResponse.json({
-    quiz: {
-      ...quizRow.quiz,
-      creatorName,
-      creatorImage,
-      questions: normalizedQuestions,
+  const [voteRow] =
+    userId || anonId
+      ? await db
+          .select({
+            vote: quizVotes.vote,
+          })
+          .from(quizVotes)
+          .where(
+            userId
+              ? and(eq(quizVotes.quizId, quizRow.quiz.id), eq(quizVotes.userId, userId))
+              : and(eq(quizVotes.quizId, quizRow.quiz.id), eq(quizVotes.anonId, anonId!)),
+          )
+          .limit(1)
+      : [];
+
+  return NextResponse.json(
+    {
+      quiz: {
+        ...quizRow.quiz,
+        creatorName,
+        creatorImage,
+        currentVote: voteRow?.vote ?? null,
+        questions: normalizedQuestions,
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }

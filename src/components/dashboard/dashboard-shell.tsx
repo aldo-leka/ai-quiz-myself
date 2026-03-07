@@ -22,11 +22,17 @@ import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
   children: React.ReactNode;
+  canAccessAdmin?: boolean;
+  impersonation?: {
+    adminLabel: string;
+    targetEmail: string;
+    targetName: string;
+    targetUserId: string;
+  } | null;
   user: {
     name: string;
     image?: string | null;
     avatarUrl?: string | null;
-    isAdmin?: boolean;
   };
 };
 
@@ -61,7 +67,12 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DashboardShell({ children, user }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  canAccessAdmin = false,
+  impersonation = null,
+  user,
+}: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const userImage = user.avatarUrl || user.image || null;
@@ -71,6 +82,13 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
     if (isSigningOut) return;
     setIsSigningOut(true);
     try {
+      if (impersonation) {
+        try {
+          await fetch("/api/admin/impersonation", { method: "DELETE" });
+        } catch {
+          // Ignore cookie cleanup failures and continue signing out.
+        }
+      }
       await authClient.signOut();
       router.replace("/");
       router.refresh();
@@ -82,6 +100,52 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-6 md:px-8 md:py-8">
+        {impersonation ? (
+          <section className="rounded-3xl border border-amber-400/40 bg-amber-500/10 p-4 shadow-lg">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-200">
+                  Admin Impersonation
+                </p>
+                <p className="text-sm text-amber-50">
+                  Viewing {impersonation.targetName} ({impersonation.targetEmail}) in the real
+                  dashboard as signed-in admin {impersonation.adminLabel}.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/admin/users/${impersonation.targetUserId}`}
+                  className={cn(
+                    "inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-4 py-2 text-sm font-semibold text-slate-100 transition",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                  )}
+                >
+                  <ShieldCheck className="size-4" />
+                  Back to Admin
+                </Link>
+                <form action="/api/admin/impersonation" method="post">
+                  <input type="hidden" name="intent" value="stop" />
+                  <input
+                    type="hidden"
+                    name="redirectTo"
+                    value={`/admin/users/${impersonation.targetUserId}`}
+                  />
+                  <button
+                    type="submit"
+                    className={cn(
+                      "inline-flex min-h-11 items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 transition hover:bg-amber-500/30",
+                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+                    )}
+                  >
+                    Stop Impersonating
+                  </button>
+                </form>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-2xl md:p-8">
           <div className="flex flex-col gap-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -123,7 +187,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                   align="end"
                   className="w-[var(--radix-popover-trigger-width)] rounded-2xl border-slate-700 bg-slate-950/95 p-2 text-slate-100"
                 >
-                  {user.isAdmin ? (
+                  {canAccessAdmin ? (
                     <Link
                       href="/admin"
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-cyan-100 transition hover:bg-cyan-500/20 hover:text-cyan-100"
@@ -138,7 +202,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                     disabled={isSigningOut}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/20 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-70",
-                      user.isAdmin ? "mt-1" : "",
+                      canAccessAdmin ? "mt-1" : "",
                     )}
                   >
                     <LogOut className="size-4" />

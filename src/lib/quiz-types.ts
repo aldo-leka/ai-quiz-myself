@@ -37,6 +37,7 @@ export type PlayableQuestion = QuestionRecord & {
 export type QuizWithQuestions = QuizRecord & {
   creatorName?: string | null;
   creatorImage?: string | null;
+  currentVote?: "like" | "dislike" | null;
   questions: PlayableQuestion[];
 };
 

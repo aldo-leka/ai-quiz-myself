@@ -62,7 +62,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [likes, setLikes] = useState(quiz.likes);
   const [dislikes, setDislikes] = useState(quiz.dislikes);
-  const [vote, setVote] = useState<VoteType | null>(null);
+  const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
   const [isVoting, setIsVoting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
 
@@ -93,6 +93,13 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     currentQuestion && currentCorrectOptionIndex !== null
       ? currentQuestion.options[currentCorrectOptionIndex]?.explanation
       : "";
+
+  useEffect(() => {
+    setLikes(quiz.likes);
+    setDislikes(quiz.dislikes);
+    setVote(quiz.currentVote ?? null);
+    setVoteError(null);
+  }, [quiz.currentVote, quiz.dislikes, quiz.id, quiz.likes]);
 
   function stopCountdown() {
     if (timerRef.current) {
