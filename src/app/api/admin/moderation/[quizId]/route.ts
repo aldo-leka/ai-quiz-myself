@@ -8,6 +8,7 @@ import {
   parseHubCandidateSnapshot,
   publishHubCandidateSnapshot,
 } from "@/lib/hub-candidates";
+import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -57,6 +58,11 @@ export async function PATCH(_: Request, { params }: RouteContext) {
     creatorId: candidate.submittedByUserId,
   });
   await storeQuizEmbedding(publishedQuizId, embedding);
+  await upsertHubThemeEmbedding({
+    quizId: publishedQuizId,
+    theme: snapshot.theme,
+    gameMode: snapshot.gameMode,
+  });
 
   await db
     .update(hubCandidates)

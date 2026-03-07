@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { creditTransactions, hubCandidates, questions, quizGenerationJobs, quizzes } from "@/db/schema";
 import type { GenerationBillingMode } from "@/lib/billing";
 import { buildHubCandidateSnapshot, createHubCandidate } from "@/lib/hub-candidates";
+import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -163,6 +164,7 @@ async function persistGeneratedQuiz(params: {
 
 async function applyHubUniqueness(
   quizId: string,
+  theme: string,
   questionTexts: string[],
   gameMode: "single" | "wwtbam" | "couch_coop",
 ) {
@@ -187,6 +189,11 @@ async function applyHubUniqueness(
   }
 
   await storeQuizEmbedding(quizId, embedding);
+  await upsertHubThemeEmbedding({
+    quizId,
+    theme,
+    gameMode,
+  });
   return {
     uniqueness,
     reason: null,
@@ -446,6 +453,7 @@ export const generateQuizTask = task({
       ) {
         const uniquenessResult = await applyHubUniqueness(
           quizId,
+          generated.theme,
           generated.questions.map((question) => question.questionText),
           effectiveInput.gameMode,
         );

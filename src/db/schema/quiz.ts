@@ -309,6 +309,34 @@ export const quizEmbeddings = pgTable(
   ],
 );
 
+export const hubThemeEmbeddings = pgTable(
+  "hub_theme_embeddings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "cascade" }),
+    theme: text("theme").notNull(),
+    themeKey: text("theme_key").notNull(),
+    gameMode: quizGameModeEnum("game_mode").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("hub_theme_embeddings_quiz_id_uq").on(table.quizId),
+    index("hub_theme_embeddings_game_mode_idx").on(table.gameMode),
+    index("hub_theme_embeddings_theme_key_idx").on(table.themeKey),
+    index("hub_theme_embeddings_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
 export const surpriseThemeHistory = pgTable(
   "surprise_theme_history",
   {
@@ -484,6 +512,7 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   sessions: many(quizSessions),
   generationJobs: many(quizGenerationJobs),
   embeddings: many(quizEmbeddings),
+  themeEmbeddings: many(hubThemeEmbeddings),
   votes: many(quizVotes),
 }));
 
@@ -546,6 +575,13 @@ export const quizGenerationJobsRelations = relations(
 export const quizEmbeddingsRelations = relations(quizEmbeddings, ({ one }) => ({
   quiz: one(quizzes, {
     fields: [quizEmbeddings.quizId],
+    references: [quizzes.id],
+  }),
+}));
+
+export const hubThemeEmbeddingsRelations = relations(hubThemeEmbeddings, ({ one }) => ({
+  quiz: one(quizzes, {
+    fields: [hubThemeEmbeddings.quizId],
     references: [quizzes.id],
   }),
 }));

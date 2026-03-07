@@ -71,6 +71,8 @@ type QuizGenerationInput = {
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
 };
 
+type QuizGenerationSettings = Pick<QuizGenerationInput, "gameMode" | "difficulty">;
+
 type ApiKeyOption = {
   id: string;
   provider: "openai" | "anthropic" | "google";
@@ -99,14 +101,16 @@ type ApiKeysResponse = {
 type SuggestSubtopicsResponse = {
   subtopics: string[];
   existingThemeCount: number;
+  semanticFilteredCount?: number;
+  broadCategory?: string;
   error?: string;
 };
 
 type ActiveBatch = {
   startedAt: string;
   themes: string[];
-  gameMode: QuizGenerationInput["gameMode"];
-  difficulty: QuizGenerationInput["difficulty"];
+  gameMode: QuizGenerationSettings["gameMode"];
+  difficulty: QuizGenerationSettings["difficulty"];
   startFailures: number;
 };
 
@@ -115,6 +119,30 @@ const defaultGenerationInput: QuizGenerationInput = {
   gameMode: "single",
   difficulty: "mixed",
 };
+
+const defaultBatchGenerationSettings: QuizGenerationSettings = {
+  gameMode: "single",
+  difficulty: "mixed",
+};
+
+const batchCategoryPresets = [
+  { value: "general_knowledge", label: "General Knowledge" },
+  { value: "science", label: "Science" },
+  { value: "history", label: "History" },
+  { value: "geography", label: "Geography" },
+  { value: "nature_animals", label: "Nature & Animals" },
+  { value: "sports", label: "Sports" },
+  { value: "movies_tv", label: "Movies & TV" },
+  { value: "music", label: "Music" },
+  { value: "food_drink", label: "Food & Drink" },
+  { value: "technology", label: "Technology" },
+] as const;
+
+const batchCountOptions = [10, 20, 30, 40, 50] as const;
+
+function getBatchCategoryLabel(preset: (typeof batchCategoryPresets)[number]["value"]) {
+  return batchCategoryPresets.find((option) => option.value === preset)?.label ?? "General Knowledge";
+}
 
 function parseJobInputData(inputData: unknown): {
   theme: string;
@@ -161,6 +189,14 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength - 1)}…`;
 }
 
+function nextDifficultyForMode(
+  mode: QuizGenerationSettings["gameMode"],
+  currentDifficulty: QuizGenerationSettings["difficulty"],
+): QuizGenerationSettings["difficulty"] {
+  if (mode === "wwtbam") return "escalating";
+  return currentDifficulty === "escalating" ? "mixed" : currentDifficulty;
+}
+
 export function AdminQuizzesPageClient() {
   const [rows, setRows] = useState<QuizListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +215,9 @@ export function AdminQuizzesPageClient() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [generationInput, setGenerationInput] = useState<QuizGenerationInput>(defaultGenerationInput);
+  const [batchGenerationSettings, setBatchGenerationSettings] = useState<QuizGenerationSettings>(
+    defaultBatchGenerationSettings,
+  );
   const [apiKeys, setApiKeys] = useState<ApiKeyOption[]>([]);
   const [apiKeysLoading, setApiKeysLoading] = useState(true);
   const [apiKeysError, setApiKeysError] = useState<string | null>(null);
@@ -186,7 +225,9 @@ export function AdminQuizzesPageClient() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+  const [batchCategoryPreset, setBatchCategoryPreset] = useState<(typeof batchCategoryPresets)[number]["value"]>("general_knowledge");
   const [batchCategory, setBatchCategory] = useState("");
+  const [batchCount, setBatchCount] = useState<(typeof batchCountOptions)[number]>(10);
   const [batchThemesText, setBatchThemesText] = useState("");
   const [isSuggestingBatch, setIsSuggestingBatch] = useState(false);
   const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
@@ -335,6 +376,7 @@ export function AdminQuizzesPageClient() {
       if (seen.has(key)) continue;
       seen.add(key);
       themes.push(cleaned);
+      if (themes.length >= 50) break;
     }
 
     return themes;
@@ -469,37 +511,35 @@ export function AdminQuizzesPageClient() {
   }
 
   async function suggestBatchThemes() {
-    const broadCategory = normalizeThemeLine(batchCategory);
-    if (!broadCategory) {
-      setBatchMessage("Enter a broad category first.");
-      return;
-    }
+      const broadCategory =
+        normalizeThemeLine(batchCategory) || getBatchCategoryLabel(batchCategoryPreset);
 
-    setIsSuggestingBatch(true);
-    setBatchMessage(null);
+      setIsSuggestingBatch(true);
+      setBatchMessage(null);
 
     try {
-      const response = await fetch("/api/admin/quizzes/suggest-subtopics", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          broadCategory,
-          count: 10,
-          apiKeyId: selectedApiKeyId || undefined,
-        }),
-      });
+        const response = await fetch("/api/admin/quizzes/suggest-subtopics", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            broadCategory,
+            count: batchCount,
+            gameMode: batchGenerationSettings.gameMode,
+            apiKeyId: selectedApiKeyId || undefined,
+          }),
+        });
 
       const payload = (await response.json()) as SuggestSubtopicsResponse;
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to suggest subtopics");
       }
 
-      setBatchThemesText(payload.subtopics.join("\n"));
-      setBatchMessage(
-        `Suggested ${payload.subtopics.length} subtopics (${payload.existingThemeCount} existing hub themes checked).`,
-      );
+        setBatchThemesText(payload.subtopics.join("\n"));
+        setBatchMessage(
+          `Suggested ${payload.subtopics.length} subtopics for ${payload.broadCategory ?? broadCategory} (${payload.existingThemeCount} existing hub themes checked, ${payload.semanticFilteredCount ?? 0} similar themes filtered).`,
+        );
     } catch (error) {
       setBatchMessage(error instanceof Error ? error.message : "Failed to suggest subtopics");
     } finally {
@@ -507,11 +547,16 @@ export function AdminQuizzesPageClient() {
     }
   }
 
-  async function generateBatch() {
-    if (batchThemes.length === 0) {
-      setBatchMessage("Add at least one subtopic to generate.");
-      return;
-    }
+    async function generateBatch() {
+      if (batchThemes.length === 0) {
+        setBatchMessage("Add at least one subtopic to generate.");
+        return;
+      }
+
+      if (batchThemes.length > 50) {
+        setBatchMessage("Max 50 themes per batch.");
+        return;
+      }
 
     setIsGeneratingBatch(true);
     setBatchMessage(null);
@@ -526,13 +571,13 @@ export function AdminQuizzesPageClient() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            theme,
-            gameMode: generationInput.gameMode,
-            difficulty: generationInput.difficulty,
-            language: "en",
-            apiKeyId: selectedApiKeyId || undefined,
-          }),
+            body: JSON.stringify({
+              theme,
+              gameMode: batchGenerationSettings.gameMode,
+              difficulty: batchGenerationSettings.difficulty,
+              language: "en",
+              apiKeyId: selectedApiKeyId || undefined,
+            }),
         });
 
         const payload = (await response.json()) as { error?: string };
@@ -545,13 +590,13 @@ export function AdminQuizzesPageClient() {
       }
     }
 
-    setActiveBatch({
-      startedAt,
-      themes: batchThemes,
-      gameMode: generationInput.gameMode,
-      difficulty: generationInput.difficulty,
-      startFailures,
-    });
+      setActiveBatch({
+        startedAt,
+        themes: batchThemes,
+        gameMode: batchGenerationSettings.gameMode,
+        difficulty: batchGenerationSettings.difficulty,
+        startFailures,
+      });
 
     setBatchMessage(
       `Started ${batchThemes.length - startFailures}/${batchThemes.length} generation jobs.`,
@@ -856,15 +901,15 @@ export function AdminQuizzesPageClient() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Generate Hub Batch</CardTitle>
-          <CardDescription>
-            Suggest unique hub subtopics by broad category, edit them, then trigger one generation
-            job per subtopic.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Generate Hub Batch</CardTitle>
+            <CardDescription>
+              Pick a preset, optionally override it with a custom category, then generate up to 50
+              hub themes in one batch.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="space-y-2">
             <p className="text-sm font-medium">API Key</p>
             <Select value={selectedApiKeyId} onValueChange={setSelectedApiKeyId}>
@@ -880,27 +925,115 @@ export function AdminQuizzesPageClient() {
               </SelectContent>
             </Select>
             {apiKeysError ? <p className="text-sm text-rose-600">{apiKeysError}</p> : null}
-            {!apiKeysLoading && apiKeys.length === 0 ? (
-              <p className="text-sm text-rose-600">
-                No API keys found. Add one in Admin &gt; API Keys.
-              </p>
-            ) : null}
-          </div>
+              {!apiKeysLoading && apiKeys.length === 0 ? (
+                <p className="text-sm text-rose-600">
+                  No API keys found. Add one in Admin &gt; API Keys.
+                </p>
+              ) : null}
+            </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-            <Input
-              placeholder="Broad category (e.g. Science, History)"
-              value={batchCategory}
-              onChange={(event) => setBatchCategory(event.target.value)}
-            />
-            <Button
-              variant="outline"
-              disabled={isSuggestingBatch || apiKeysLoading || !selectedApiKeyId}
-              onClick={() => void suggestBatchThemes()}
-            >
-              {isSuggestingBatch ? "Suggesting..." : "Suggest 10 Themes"}
-            </Button>
-          </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                value={batchGenerationSettings.gameMode}
+                onValueChange={(value: QuizGenerationSettings["gameMode"]) =>
+                  setBatchGenerationSettings((previous) => ({
+                    ...previous,
+                    gameMode: value,
+                    difficulty: nextDifficultyForMode(value, previous.difficulty),
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Batch game mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Single Player</SelectItem>
+                  <SelectItem value="couch_coop">Couch Co-op</SelectItem>
+                  <SelectItem value="wwtbam">WWTBAM</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={batchGenerationSettings.difficulty}
+                onValueChange={(value: QuizGenerationSettings["difficulty"]) =>
+                  setBatchGenerationSettings((previous) => ({
+                    ...previous,
+                    difficulty: value,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Batch difficulty" />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchGenerationSettings.gameMode === "wwtbam" ? (
+                    <SelectItem value="escalating">Escalating</SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                      <SelectItem value="mixed">Mixed</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-slate-500">
+              Batch generation uses this mode and difficulty for every theme in the batch.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_140px_auto]">
+              <Select
+                value={batchCategoryPreset}
+                onValueChange={(value: (typeof batchCategoryPresets)[number]["value"]) =>
+                  setBatchCategoryPreset(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Preset category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchCategoryPresets.map((preset) => (
+                    <SelectItem key={preset.value} value={preset.value}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Custom category override (optional)"
+                value={batchCategory}
+                onChange={(event) => setBatchCategory(event.target.value)}
+              />
+              <Select
+                value={String(batchCount)}
+                onValueChange={(value) =>
+                  setBatchCount(Number(value) as (typeof batchCountOptions)[number])
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Count" />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchCountOptions.map((count) => (
+                    <SelectItem key={count} value={String(count)}>
+                      {count} themes
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                disabled={isSuggestingBatch || apiKeysLoading || !selectedApiKeyId}
+                onClick={() => void suggestBatchThemes()}
+              >
+                {isSuggestingBatch ? "Suggesting..." : `Suggest ${batchCount} Themes`}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Leave custom override empty to use {getBatchCategoryLabel(batchCategoryPreset)} as
+              the seed category.
+            </p>
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Subtopics (one per line)</p>
@@ -910,9 +1043,10 @@ export function AdminQuizzesPageClient() {
               className="min-h-40"
               placeholder="Generated subtopics will appear here"
             />
-            <p className="text-xs text-slate-500">
-              {batchThemes.length} unique subtopic{batchThemes.length === 1 ? "" : "s"} ready.
-            </p>
+              <p className="text-xs text-slate-500">
+                {batchThemes.length} unique subtopic{batchThemes.length === 1 ? "" : "s"} ready
+                (max 50 per batch).
+              </p>
           </div>
 
           <Button

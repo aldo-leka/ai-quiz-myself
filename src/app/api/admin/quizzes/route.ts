@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
+import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
 
 const createQuestionSchema = z.object({
   questionText: z.string().min(1),
@@ -220,6 +221,14 @@ export async function POST(request: Request) {
       subject: question.subject ?? null,
     })),
   );
+
+  if (payload.isHub) {
+    await upsertHubThemeEmbedding({
+      quizId: createdQuiz.id,
+      theme: payload.theme,
+      gameMode: payload.gameMode,
+    });
+  }
 
   return NextResponse.json({ success: true, quizId: createdQuiz.id }, { status: 201 });
 }

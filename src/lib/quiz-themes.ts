@@ -12,9 +12,16 @@ function toKey(value: string): string {
   return normalizeValue(value).toLowerCase();
 }
 
-export async function getExistingThemesForCategory(category: string): Promise<string[]> {
+export async function getExistingHubThemeEntriesForCategory(
+  category: string,
+  gameMode?: "single" | "wwtbam" | "couch_coop",
+): Promise<Array<{ quizId: string; theme: string; gameMode: "single" | "wwtbam" | "couch_coop" }>> {
   const normalizedCategory = normalizeValue(category);
   const filters = [eq(quizzes.isHub, true)];
+
+  if (gameMode) {
+    filters.push(eq(quizzes.gameMode, gameMode));
+  }
 
   if (normalizedCategory.length > 0) {
     const pattern = `%${normalizedCategory}%`;
@@ -34,8 +41,10 @@ export async function getExistingThemesForCategory(category: string): Promise<st
   }
 
   const rows = await db
-    .selectDistinct({
+    .select({
+      quizId: quizzes.id,
       theme: quizzes.theme,
+      gameMode: quizzes.gameMode,
     })
     .from(quizzes)
     .where(and(...filters))
@@ -43,17 +52,34 @@ export async function getExistingThemesForCategory(category: string): Promise<st
     .limit(500);
 
   const seen = new Set<string>();
-  const uniqueThemes: string[] = [];
+  const entries: Array<{
+    quizId: string;
+    theme: string;
+    gameMode: "single" | "wwtbam" | "couch_coop";
+  }> = [];
+
   for (const row of rows) {
     const theme = normalizeValue(row.theme);
     if (!theme) continue;
     const key = toKey(theme);
     if (seen.has(key)) continue;
     seen.add(key);
-    uniqueThemes.push(theme);
+    entries.push({
+      quizId: row.quizId,
+      theme,
+      gameMode: row.gameMode,
+    });
   }
 
-  return uniqueThemes;
+  return entries;
+}
+
+export async function getExistingThemesForCategory(
+  category: string,
+  gameMode?: "single" | "wwtbam" | "couch_coop",
+): Promise<string[]> {
+  const entries = await getExistingHubThemeEntriesForCategory(category, gameMode);
+  return entries.map((entry) => entry.theme);
 }
 
 export async function generateUniqueSubtopics(params: {
@@ -117,7 +143,6 @@ export async function generateUniqueSubtopics(params: {
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(cleaned);
-    if (deduped.length >= params.count) break;
   }
 
   if (deduped.length < params.count) {

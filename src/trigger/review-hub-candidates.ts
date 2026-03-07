@@ -10,6 +10,7 @@ import {
   parseHubCandidateSnapshot,
   publishHubCandidateSnapshot,
 } from "@/lib/hub-candidates";
+import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
 import {
   checkHubUniqueness,
   generateEmbedding,
@@ -310,6 +311,11 @@ export const reviewHubCandidateTask = task({
         creatorId: candidate.submittedByUserId,
       });
       await storeQuizEmbedding(publishedQuizId, embedding);
+      await upsertHubThemeEmbedding({
+        quizId: publishedQuizId,
+        theme: snapshot.theme,
+        gameMode: snapshot.gameMode,
+      });
       await updateCandidateStatus(candidateId, {
         status: "approved",
         decision: "approve",
