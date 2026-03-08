@@ -73,7 +73,7 @@ const SORT_OPTIONS: Array<{ value: HubSort; label: string }> = [
 ];
 
 const hubFilterPillClassName =
-  "min-h-10 px-3.5 text-base md:min-h-14 md:px-5 md:text-xl xl:min-h-16 xl:px-6 xl:text-[1.5rem]";
+  "min-h-10 px-3.5 text-base focus:outline-none focus:ring-4 focus:ring-[#818cf8]/70 md:min-h-14 md:px-5 md:text-xl xl:min-h-16 xl:px-6 xl:text-[1.5rem]";
 
 function normalizeSort(value: string | null): HubSort {
   return value === "newest" ? "newest" : "popular";
@@ -158,6 +158,8 @@ function HomePageContent() {
   const { data: sessionData } = authClient.useSession();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const surpriseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const didAutoFocusHubRef = useRef(false);
   const [gridColumns, setGridColumns] = useState(4);
 
   const [hubQuizzes, setHubQuizzes] = useState<HubQuiz[]>([]);
@@ -378,7 +380,7 @@ function HomePageContent() {
   }, [filters.mode]);
 
   const featuredThemeOptions = useMemo(() => {
-    const cappedThemes = popularThemes.slice(0, 5);
+    const cappedThemes = popularThemes.slice(0, 4);
 
     if (!filters.theme) {
       return cappedThemes;
@@ -395,7 +397,7 @@ function HomePageContent() {
         totalPlayCount: 0,
         quizCount: 0,
       },
-      ...cappedThemes.slice(0, 4),
+      ...cappedThemes.slice(0, 3),
     ];
   }, [filters.theme, popularThemes]);
 
@@ -407,6 +409,21 @@ function HomePageContent() {
     updateColumns();
     window.addEventListener("resize", updateColumns);
     return () => window.removeEventListener("resize", updateColumns);
+  }, []);
+
+  useEffect(() => {
+    if (didAutoFocusHubRef.current) return;
+    const button = surpriseButtonRef.current;
+    if (!button) return;
+
+    didAutoFocusHubRef.current = true;
+
+    const frame = window.requestAnimationFrame(() => {
+      button.focus();
+      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -530,7 +547,11 @@ function HomePageContent() {
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      moveCardFocus(index, "up");
+      if (index < gridColumns) {
+        surpriseButtonRef.current?.focus();
+      } else {
+        moveCardFocus(index, "up");
+      }
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -613,10 +634,10 @@ function HomePageContent() {
                 <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
                   Popular Themes
                 </p>
-                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-col md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <FilterPill
                     isActive={filters.theme === null}
-                    className={`${hubFilterPillClassName} shrink-0`}
+                    className={`${hubFilterPillClassName} shrink-0 md:w-full md:max-w-full md:shrink`}
                     onClick={() => updateQueryParams({ theme: null, page: 1 })}
                   >
                     All Themes
@@ -625,7 +646,7 @@ function HomePageContent() {
                     <FilterPill
                       key={entry.theme}
                       isActive={filters.theme === entry.theme}
-                      className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:max-w-[18rem] xl:max-w-[20rem]`}
+                      className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:w-full md:max-w-full md:shrink`}
                       onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
                     >
                       {entry.theme}
@@ -673,8 +694,9 @@ function HomePageContent() {
 
             <div className="flex justify-center">
               <GameButton
+                ref={surpriseButtonRef}
                 centered
-                className="min-h-14 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-xl text-[#e4e4e9] md:min-h-20 md:text-3xl xl:max-w-[34rem] xl:text-5xl"
+                className="min-h-14 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-xl text-[#e4e4e9] focus:outline-none focus:ring-4 focus:ring-[#818cf8]/70 md:min-h-20 md:text-3xl xl:max-w-[34rem] xl:text-5xl"
                 onClick={() => void handleSurpriseMe()}
                 disabled={isSurpriseLoading}
                 icon={<Shuffle className="size-8 md:size-10 xl:size-12" />}
