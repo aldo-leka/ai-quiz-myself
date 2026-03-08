@@ -17,7 +17,7 @@ export function CircularButton({
   return (
     <button
       className={cn(
-        "size-20 min-h-20 min-w-20 rounded-full border-2 text-base font-semibold transition md:size-24 md:text-lg",
+        "size-16 min-h-16 min-w-16 rounded-full border-2 text-sm font-semibold transition md:size-24 md:min-h-24 md:min-w-24 md:text-lg",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/70",
         selected
           ? "border-[#818cf8]/60 bg-[#6c8aff]/18 text-[#e4e4e9]"

@@ -80,6 +80,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const hasPersistedSessionRef = useRef(false);
   const isAdvancingRef = useRef(false);
   const revealedAnswerRef = useRef(false);
+  const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const { data: sessionData } = authClient.useSession();
 
@@ -231,6 +232,27 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     // Keyboard handler intentionally depends on current visible control state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusOrder, focusedControl, gameOver, isLoading]);
+
+  useEffect(() => {
+    if (isLoading || gameOver || visibleOptions < 4 || optionsDisabled) return;
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return;
+
+    const anchor = questionViewportAnchorRef.current;
+    if (!anchor) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const nextTop = Math.max(
+        0,
+        window.scrollY + anchor.getBoundingClientRect().bottom - window.innerHeight + 12,
+      );
+      window.scrollTo({
+        top: nextTop,
+        behavior: "auto",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentQuestionIndex, gameOver, isLoading, optionsDisabled, visibleOptions]);
 
   function stopTimer() {
     if (timerRef.current) {
@@ -748,8 +770,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
 
   return (
-    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
-      <main className="mx-auto w-full max-w-7xl space-y-5 md:space-y-7">
+    <div className="min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-7xl space-y-4 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
@@ -764,19 +786,19 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 fillClassName="bg-gradient-to-r from-[#818cf8] to-[#fbbf24]"
               />
 
-              <div className="space-y-5 p-5 md:space-y-6 md:p-8">
+              <div className="space-y-3 p-3 md:space-y-6 md:p-8">
                 <header className="space-y-2 md:space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-4">
-                    <p className="text-base font-semibold uppercase tracking-wide text-amber-300 md:text-xl">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-amber-300 md:text-xl">
                       Question {currentQuestionIndex + 1} of {questions.length}
                     </p>
                   </div>
-                  <h1 className="text-[clamp(2rem,3vw,3.25rem)] leading-tight font-bold">
+                  <h1 className="text-[clamp(1.35rem,6.1vw,3.25rem)] leading-[1.03] font-bold">
                     {currentQuestion.questionText}
                   </h1>
                 </header>
 
-                <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+                <div className="grid gap-2.5 md:grid-cols-2 md:gap-4">
                   {[0, 1, 2, 3].map((index) => {
                     const option = currentQuestion.options[index];
                     const isEliminated = eliminatedOptions.includes(index);
@@ -788,7 +810,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     return (
                       <GameButton
                         key={index}
-                        className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3vw,3.25rem)] [&>span>span]:leading-tight"
+                        className="min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.25rem)] [&>span>span]:leading-[1.06]"
                         disabled={optionsDisabled || isEliminated || !isVisible}
                         focused={focusedControl === `answer-${index}`}
                         state={
@@ -807,10 +829,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     );
                   })}
                 </div>
+                <div ref={questionViewportAnchorRef} className="h-px" />
 
                 {selectedAnswerIndex !== null && !revealedAnswer ? (
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
+                    <p className="text-sm font-semibold text-[#9394a5] md:text-2xl">
                       Lock in your final answer?
                     </p>
                     <CircularButton
@@ -843,7 +866,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
                     centered
-                    className="min-h-16 text-lg md:text-xl"
+                    className="min-h-12 text-sm md:min-h-16 md:text-xl"
                     focused={focusedControl === "lifeline-5050"}
                     disabled={usedLifelines.fiftyFifty || optionsDisabled || revealedAnswer}
                     onClick={() => void handleFiftyFifty()}
@@ -853,7 +876,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   <GameButton
                     centered
                     icon={<User size={20} />}
-                    className="min-h-16 text-lg md:text-xl"
+                    className="min-h-12 text-sm md:min-h-16 md:text-xl"
                     focused={focusedControl === "lifeline-ask-host"}
                     disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
                     onClick={() => void handleAskHost()}
@@ -863,7 +886,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 </div>
               </div>
 
-              <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+              <div className="border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5">
                 <SlantedBar
                   value={((currentQuestionIndex + 1) / questions.length) * 100}
                   className="h-3 md:h-4"

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -16,12 +16,79 @@ function normalizeCallbackUrl(url: string | null): string {
 function SignInPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const pageRef = useRef<HTMLElement | null>(null);
+  const googleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const didAutoFocusRef = useRef(false);
 
   const params = useSearchParams();
   const callbackURL = useMemo(
     () => normalizeCallbackUrl(params.get("callbackURL")),
     [params],
   );
+
+  useEffect(() => {
+    if (didAutoFocusRef.current) return;
+    const button = googleButtonRef.current;
+    if (!button) return;
+
+    didAutoFocusRef.current = true;
+
+    const frame = window.requestAnimationFrame(() => {
+      button.focus({ preventScroll: true });
+      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const rootNode = pageRef.current;
+    if (!rootNode) return;
+
+    const handleArrowFocusNavigation = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight" &&
+        event.key !== "ArrowUp" &&
+        event.key !== "ArrowDown"
+      ) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (!activeElement || !rootNode.contains(activeElement)) return;
+
+      const focusableElements = Array.from(
+        rootNode.querySelectorAll<HTMLElement>(
+          "button,[href],input,select,textarea,[tabindex]:not([tabindex='-1'])",
+        ),
+      ).filter((element) => {
+        if (element.hasAttribute("disabled")) return false;
+        if (element.getAttribute("aria-hidden") === "true") return false;
+        return true;
+      });
+
+      const currentIndex = focusableElements.indexOf(activeElement);
+      if (currentIndex < 0) return;
+
+      const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+      const nextIndex = Math.max(
+        0,
+        Math.min(focusableElements.length - 1, currentIndex + direction),
+      );
+
+      if (nextIndex !== currentIndex) {
+        event.preventDefault();
+        focusableElements[nextIndex]?.focus();
+      }
+    };
+
+    rootNode.addEventListener("keydown", handleArrowFocusNavigation);
+    return () => {
+      rootNode.removeEventListener("keydown", handleArrowFocusNavigation);
+    };
+  }, []);
 
   async function continueWithGoogle() {
     setIsSubmitting(true);
@@ -39,7 +106,10 @@ function SignInPageContent() {
   }
 
   return (
-    <main className="relative min-h-[100svh] overflow-hidden bg-[#0f1117] text-[#e4e4e9]">
+    <main
+      ref={pageRef}
+      className="relative min-h-[100svh] overflow-hidden bg-[#0f1117] text-[#e4e4e9]"
+    >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#6c8aff]/18 blur-3xl" />
         <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-blue-600/15 blur-3xl" />
@@ -83,6 +153,7 @@ function SignInPageContent() {
               </div>
 
               <button
+                ref={googleButtonRef}
                 type="button"
                 disabled={isSubmitting}
                 onClick={continueWithGoogle}

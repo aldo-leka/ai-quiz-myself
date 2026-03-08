@@ -83,6 +83,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const questionStartedAtRef = useRef(0);
   const startedAtRef = useRef<Date | null>(null);
   const finishedAtRef = useRef<Date | null>(null);
@@ -332,6 +333,27 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       stopCountdown();
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== "question") return;
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return;
+
+    const anchor = questionViewportAnchorRef.current;
+    if (!anchor) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const nextTop = Math.max(
+        0,
+        window.scrollY + anchor.getBoundingClientRect().bottom - window.innerHeight + 12,
+      );
+      window.scrollTo({
+        top: nextTop,
+        behavior: "auto",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentQuestionIndex, phase]);
 
   function beginRound(nextPlayerNames: string[]) {
     const trimmedPlayers = normalizePlayerNames(nextPlayerNames);
@@ -634,8 +656,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     currentCorrectOptionIndex !== null ? currentQuestion.options[currentCorrectOptionIndex]?.explanation : "";
 
   return (
-    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
-      <main className="mx-auto w-full max-w-7xl space-y-5 md:space-y-7">
+    <div className="min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-7xl space-y-4 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
@@ -650,23 +672,23 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             />
           ) : null}
 
-          <div className="space-y-5 p-5 md:p-8">
+          <div className="space-y-3 p-3 md:space-y-5 md:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-lg font-semibold text-[#818cf8] md:text-2xl">
+              <p className="text-sm font-semibold text-[#818cf8] md:text-2xl">
                 Question {currentQuestionIndex + 1} of {totalQuestions}
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-base font-bold text-amber-100 md:px-5 md:text-lg">
+                <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1.5 text-sm font-bold text-amber-100 md:px-5 md:py-2 md:text-lg">
                   {currentPlayerName}&apos;s turn
                 </span>
               </div>
             </div>
 
-            <h2 className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight font-bold">
+            <h2 className="text-[clamp(1.35rem,6.1vw,3.5rem)] leading-[1.03] font-bold">
               {currentQuestion.questionText}
             </h2>
 
-            <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+            <div className="grid gap-2.5 md:grid-cols-2 md:gap-4">
               {[0, 1, 2, 3].map((index) => {
                 const option = currentQuestion.options[index];
                 const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
@@ -676,7 +698,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 return (
                   <GameButton
                     key={index}
-                    className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3.2vw,3.5rem)] [&>span>span]:leading-tight"
+                    className="min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.5rem)] [&>span>span]:leading-[1.06]"
                     state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
                     focused={phase === "question" && focusedAnswerIndex === index}
                     disabled={phase !== "question"}
@@ -687,21 +709,22 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 );
               })}
             </div>
+            <div ref={questionViewportAnchorRef} className="h-px" />
 
             {phase === "reveal" ? (
               <div className="space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5">
-                <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">
+                <p className="text-base font-semibold text-[#e4e4e9] md:text-2xl">
                   {selectedAnswerIndex === null
                     ? `${currentPlayerName} ran out of time.`
                     : selectedAnswerIndex === currentCorrectOptionIndex
                       ? `${currentPlayerName} is correct!`
                       : `${currentPlayerName} is incorrect.`}
                 </p>
-                <p className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight text-[#9394a5]">
+                <p className="text-[clamp(1.05rem,4.9vw,3rem)] leading-tight text-[#9394a5]">
                   {correctExplanation || "No explanation provided for this question."}
                 </p>
                 <div className="flex justify-center">
-                  <GameButton centered className="min-h-16 max-w-sm text-lg md:text-xl" onClick={moveToNextTurn}>
+                  <GameButton centered className="min-h-12 max-w-sm text-sm md:min-h-16 md:text-xl" onClick={moveToNextTurn}>
                     {currentQuestionIndex + 1 >= totalQuestions ? "Show Leaderboard" : "Next Turn"}
                   </GameButton>
                 </div>
@@ -709,7 +732,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             ) : null}
           </div>
 
-          <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+          <div className="border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5">
             <SlantedBar
               value={progressPercentage}
               className="h-3 md:h-4"

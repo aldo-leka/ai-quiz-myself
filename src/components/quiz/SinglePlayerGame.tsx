@@ -78,6 +78,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const answerButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const nextQuestionButtonRef = useRef<HTMLButtonElement | null>(null);
   const revealPanelRef = useRef<HTMLDivElement | null>(null);
+  const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const completeFocusRefs = useRef<Record<string, HTMLElement | null>>({});
   const questionStartedAtRef = useRef(0);
   const quizStartedAtRef = useRef<Date | null>(new Date());
@@ -305,6 +306,27 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       revealPanelRef.current?.scrollIntoView({
         block: "nearest",
         inline: "nearest",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentQuestionIndex, phase]);
+
+  useEffect(() => {
+    if (phase !== "question") return;
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return;
+
+    const anchor = questionViewportAnchorRef.current;
+    if (!anchor) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const nextTop = Math.max(
+        0,
+        window.scrollY + anchor.getBoundingClientRect().bottom - window.innerHeight + 12,
+      );
+      window.scrollTo({
+        top: nextTop,
+        behavior: "auto",
       });
     });
 
@@ -649,8 +671,8 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f1117] px-4 py-5 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
-      <main className="mx-auto w-full max-w-6xl space-y-5 md:space-y-7">
+    <div className="min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
+      <main className="mx-auto w-full max-w-6xl space-y-4 md:space-y-7">
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
@@ -664,25 +686,25 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
               fillClassName={cn("bg-gradient-to-r", timerBarClass(remainingSeconds))}
             />
 
-            <div className="space-y-5 p-5 md:space-y-6 md:p-8">
-              <header className="space-y-3 md:space-y-4">
+            <div className="space-y-3 p-3 md:space-y-6 md:p-8">
+              <header className="space-y-2 md:space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <p className="text-lg font-semibold text-[#818cf8] md:text-2xl">
+                  <p className="text-sm font-semibold text-[#818cf8] md:text-2xl">
                     Question {currentQuestionIndex + 1} of {totalQuestions}
                   </p>
                   <div className="flex flex-wrap items-center gap-4">
-                    <p className="text-lg font-bold text-emerald-300 md:text-2xl">
+                    <p className="text-sm font-bold text-emerald-300 md:text-2xl">
                       Score: {score}
                     </p>
                   </div>
                 </div>
 
-                <h2 className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight font-bold text-[#e4e4e9]">
+                <h2 className="text-[clamp(1.35rem,6.1vw,3.5rem)] leading-[1.03] font-bold text-[#e4e4e9]">
                   {currentQuestion?.questionText}
                 </h2>
               </header>
 
-              <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+              <div className="grid gap-2.5 md:grid-cols-2 md:gap-4">
                 {[0, 1, 2, 3].map((index) => {
                   const option = currentQuestion?.options[index];
                   const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
@@ -695,7 +717,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
                       ref={(node) => {
                         answerButtonRefs.current[index] = node;
                       }}
-                      className="min-h-28 md:min-h-32 [&>span>span]:text-[clamp(2rem,3.2vw,3.5rem)] [&>span>span]:leading-tight"
+                      className="min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.5rem)] [&>span>span]:leading-[1.06]"
                       state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
                       focused={phase === "question" && focusedAnswerIndex === index}
                       disabled={phase !== "question"}
@@ -706,27 +728,28 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
                   );
                 })}
               </div>
+              <div ref={questionViewportAnchorRef} className="h-px" />
 
               {phase === "reveal" ? (
                 <div
                   ref={revealPanelRef}
                   className="space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5"
                 >
-                  <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">
+                  <p className="text-base font-semibold text-[#e4e4e9] md:text-2xl">
                     {selectedAnswerIndex === null
                       ? "Time is up."
                       : selectedAnswerIndex === currentCorrectOptionIndex
                         ? "Correct answer!"
                         : "Incorrect answer."}
                   </p>
-                  <p className="text-[clamp(2rem,3.2vw,3.5rem)] leading-tight text-[#9394a5]">
+                  <p className="text-[clamp(1.05rem,4.9vw,3rem)] leading-tight text-[#9394a5]">
                     {correctExplanation || "No explanation provided for this question."}
                   </p>
                   <div className="flex justify-center">
                     <GameButton
                       ref={nextQuestionButtonRef}
                       centered
-                      className="min-h-16 max-w-sm text-lg md:min-h-20 md:text-xl"
+                      className="min-h-12 max-w-sm text-sm md:min-h-20 md:text-xl"
                       onClick={moveToNextQuestion}
                     >
                       Next Question
@@ -736,7 +759,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
               ) : null}
             </div>
 
-            <div className="border-t border-[#252940] bg-[#0f1117]/82 px-5 py-4 md:px-8 md:py-5">
+            <div className="border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5">
               <SlantedBar
                 value={progressPercentage}
                 className="h-3 md:h-4"

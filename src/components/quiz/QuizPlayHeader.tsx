@@ -14,9 +14,9 @@ export function QuizPlayHeader({
   creatorImage,
 }: QuizPlayHeaderProps) {
   return (
-    <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/86 p-5 md:p-8">
-      <div className="space-y-4 md:flex md:flex-wrap md:items-center md:gap-4 md:space-y-0">
-        <h1 className="text-[clamp(2.5rem,4.6vw,4.75rem)] leading-[0.95] font-black tracking-tight text-[#e4e4e9]">
+    <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/86 p-4 md:p-8">
+      <div className="space-y-3 md:flex md:flex-wrap md:items-center md:gap-4 md:space-y-0">
+        <h1 className="text-[clamp(1.9rem,8vw,4.75rem)] leading-[0.95] font-black tracking-tight text-[#e4e4e9]">
           {title}
         </h1>
         <QuizCreatorAttribution
