@@ -75,7 +75,7 @@ export default async function AdminPage() {
       .from(creditTransactions)
       .where(
         and(
-          eq(creditTransactions.type, "purchase"),
+          inArray(creditTransactions.type, ["purchase", "auto_reload"]),
           eq(creditTransactions.status, "completed"),
         ),
       ),
