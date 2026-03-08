@@ -81,12 +81,12 @@ export function AdminShell({ children, userLabel }: AdminShellProps) {
           <p className="mt-2 text-xs text-slate-500">{userLabel}</p>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="flex items-center gap-3 border-b px-4 py-3">
           <SidebarTrigger />
           <div className="text-sm font-semibold text-slate-700">Admin Dashboard</div>
         </header>
-        <div className="p-4 md:p-6">{children}</div>
+        <div className="min-w-0 p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

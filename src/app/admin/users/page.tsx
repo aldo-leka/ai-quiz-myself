@@ -17,8 +17,29 @@ import { apiKeys, credits, quizSessions, quizzes, session, user } from "@/db/sch
 import { db } from "@/db";
 
 type UsersPageProps = {
-  searchParams?: Promise<{ q?: string }>;
+  searchParams?: Promise<{ q?: string; page?: string }>;
 };
+
+const PAGE_SIZE = 50;
+
+function parsePageParam(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return parsed;
+}
+
+function buildUsersHref(query: string, page: number) {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set("q", query);
+  }
+  if (page > 1) {
+    params.set("page", String(page));
+  }
+
+  const serialized = params.toString();
+  return serialized ? `/admin/users?${serialized}` : "/admin/users";
+}
 
 function normalizeDate(value: unknown): Date | null {
   if (!value) return null;
@@ -63,6 +84,7 @@ function latestDate(...values: unknown[]) {
 export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const query = resolvedSearchParams.q?.trim() ?? "";
+  const requestedPage = parsePageParam(resolvedSearchParams.page);
   const adminUser = aliasedTable(user, "admin_user");
   const quizStats = db
     .select({
@@ -148,19 +170,36 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
       total: sql<number>`count(*)::int`,
     })
     .from(user);
+  const activeUsersBaseQuery = db
+    .select({
+      total: sql<number>`count(distinct ${user.id})::int`,
+    })
+    .from(user)
+    .innerJoin(
+      session,
+      sql`${session.userId} = ${user.id} and ${session.expiresAt} > now()`,
+    );
 
   const rowsQuery = listFilter ? rowsBaseQuery.where(listFilter) : rowsBaseQuery;
   const countQuery = countFilter ? countBaseQuery.where(countFilter) : countBaseQuery;
+  const activeUsersQuery = countFilter
+    ? activeUsersBaseQuery.where(countFilter)
+    : activeUsersBaseQuery;
 
-  const [rows, countRows] = await Promise.all([
-    rowsQuery.orderBy(desc(adminUser.createdAt)).limit(100),
-    countQuery,
-  ]);
-
+  const [countRows, activeUsersRows] = await Promise.all([countQuery, activeUsersQuery]);
   const total = Number(countRows[0]?.total ?? 0);
+  const activeUsers = Number(activeUsersRows[0]?.total ?? 0);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(requestedPage, pageCount);
+  const offset = (currentPage - 1) * PAGE_SIZE;
+  const rows = await rowsQuery.orderBy(desc(adminUser.createdAt)).limit(PAGE_SIZE).offset(offset);
+  const startIndex = total === 0 ? 0 : offset + 1;
+  const endIndex = total === 0 ? 0 : offset + rows.length;
+  const hasPreviousPage = currentPage > 1;
+  const hasNextPage = currentPage < pageCount;
 
   return (
-    <main className="space-y-6">
+    <main className="min-w-0 space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -201,10 +240,8 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
           <p className="mt-2 text-3xl font-black text-slate-900">{rows.length.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <p className="text-sm font-semibold text-slate-500">Admins in result</p>
-          <p className="mt-2 text-3xl font-black text-slate-900">
-            {rows.filter((entry) => entry.isAdmin).length.toLocaleString()}
-          </p>
+          <p className="text-sm font-semibold text-slate-500">Users with active sessions</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{activeUsers.toLocaleString()}</p>
         </div>
       </section>
 
@@ -212,11 +249,17 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-black text-slate-900">Directory</h2>
-            <p className="text-sm text-slate-500">Up to 100 users, newest first.</p>
+            <p className="text-sm text-slate-500">
+              Showing {startIndex.toLocaleString()}-{endIndex.toLocaleString()} of {total.toLocaleString()},
+              newest first.
+            </p>
           </div>
+          <Badge variant="outline">
+            Page {currentPage} of {pageCount}
+          </Badge>
         </div>
 
-        <Table>
+        <Table className="min-w-[1180px]">
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
@@ -293,6 +336,34 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
             ) : null}
           </TableBody>
         </Table>
+
+        <div className="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-500">
+            {total === 0
+              ? "No users matched this search."
+              : `Showing ${startIndex.toLocaleString()}-${endIndex.toLocaleString()} of ${total.toLocaleString()} users.`}
+          </p>
+          <div className="flex gap-2">
+            {hasPreviousPage ? (
+              <Button asChild variant="outline">
+                <Link href={buildUsersHref(query, currentPage - 1)}>Previous</Link>
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                Previous
+              </Button>
+            )}
+            {hasNextPage ? (
+              <Button asChild variant="outline">
+                <Link href={buildUsersHref(query, currentPage + 1)}>Next</Link>
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                Next
+              </Button>
+            )}
+          </div>
+        </div>
       </section>
     </main>
   );
