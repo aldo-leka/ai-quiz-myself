@@ -164,6 +164,7 @@ function HomePageContent() {
 
   const [hubQuizzes, setHubQuizzes] = useState<HubQuiz[]>([]);
   const [popularThemes, setPopularThemes] = useState<PopularTheme[]>([]);
+  const [didLoadThemes, setDidLoadThemes] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -368,6 +369,10 @@ function HomePageContent() {
         if (!cancelled) {
           setPopularThemes([]);
         }
+      } finally {
+        if (!cancelled) {
+          setDidLoadThemes(true);
+        }
       }
     }
 
@@ -412,19 +417,31 @@ function HomePageContent() {
   }, []);
 
   useEffect(() => {
-    if (didAutoFocusHubRef.current) return;
+    if (didAutoFocusHubRef.current || !didLoadThemes) return;
     const button = surpriseButtonRef.current;
     if (!button) return;
 
     didAutoFocusHubRef.current = true;
 
     const frame = window.requestAnimationFrame(() => {
-      button.focus();
-      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+      button.focus({ preventScroll: true });
+      button.scrollIntoView({ block: "end", inline: "nearest" });
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [didLoadThemes]);
+
+  useEffect(() => {
+    const button = surpriseButtonRef.current;
+    if (!button) return;
+    if (document.activeElement !== button) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      button.scrollIntoView({ block: "end", inline: "nearest" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [didLoadThemes, featuredThemeOptions.length, sessionData?.user?.id]);
 
   useEffect(() => {
     const rootNode = pageRef.current;
@@ -634,10 +651,10 @@ function HomePageContent() {
                 <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
                   Popular Themes
                 </p>
-                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-col md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <FilterPill
                     isActive={filters.theme === null}
-                    className={`${hubFilterPillClassName} shrink-0 md:w-full md:max-w-full md:shrink`}
+                    className={`${hubFilterPillClassName} max-w-[14rem] shrink-0 md:max-w-[15rem] md:shrink xl:max-w-[16rem]`}
                     onClick={() => updateQueryParams({ theme: null, page: 1 })}
                   >
                     All Themes
@@ -646,7 +663,7 @@ function HomePageContent() {
                     <FilterPill
                       key={entry.theme}
                       isActive={filters.theme === entry.theme}
-                      className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:w-full md:max-w-full md:shrink`}
+                      className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:max-w-[17.5rem] md:shrink xl:max-w-[18.5rem]`}
                       onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
                     >
                       {entry.theme}
