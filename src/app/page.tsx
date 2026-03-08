@@ -72,7 +72,8 @@ const SORT_OPTIONS: Array<{ value: HubSort; label: string }> = [
   { value: "newest", label: "Newest" },
 ];
 
-const hubFilterPillClassName = "min-h-16 px-6 text-2xl md:min-h-20 md:px-8 md:text-3xl";
+const hubFilterPillClassName =
+  "min-h-10 px-3.5 text-base md:min-h-14 md:px-5 md:text-xl xl:min-h-16 xl:px-6 xl:text-[1.5rem]";
 
 function normalizeSort(value: string | null): HubSort {
   return value === "newest" ? "newest" : "popular";
@@ -376,14 +377,16 @@ function HomePageContent() {
     };
   }, [filters.mode]);
 
-  const visibleThemeOptions = useMemo(() => {
+  const featuredThemeOptions = useMemo(() => {
+    const cappedThemes = popularThemes.slice(0, 5);
+
     if (!filters.theme) {
-      return popularThemes;
+      return cappedThemes;
     }
 
-    const alreadyVisible = popularThemes.some((entry) => entry.theme === filters.theme);
+    const alreadyVisible = cappedThemes.some((entry) => entry.theme === filters.theme);
     if (alreadyVisible) {
-      return popularThemes;
+      return cappedThemes;
     }
 
     return [
@@ -392,7 +395,7 @@ function HomePageContent() {
         totalPlayCount: 0,
         quizCount: 0,
       },
-      ...popularThemes,
+      ...cappedThemes.slice(0, 4),
     ];
   }, [filters.theme, popularThemes]);
 
@@ -535,26 +538,29 @@ function HomePageContent() {
     }
   }
 
+  const surpriseButtonLabel = isSurpriseLoading ? "Finding Quiz..." : "Surprise Me";
+
   return (
     <div ref={pageRef} className="min-h-screen overflow-x-clip bg-[#0f1117] text-[#e4e4e9]">
-      <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-6 md:px-8 md:py-8">
-        <section className="rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 shadow-2xl md:p-8">
-          <div className="flex flex-col gap-8">
-            <div>
-              <div className="flex flex-wrap items-start justify-between gap-5">
-                <h1 className="text-6xl font-black tracking-tight text-[#e4e4e9] md:text-8xl xl:text-[6.5rem]">
-                  QuizPlus Hub
-                </h1>
+      <main className="mx-auto w-full max-w-[1700px] space-y-8 px-4 py-5 md:px-8 md:py-8">
+        <section className="rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-4 shadow-2xl md:p-8">
+          <div className="space-y-4 md:space-y-8">
+            <div className="flex flex-wrap items-start justify-between gap-4 md:gap-5">
+              <h1 className="text-4xl leading-[0.92] font-black tracking-tight text-[#e4e4e9] sm:text-5xl md:text-8xl xl:text-[6.5rem]">
+                QuizPlus Hub
+              </h1>
+
+              <div className="flex flex-col gap-3 xl:items-end">
                 {sessionData?.user ? (
                   <button
                     type="button"
                     onClick={() => router.push("/dashboard")}
                     className={cn(
-                      "inline-flex min-h-16 select-none items-center gap-4 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-5 py-3 text-2xl font-semibold text-[#e4e4e9] transition md:min-h-20 md:px-7 md:text-3xl xl:text-4xl",
+                      "inline-flex min-h-12 w-full select-none items-center justify-center gap-3 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-2.5 text-lg font-semibold text-[#e4e4e9] transition md:min-h-20 md:gap-4 md:px-7 md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
-                    <Avatar size="lg" className="size-12 border border-[#252940] md:size-14">
+                    <Avatar size="lg" className="size-9 border border-[#252940] md:size-14">
                       <AvatarImage
                         src={sessionData.user.image ?? undefined}
                         alt={sessionData.user.name}
@@ -572,7 +578,7 @@ function HomePageContent() {
                     type="button"
                     onClick={() => router.push("/dashboard")}
                     className={cn(
-                      "min-h-16 select-none rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 py-3 text-2xl font-semibold whitespace-nowrap text-[#e4e4e9] transition md:min-h-20 md:px-8 md:text-3xl xl:text-4xl",
+                      "min-h-12 w-full select-none rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2.5 text-lg font-semibold whitespace-nowrap text-[#e4e4e9] transition md:min-h-20 md:px-8 md:py-3 md:text-3xl xl:w-auto xl:text-4xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
@@ -580,111 +586,101 @@ function HomePageContent() {
                   </button>
                 )}
               </div>
-              <p className="mt-5 max-w-[18ch] text-4xl leading-[1.08] text-[#9394a5] md:text-5xl xl:text-6xl">
-                Browse hub quizzes, filter by mode and difficulty, then jump straight into play.
-              </p>
             </div>
 
-            <div className="flex flex-col gap-4 xl:flex-row xl:justify-end">
+            <div className="grid gap-3 md:gap-4 lg:grid-cols-2 xl:grid-cols-4">
+              <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
+                <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
+                  Game Mode
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {MODE_OPTIONS.map((option) => (
+                    <FilterPill
+                      key={option.value}
+                      isActive={filters.mode === option.value}
+                      className={`${hubFilterPillClassName} shrink-0`}
+                      onClick={() =>
+                        updateQueryParams({ mode: option.value, theme: null, page: 1 })
+                      }
+                    >
+                      {option.label}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
+                <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
+                  Popular Themes
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <FilterPill
+                    isActive={filters.theme === null}
+                    className={`${hubFilterPillClassName} shrink-0`}
+                    onClick={() => updateQueryParams({ theme: null, page: 1 })}
+                  >
+                    All Themes
+                  </FilterPill>
+                  {featuredThemeOptions.map((entry) => (
+                    <FilterPill
+                      key={entry.theme}
+                      isActive={filters.theme === entry.theme}
+                      className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:max-w-[18rem] xl:max-w-[20rem]`}
+                      onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
+                    >
+                      {entry.theme}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
+                <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
+                  Difficulty
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {DIFFICULTY_OPTIONS.map((option) => (
+                    <FilterPill
+                      key={option.value}
+                      isActive={filters.difficulty === option.value}
+                      className={`${hubFilterPillClassName} shrink-0`}
+                      onClick={() => updateQueryParams({ difficulty: option.value, page: 1 })}
+                    >
+                      {option.label}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
+                <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
+                  Sort
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {SORT_OPTIONS.map((option) => (
+                    <FilterPill
+                      key={option.value}
+                      isActive={filters.sort === option.value}
+                      className={`${hubFilterPillClassName} shrink-0`}
+                      onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
+                    >
+                      {option.label}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-center">
               <GameButton
                 centered
-                className="min-h-20 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-3xl text-[#e4e4e9] xl:w-auto xl:min-w-80 xl:text-5xl"
+                className="min-h-14 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-xl text-[#e4e4e9] md:min-h-20 md:text-3xl xl:max-w-[34rem] xl:text-5xl"
                 onClick={() => void handleSurpriseMe()}
                 disabled={isSurpriseLoading}
-                icon={<Shuffle className="size-10 md:size-12" />}
+                icon={<Shuffle className="size-8 md:size-10 xl:size-12" />}
               >
-                {isSurpriseLoading ? "Finding Quiz..." : "Surprise Me"}
+                {surpriseButtonLabel}
               </GameButton>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-4 md:p-6">
-          <div className="rounded-2xl border border-[#6c8aff]/30 bg-gradient-to-r from-[#6c8aff]/14 to-[#1a1d2e]/92 p-4 md:p-5">
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="inline-flex size-16 shrink-0 items-center justify-center rounded-2xl border border-[#6c8aff]/30 bg-[#6c8aff]/14 text-[#818cf8] md:size-20">
-                <Shuffle className="size-8 md:size-10" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-4xl leading-tight font-bold text-[#e4e4e9] md:text-5xl">
-                  Pick your filters, then hit Surprise Me
-                </p>
-                <p className="max-w-[26ch] text-2xl leading-tight text-[#9394a5] md:text-4xl">
-                  Select a game mode, optionally lock in a popular theme and difficulty, then
-                  QuizPlus will launch a random matching quiz instantly.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Game Mode</h2>
-            <div className="flex flex-wrap gap-3">
-              {MODE_OPTIONS.map((option) => (
-                <FilterPill
-                  key={option.value}
-                  isActive={filters.mode === option.value}
-                  className={hubFilterPillClassName}
-                  onClick={() => updateQueryParams({ mode: option.value, theme: null, page: 1 })}
-                >
-                  {option.label}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Popular Themes</h2>
-            <div className="flex flex-wrap gap-3">
-              <FilterPill
-                isActive={filters.theme === null}
-                className={hubFilterPillClassName}
-                onClick={() => updateQueryParams({ theme: null, page: 1 })}
-              >
-                All Themes
-              </FilterPill>
-              {visibleThemeOptions.map((entry) => (
-                <FilterPill
-                  key={entry.theme}
-                  isActive={filters.theme === entry.theme}
-                  className={hubFilterPillClassName}
-                  onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
-                >
-                  {entry.theme}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Difficulty</h2>
-            <div className="flex flex-wrap gap-3">
-              {DIFFICULTY_OPTIONS.map((option) => (
-                <FilterPill
-                  key={option.value}
-                  isActive={filters.difficulty === option.value}
-                  className={hubFilterPillClassName}
-                  onClick={() => updateQueryParams({ difficulty: option.value, page: 1 })}
-                >
-                  {option.label}
-                </FilterPill>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-4xl font-bold text-[#e4e4e9] md:text-5xl">Sort</h2>
-            <div className="flex flex-wrap gap-3">
-              {SORT_OPTIONS.map((option) => (
-                <FilterPill
-                  key={option.value}
-                  isActive={filters.sort === option.value}
-                  className={hubFilterPillClassName}
-                  onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
-                >
-                  {option.label}
-                </FilterPill>
-              ))}
             </div>
           </div>
         </section>
