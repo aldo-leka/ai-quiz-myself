@@ -618,17 +618,15 @@ function HomePageContent() {
             <div className="grid gap-3 md:gap-4 lg:grid-cols-2 xl:grid-cols-4">
               <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
                 <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
-                  Game Mode
+                  Sort
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {MODE_OPTIONS.map((option) => (
+                  {SORT_OPTIONS.map((option) => (
                     <FilterPill
                       key={option.value}
-                      isActive={filters.mode === option.value}
+                      isActive={filters.sort === option.value}
                       className={`${hubFilterPillClassName} shrink-0`}
-                      onClick={() =>
-                        updateQueryParams({ mode: option.value, theme: null, page: 1 })
-                      }
+                      onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
                     >
                       {option.label}
                     </FilterPill>
@@ -681,15 +679,17 @@ function HomePageContent() {
 
               <div className="min-w-0 space-y-2 rounded-2xl border border-[#252940] bg-[#1a1d2e]/72 p-3 md:space-y-3 md:p-4">
                 <p className="text-xs font-semibold tracking-[0.24em] text-[#9394a5] uppercase md:text-sm">
-                  Sort
+                  Game Mode
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1 pr-1 md:flex-wrap md:gap-3 md:overflow-visible md:pb-0 md:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {SORT_OPTIONS.map((option) => (
+                  {MODE_OPTIONS.map((option) => (
                     <FilterPill
                       key={option.value}
-                      isActive={filters.sort === option.value}
+                      isActive={filters.mode === option.value}
                       className={`${hubFilterPillClassName} shrink-0`}
-                      onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
+                      onClick={() =>
+                        updateQueryParams({ mode: option.value, theme: null, page: 1 })
+                      }
                     >
                       {option.label}
                     </FilterPill>
