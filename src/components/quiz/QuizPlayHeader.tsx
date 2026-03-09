@@ -52,7 +52,7 @@ export function QuizPlayHeader({
     >
       <div
         className={cn(
-          "grid gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start md:gap-4",
+          "grid grid-cols-2 gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start md:gap-4",
           compactLayout && "md:gap-3",
         )}
       >
@@ -60,7 +60,7 @@ export function QuizPlayHeader({
           <GameButton
             centered
             className={cn(
-              "order-2 aspect-square min-h-14 w-14 px-0 py-0 md:order-1 md:min-h-16 md:w-16",
+              "order-2 aspect-square min-h-14 w-14 justify-self-start px-0 py-0 md:order-1 md:min-h-16 md:w-16",
               compactLayout && "md:min-h-14 md:w-14",
             )}
             aria-label={leftActionLabel}
@@ -76,7 +76,7 @@ export function QuizPlayHeader({
           <div className="hidden md:block" />
         )}
 
-        <div className="order-1 min-w-0 space-y-3 md:order-2">
+        <div className="order-1 col-span-2 min-w-0 space-y-3 md:order-2 md:col-span-1">
           <h1
             className={cn(
               "text-[clamp(1.9rem,8vw,4.75rem)] leading-[0.95] font-black tracking-tight text-[#e4e4e9]",
