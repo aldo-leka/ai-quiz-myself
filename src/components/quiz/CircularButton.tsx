@@ -1,6 +1,8 @@
 "use client";
 
+import { forwardRef } from "react";
 import { useCompactQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { scrollRemoteControlIntoView } from "@/lib/remote-focus";
 import { cn } from "@/lib/utils";
 
 type CircularButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -8,17 +10,22 @@ type CircularButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   focused?: boolean;
 };
 
-export function CircularButton({
-  className,
-  selected = false,
-  focused = false,
-  children,
-  ...props
-}: CircularButtonProps) {
+export const CircularButton = forwardRef<HTMLButtonElement, CircularButtonProps>(function CircularButton(
+  {
+    className,
+    selected = false,
+    focused = false,
+    children,
+    onFocus,
+    ...props
+  },
+  ref,
+) {
   const compactLayout = useCompactQuizLayout();
 
   return (
     <button
+      ref={ref}
       className={cn(
         "size-16 min-h-16 min-w-16 rounded-full border-2 text-sm font-semibold transition md:size-24 md:min-h-24 md:min-w-24 md:text-lg",
         compactLayout && "md:size-[4.5rem] md:min-h-[4.5rem] md:min-w-[4.5rem] md:text-base",
@@ -30,9 +37,13 @@ export function CircularButton({
         props.disabled && "cursor-not-allowed opacity-50",
         className,
       )}
+      onFocus={(event) => {
+        scrollRemoteControlIntoView(event.currentTarget);
+        onFocus?.(event);
+      }}
       {...props}
     >
       {children}
     </button>
   );
-}
+});

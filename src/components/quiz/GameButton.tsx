@@ -2,6 +2,7 @@
 
 import { forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { scrollRemoteControlIntoView } from "@/lib/remote-focus";
 import { cn } from "@/lib/utils";
 
 const gameButtonVariants = cva(
@@ -47,6 +48,7 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(functio
     icon,
     iconOnly = false,
     children,
+    onFocus,
     ...props
   },
   ref,
@@ -59,6 +61,10 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(functio
         iconOnly && "flex items-center justify-center",
         className,
       )}
+      onFocus={(event) => {
+        scrollRemoteControlIntoView(event.currentTarget);
+        onFocus?.(event);
+      }}
       {...props}
     >
       <span

@@ -10,6 +10,7 @@ import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { focusRemoteControl, scrollRemoteControlIntoView } from "@/lib/remote-focus";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
@@ -714,7 +715,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
-      node.focus({ preventScroll: true });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -755,7 +756,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
-      node.focus({ preventScroll: true });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -769,7 +770,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         focusedRevealTarget === "header-quit" || focusedRevealTarget === "header-next"
           ? headerButtonRefs.current[focusedRevealTarget]
           : nextTurnButtonRef.current;
-      node?.focus({ preventScroll: true });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -874,7 +875,10 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                     type="text"
                     value={name}
                     maxLength={MAX_NAME_LENGTH}
-                    onFocus={() => setSetupFocusTarget(`setup-input-${index}`)}
+                    onFocus={(event) => {
+                      setSetupFocusTarget(`setup-input-${index}`);
+                      scrollRemoteControlIntoView(event.currentTarget);
+                    }}
                     onChange={(event) => {
                       const nextName = event.target.value.slice(0, MAX_NAME_LENGTH);
                       setSetupNames((previous) => {

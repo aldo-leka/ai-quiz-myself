@@ -10,6 +10,7 @@ import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { focusRemoteControl } from "@/lib/remote-focus";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
@@ -390,7 +391,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           ? headerButtonRefs.current[focusedRevealTarget]
           : nextQuestionButtonRef.current;
 
-      targetNode?.focus({ preventScroll: true });
+      focusRemoteControl(targetNode);
       revealPanelRef.current?.scrollIntoView({
         block: "nearest",
         inline: "nearest",
@@ -453,7 +454,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
-      node.focus({ preventScroll: true });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -466,7 +467,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
-      node.focus({ preventScroll: true });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -479,11 +480,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
-      node.focus({ preventScroll: true });
-      node.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      });
+      focusRemoteControl(node);
     });
 
     return () => window.cancelAnimationFrame(frame);

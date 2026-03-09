@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, House, LoaderCircle, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AnimatedText } from "@/components/quiz/AnimatedText";
@@ -13,6 +13,7 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useHostCommunication } from "@/hooks/useHostCommunication";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { focusRemoteControl } from "@/lib/remote-focus";
 import {
   ASK_HOST_FALLBACK_MESSAGES,
   CHECKPOINTS,
@@ -79,6 +80,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [focusedControl, setFocusedControl] = useState<FocusControlId | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const focusControlRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const countdownStartedRef = useRef(false);
   const startedAtRef = useRef<Date>(new Date());
   const questionStartedAtRef = useRef<number>(Date.now());
@@ -198,6 +200,26 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setFocusedControl(null);
     }
   }, [focusOrder, focusedControl]);
+
+  const registerFocusControlRef = useCallback(
+    (controlId: FocusControlId) => (node: HTMLButtonElement | null) => {
+      focusControlRefs.current[controlId] = node;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!focusedControl) return;
+
+    const node = focusControlRefs.current[focusedControl];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      focusRemoteControl(node);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedControl]);
 
   useEffect(() => {
     if (isLoading || gameOver) return;
@@ -730,11 +752,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             creatorImage={quiz.creatorImage}
             leftActionLabel="Quit"
             leftActionOnClick={() => router.push("/")}
+            leftActionButtonRef={registerFocusControlRef("header-quit")}
             leftActionFocused={focusedControl === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
             rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
             rightActionOnClick={() => void playRandomAgain()}
             rightActionDisabled={isLoadingNextQuiz}
+            rightActionButtonRef={registerFocusControlRef("header-next")}
             rightActionFocused={focusedControl === "header-next"}
             rightActionIcon={
               <span className="inline-flex items-center justify-center">
@@ -822,11 +846,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           creatorImage={quiz.creatorImage}
           leftActionLabel="Quit"
           leftActionOnClick={() => router.push("/")}
+          leftActionButtonRef={registerFocusControlRef("header-quit")}
           leftActionFocused={focusedControl === "header-quit"}
           leftActionIcon={<House className="size-5 md:size-6" />}
           rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
           rightActionOnClick={() => void playRandomAgain()}
           rightActionDisabled={isLoadingNextQuiz}
+          rightActionButtonRef={registerFocusControlRef("header-next")}
           rightActionFocused={focusedControl === "header-next"}
           rightActionIcon={
             <span className="inline-flex items-center justify-center">
@@ -882,6 +908,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     return (
                       <GameButton
                         key={index}
+                        ref={registerFocusControlRef(`answer-${index}`)}
                         className={cn(
                           "min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.25rem)] [&>span>span]:leading-[1.06]",
                           compactLayout &&
@@ -915,6 +942,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                       Lock in your final answer?
                     </p>
                     <CircularButton
+                      ref={registerFocusControlRef("final")}
                       focused={focusedControl === "final"}
                       selected={finalAnswerLocked}
                       disabled={finalAnswerLocked}
@@ -927,7 +955,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
                   <div className="flex items-center justify-end">
-                    <CircularButton focused={focusedControl === "cashout"} onClick={cashOut}>
+                    <CircularButton
+                      ref={registerFocusControlRef("cashout")}
+                      focused={focusedControl === "cashout"}
+                      onClick={cashOut}
+                    >
                       Cash Out
                     </CircularButton>
                   </div>
@@ -935,7 +967,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 {revealedAnswer ? (
                   <div className="flex items-center justify-center">
-                    <CircularButton focused={focusedControl === "continue"} onClick={continueAfterReveal}>
+                    <CircularButton
+                      ref={registerFocusControlRef("continue")}
+                      focused={focusedControl === "continue"}
+                      onClick={continueAfterReveal}
+                    >
                       Continue
                     </CircularButton>
                   </div>
@@ -943,6 +979,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
+                    ref={registerFocusControlRef("lifeline-5050")}
                     centered
                     className={cn(
                       "min-h-12 text-sm md:min-h-16 md:text-xl",
@@ -955,6 +992,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     50:50
                   </GameButton>
                   <GameButton
+                    ref={registerFocusControlRef("lifeline-ask-host")}
                     centered
                     icon={<User size={20} />}
                     className={cn(
