@@ -29,6 +29,7 @@ import type {
   QuizWithQuestions,
   SaveQuizSessionPayload,
 } from "@/lib/quiz-types";
+import { cn } from "@/lib/utils";
 
 type FocusControlId =
   | `answer-${number}`
