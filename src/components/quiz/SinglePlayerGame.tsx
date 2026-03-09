@@ -42,7 +42,7 @@ type QuestionResult = {
 };
 
 const QUESTION_TIME_SECONDS = 30;
-const AUTO_ADVANCE_MS = 3000;
+const AUTO_ADVANCE_MS = 4500;
 
 function formatSecondsFromMs(durationMs: number) {
   return `${(durationMs / 1000).toFixed(1)}s`;
@@ -85,6 +85,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [isVoting, setIsVoting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
+  const [revealOutlineProgress, setRevealOutlineProgress] = useState(0);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
@@ -364,6 +365,21 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setFocusedHeaderTarget(null);
     setFocusedRevealTarget((previous) => previous ?? "reveal-next");
   }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "reveal") {
+      setRevealOutlineProgress(0);
+      return;
+    }
+
+    setRevealOutlineProgress(0);
+
+    const frame = window.requestAnimationFrame(() => {
+      setRevealOutlineProgress(100);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentQuestionIndex, phase]);
 
   useEffect(() => {
     if (phase !== "reveal") return;
@@ -939,8 +955,32 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
               {phase === "reveal" ? (
                 <div
                   ref={revealPanelRef}
-                  className="space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5"
+                  className="relative overflow-hidden space-y-4 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:p-5"
                 >
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    preserveAspectRatio="none"
+                    viewBox="0 0 100 100"
+                  >
+                    <rect
+                      x="1.5"
+                      y="1.5"
+                      width="97"
+                      height="97"
+                      rx="10"
+                      ry="10"
+                      pathLength={100}
+                      className="fill-none stroke-[#818cf8]/85"
+                      strokeWidth="2.5"
+                      strokeDasharray="100"
+                      strokeDashoffset={100 - revealOutlineProgress}
+                      strokeLinecap="round"
+                      style={{
+                        transition: `stroke-dashoffset ${AUTO_ADVANCE_MS}ms linear`,
+                      }}
+                    />
+                  </svg>
                   <p className="text-base font-semibold text-[#e4e4e9] md:text-2xl">
                     {selectedAnswerIndex === null
                       ? "Time is up."
