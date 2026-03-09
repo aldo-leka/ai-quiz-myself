@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, House, LoaderCircle, Medal, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, House, LoaderCircle, Medal, Trash2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -640,8 +640,12 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                   />
                   <GameButton
                     centered
+                    iconOnly
+                    aria-label={`Remove Player ${index + 1}`}
+                    title={`Remove Player ${index + 1}`}
                     disabled={setupNames.length <= MIN_PLAYERS}
-                    className="min-h-14 max-w-36 text-base md:text-lg"
+                    className="min-h-14 w-14 shrink-0 px-0 md:min-h-16 md:w-16"
+                    icon={<Trash2 className="h-6 w-6 md:h-7 md:w-7" />}
                     onClick={() =>
                       setSetupNames((previous) =>
                         previous.length <= MIN_PLAYERS
@@ -649,9 +653,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                           : previous.filter((_, currentIndex) => currentIndex !== index),
                       )
                     }
-                  >
-                    Remove
-                  </GameButton>
+                  />
                 </div>
               ))}
             </div>
