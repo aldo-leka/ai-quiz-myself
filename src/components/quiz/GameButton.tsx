@@ -35,6 +35,7 @@ const gameButtonVariants = cva(
 type GameButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof gameButtonVariants> & {
     icon?: React.ReactNode;
+    iconOnly?: boolean;
   };
 
 export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(function GameButton(
@@ -44,6 +45,7 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(functio
     focused,
     centered,
     icon,
+    iconOnly = false,
     children,
     ...props
   },
@@ -52,12 +54,22 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(functio
   return (
     <button
       ref={ref}
-      className={cn(gameButtonVariants({ state, focused, centered }), className)}
+      className={cn(
+        gameButtonVariants({ state, focused, centered }),
+        iconOnly && "flex items-center justify-center",
+        className,
+      )}
       {...props}
     >
-      <span className={cn("flex items-center gap-2", centered && "justify-center")}>
+      <span
+        className={cn(
+          "flex items-center gap-2",
+          (centered || iconOnly) && "justify-center",
+          iconOnly && "w-full gap-0",
+        )}
+      >
         {icon ? <span className="shrink-0">{icon}</span> : null}
-        <span>{children}</span>
+        {children ? <span>{children}</span> : null}
       </span>
     </button>
   );

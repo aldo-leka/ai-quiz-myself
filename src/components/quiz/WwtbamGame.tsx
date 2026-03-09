@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { User } from "lucide-react";
+import { ArrowRight, House, LoaderCircle, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AnimatedText } from "@/components/quiz/AnimatedText";
 import { CircularButton } from "@/components/quiz/CircularButton";
@@ -32,6 +32,8 @@ import type {
 import { cn } from "@/lib/utils";
 
 type FocusControlId =
+  | "header-quit"
+  | "header-next"
   | `answer-${number}`
   | "final"
   | "continue"
@@ -72,6 +74,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   const [gameOver, setGameOver] = useState(false);
   const [wonAmount, setWonAmount] = useState(0);
+  const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
 
   const [focusedControl, setFocusedControl] = useState<FocusControlId | null>(null);
 
@@ -106,7 +109,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }, [eliminatedOptions, optionsDisabled, visibleOptions]);
 
   const focusOrder = useMemo<FocusControlId[]>(() => {
-    const controls: FocusControlId[] = [];
+    const controls: FocusControlId[] = ["header-quit", "header-next"];
 
     if (availableAnswerIndexes.length > 0 && selectedAnswerIndex === null && !revealedAnswer) {
       controls.push(...availableAnswerIndexes.map((index) => `answer-${index}` as const));
@@ -632,6 +635,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }
 
   async function playRandomAgain() {
+    if (isLoadingNextQuiz) return;
+
+    setIsLoadingNextQuiz(true);
     try {
       const nextQuizId = await getNextRandomQuizId({
         mode: "wwtbam",
@@ -646,10 +652,22 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       router.push(`/play/${nextQuizId}`);
     } catch {
       router.push("/");
+    } finally {
+      setIsLoadingNextQuiz(false);
     }
   }
 
   function triggerControl(controlId: FocusControlId) {
+    if (controlId === "header-quit") {
+      router.push("/");
+      return;
+    }
+
+    if (controlId === "header-next") {
+      void playRandomAgain();
+      return;
+    }
+
     if (controlId.startsWith("answer-")) {
       const idx = Number(controlId.replace("answer-", ""));
       if (!Number.isNaN(idx) && availableAnswerIndexes.includes(idx)) {
@@ -710,6 +728,23 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             title={quiz.title}
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
+            leftActionLabel="Quit"
+            leftActionOnClick={() => router.push("/")}
+            leftActionFocused={focusedControl === "header-quit"}
+            leftActionIcon={<House className="size-5 md:size-6" />}
+            rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+            rightActionOnClick={() => void playRandomAgain()}
+            rightActionDisabled={isLoadingNextQuiz}
+            rightActionFocused={focusedControl === "header-next"}
+            rightActionIcon={
+              <span className="inline-flex items-center justify-center">
+                {isLoadingNextQuiz ? (
+                  <LoaderCircle className="size-5 animate-spin md:size-6" />
+                ) : (
+                  <ArrowRight className="size-5 md:size-6" />
+                )}
+              </span>
+            }
           />
           <section className="space-y-8 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-8 md:p-12">
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
@@ -785,6 +820,23 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
+          leftActionLabel="Quit"
+          leftActionOnClick={() => router.push("/")}
+          leftActionFocused={focusedControl === "header-quit"}
+          leftActionIcon={<House className="size-5 md:size-6" />}
+          rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+          rightActionOnClick={() => void playRandomAgain()}
+          rightActionDisabled={isLoadingNextQuiz}
+          rightActionFocused={focusedControl === "header-next"}
+          rightActionIcon={
+            <span className="inline-flex items-center justify-center">
+              {isLoadingNextQuiz ? (
+                <LoaderCircle className="size-5 animate-spin md:size-6" />
+              ) : (
+                <ArrowRight className="size-5 md:size-6" />
+              )}
+            </span>
+          }
         />
         <div className={cn("grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]", compactLayout && "lg:grid-cols-1")}>
           <section className="space-y-5 md:space-y-6">

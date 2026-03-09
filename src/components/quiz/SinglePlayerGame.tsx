@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, House, LoaderCircle, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -20,9 +20,17 @@ type SinglePlayerGameProps = {
 type GamePhase = "question" | "reveal" | "complete";
 type VoteType = "like" | "dislike";
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "anonymous";
+type HeaderActionTarget = "header-quit" | "header-next";
 type CompleteActionId = "play-next" | "play-again" | "back-to-hub";
 type CompleteActionTarget = `${"top" | "bottom"}-${CompleteActionId}`;
-type CompleteFocusTarget = CompleteActionTarget | `breakdown-${number}` | "like" | "dislike" | "sign-in";
+type RevealFocusTarget = HeaderActionTarget | "reveal-next";
+type CompleteFocusTarget =
+  | HeaderActionTarget
+  | CompleteActionTarget
+  | `breakdown-${number}`
+  | "like"
+  | "dislike"
+  | "sign-in";
 
 type QuestionResult = {
   questionId: string;
@@ -62,6 +70,8 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [phase, setPhase] = useState<GamePhase>("question");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
+  const [focusedHeaderTarget, setFocusedHeaderTarget] = useState<HeaderActionTarget | null>(null);
+  const [focusedRevealTarget, setFocusedRevealTarget] = useState<RevealFocusTarget | null>(null);
   const [focusedCompleteTarget, setFocusedCompleteTarget] = useState<CompleteFocusTarget | null>(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
@@ -79,6 +89,10 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
   const answerButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const headerButtonRefs = useRef<Record<HeaderActionTarget, HTMLButtonElement | null>>({
+    "header-quit": null,
+    "header-next": null,
+  });
   const nextQuestionButtonRef = useRef<HTMLButtonElement | null>(null);
   const revealPanelRef = useRef<HTMLDivElement | null>(null);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +128,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       : "";
   const completeFocusRows = useMemo<CompleteFocusTarget[][]>(() => {
     const rows: CompleteFocusTarget[][] = [
+      ["header-quit", "header-next"],
       ["top-play-next", "top-play-again"],
       ["top-back-to-hub"],
       ...Array.from({ length: results.length }, (_, index) => [`breakdown-${index}` as const]),
@@ -259,6 +274,34 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
       event.preventDefault();
 
+      if (focusedHeaderTarget) {
+        if (event.key === "Enter") {
+          if (focusedHeaderTarget === "header-quit") {
+            router.push("/");
+            return;
+          }
+
+          void playNext();
+          return;
+        }
+
+        if (event.key === "ArrowLeft") {
+          setFocusedHeaderTarget("header-quit");
+          return;
+        }
+
+        if (event.key === "ArrowRight") {
+          setFocusedHeaderTarget("header-next");
+          return;
+        }
+
+        if (event.key === "ArrowDown") {
+          setFocusedHeaderTarget(null);
+          setFocusedAnswerIndex(focusedHeaderTarget === "header-quit" ? 0 : 1);
+        }
+        return;
+      }
+
       if (event.key === "Enter") {
         if (focusedAnswerIndex === null) return;
         finalizeAnswer(focusedAnswerIndex);
@@ -267,6 +310,10 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
       setFocusedAnswerIndex((previous) => {
         if (previous === null) {
+          if (event.key === "ArrowUp") {
+            setFocusedHeaderTarget("header-quit");
+            return null;
+          }
           if (event.key === "ArrowRight") return 1;
           if (event.key === "ArrowDown") return 2;
           return 0;
@@ -274,6 +321,11 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
         const row = Math.floor(previous / 2);
         const col = previous % 2;
+
+        if (event.key === "ArrowUp" && previous < 2) {
+          setFocusedHeaderTarget(previous === 0 ? "header-quit" : "header-next");
+          return null;
+        }
 
         if (event.key === "ArrowLeft") return row * 2 + Math.max(0, col - 1);
         if (event.key === "ArrowRight") return row * 2 + Math.min(1, col + 1);
@@ -284,7 +336,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [finalizeAnswer, focusedAnswerIndex, phase]);
+  }, [finalizeAnswer, focusedAnswerIndex, focusedHeaderTarget, phase, playNext, router]);
 
   useEffect(() => {
     if (phase === "complete") {
@@ -302,10 +354,27 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   }, [completeFocusRows, phase]);
 
   useEffect(() => {
+    if (phase === "question") {
+      setFocusedRevealTarget(null);
+      return;
+    }
+
+    if (phase !== "reveal") return;
+
+    setFocusedHeaderTarget(null);
+    setFocusedRevealTarget((previous) => previous ?? "reveal-next");
+  }, [phase]);
+
+  useEffect(() => {
     if (phase !== "reveal") return;
 
     const frame = window.requestAnimationFrame(() => {
-      nextQuestionButtonRef.current?.focus({ preventScroll: true });
+      const targetNode =
+        focusedRevealTarget === "header-quit" || focusedRevealTarget === "header-next"
+          ? headerButtonRefs.current[focusedRevealTarget]
+          : nextQuestionButtonRef.current;
+
+      targetNode?.focus({ preventScroll: true });
       revealPanelRef.current?.scrollIntoView({
         block: "nearest",
         inline: "nearest",
@@ -313,7 +382,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [currentQuestionIndex, phase]);
+  }, [currentQuestionIndex, focusedRevealTarget, phase]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -348,6 +417,19 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     [],
   );
 
+  const registerHeaderButtonRef = useCallback(
+    (target: HeaderActionTarget) => (node: HTMLButtonElement | null) => {
+      headerButtonRefs.current[target] = node;
+      if (node) {
+        completeFocusRefs.current[target] = node;
+        return;
+      }
+
+      delete completeFocusRefs.current[target];
+    },
+    [],
+  );
+
   useEffect(() => {
     if (phase !== "question" || focusedAnswerIndex === null) return;
 
@@ -360,6 +442,19 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     return () => window.cancelAnimationFrame(frame);
   }, [focusedAnswerIndex, phase]);
+
+  useEffect(() => {
+    if (phase !== "question" || !focusedHeaderTarget) return;
+
+    const node = headerButtonRefs.current[focusedHeaderTarget];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      node.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedHeaderTarget, phase]);
 
   useEffect(() => {
     if (phase !== "complete" || !focusedCompleteTarget) return;
@@ -453,7 +548,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setPhase("question");
   }, [clearAutoAdvance, stopCountdown]);
 
-  const playNext = useCallback(async () => {
+  async function playNext() {
     if (isLoadingNextQuiz) return;
 
     setIsLoadingNextQuiz(true);
@@ -474,7 +569,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     } finally {
       setIsLoadingNextQuiz(false);
     }
-  }, [isLoadingNextQuiz, quiz.id, router]);
+  }
 
   const submitVote = useCallback(async (nextVote: VoteType) => {
     if (isVoting) return;
@@ -565,6 +660,16 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       if (event.key === "Enter") {
         if (!focusedCompleteTarget) return;
 
+        if (focusedCompleteTarget === "header-quit") {
+          router.push("/");
+          return;
+        }
+
+        if (focusedCompleteTarget === "header-next") {
+          void playNext();
+          return;
+        }
+
         if (focusedCompleteTarget === "like") {
           void submitVote("like");
           return;
@@ -609,6 +714,60 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [focusedCompleteTarget, getNextCompleteTarget, phase, playAgain, playNext, router, submitVote]);
+
+  useEffect(() => {
+    if (phase !== "reveal") return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Enter") {
+        if (focusedRevealTarget === "header-quit") {
+          router.push("/");
+          return;
+        }
+
+        if (focusedRevealTarget === "header-next") {
+          void playNext();
+          return;
+        }
+
+        moveToNextQuestion();
+        return;
+      }
+
+      setFocusedRevealTarget((previous) => {
+        if (!previous) return "reveal-next";
+
+        if (previous === "reveal-next") {
+          if (event.key === "ArrowUp") return "header-quit";
+          return "reveal-next";
+        }
+
+        if (previous === "header-quit") {
+          if (event.key === "ArrowRight") return "header-next";
+          if (event.key === "ArrowDown") return "reveal-next";
+          return "header-quit";
+        }
+
+        if (event.key === "ArrowLeft") return "header-quit";
+        if (event.key === "ArrowDown") return "reveal-next";
+        return "header-next";
+      });
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusedRevealTarget, moveToNextQuestion, phase, playNext, router]);
 
   if (!currentQuestion && phase !== "complete") {
     return (
@@ -685,6 +844,33 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
+          leftActionLabel="Quit"
+          leftActionOnClick={() => router.push("/")}
+          leftActionFocused={
+            (phase === "question" && focusedHeaderTarget === "header-quit") ||
+            (phase === "reveal" && focusedRevealTarget === "header-quit") ||
+            (phase === "complete" && focusedCompleteTarget === "header-quit")
+          }
+          leftActionButtonRef={registerHeaderButtonRef("header-quit")}
+          leftActionIcon={<House className="size-5 md:size-6" />}
+          rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+          rightActionOnClick={() => void playNext()}
+          rightActionDisabled={isLoadingNextQuiz}
+          rightActionFocused={
+            (phase === "question" && focusedHeaderTarget === "header-next") ||
+            (phase === "reveal" && focusedRevealTarget === "header-next") ||
+            (phase === "complete" && focusedCompleteTarget === "header-next")
+          }
+          rightActionButtonRef={registerHeaderButtonRef("header-next")}
+          rightActionIcon={
+            <span className="inline-flex items-center justify-center">
+              {isLoadingNextQuiz ? (
+                <LoaderCircle className="size-5 animate-spin md:size-6" />
+              ) : (
+                <ArrowRight className="size-5 md:size-6" />
+              )}
+            </span>
+          }
         />
         {phase === "question" || phase === "reveal" ? (
           <section className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
