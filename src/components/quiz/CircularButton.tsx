@@ -1,5 +1,6 @@
 "use client";
 
+import { useCompactQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { cn } from "@/lib/utils";
 
 type CircularButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -14,10 +15,13 @@ export function CircularButton({
   children,
   ...props
 }: CircularButtonProps) {
+  const compactLayout = useCompactQuizLayout();
+
   return (
     <button
       className={cn(
         "size-16 min-h-16 min-w-16 rounded-full border-2 text-sm font-semibold transition md:size-24 md:min-h-24 md:min-w-24 md:text-lg",
+        compactLayout && "md:size-[4.5rem] md:min-h-[4.5rem] md:min-w-[4.5rem] md:text-base",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/70",
         selected
           ? "border-[#818cf8]/60 bg-[#6c8aff]/18 text-[#e4e4e9]"

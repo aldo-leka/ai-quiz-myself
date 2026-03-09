@@ -7,6 +7,7 @@ import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
+import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
@@ -65,6 +66,8 @@ function normalizePlayerNames(rawNames: string[]): string[] {
 export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const router = useRouter();
   const { data: sessionData } = authClient.useSession();
+  const compactLayout = useCompactQuizLayout();
+  const tvLikeLayout = useTvLikeQuizLayout();
 
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [setupNames, setSetupNames] = useState<string[]>(["", ""]);
@@ -656,8 +659,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     currentCorrectOptionIndex !== null ? currentQuestion.options[currentCorrectOptionIndex]?.explanation : "";
 
   return (
-    <div className="min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
-      <main className="mx-auto w-full max-w-7xl space-y-4 md:space-y-7">
+    <div
+      className={cn(
+        "min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10",
+        compactLayout && "md:px-7 md:py-5",
+      )}
+    >
+      <main className={cn("mx-auto w-full max-w-7xl space-y-4 md:space-y-7", compactLayout && "md:space-y-5")}>
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
@@ -672,23 +680,34 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             />
           ) : null}
 
-          <div className="space-y-3 p-3 md:space-y-5 md:p-8">
+          <div className={cn("space-y-3 p-3 md:space-y-5 md:p-8", compactLayout && "md:space-y-3 md:p-4")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-[#818cf8] md:text-2xl">
+              <p className={cn("text-sm font-semibold text-[#818cf8] md:text-2xl", compactLayout && "md:text-base")}>
                 Question {currentQuestionIndex + 1} of {totalQuestions}
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1.5 text-sm font-bold text-amber-100 md:px-5 md:py-2 md:text-lg">
+                <span
+                  className={cn(
+                    "rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1.5 text-sm font-bold text-amber-100 md:px-5 md:py-2 md:text-lg",
+                    compactLayout && "md:px-4 md:py-1.5 md:text-base",
+                  )}
+                >
                   {currentPlayerName}&apos;s turn
                 </span>
               </div>
             </div>
 
-            <h2 className="text-[clamp(1.35rem,6.1vw,3.5rem)] leading-[1.03] font-bold">
+            <h2
+              className={cn(
+                "text-[clamp(1.35rem,6.1vw,3.5rem)] leading-[1.03] font-bold",
+                compactLayout && "md:text-[clamp(1.7rem,3.2vw,2.75rem)]",
+                tvLikeLayout && "md:text-[clamp(2.55rem,4.8vw,4.1rem)]",
+              )}
+            >
               {currentQuestion.questionText}
             </h2>
 
-            <div className="grid gap-2.5 md:grid-cols-2 md:gap-4">
+            <div className={cn("grid gap-2.5 md:grid-cols-2 md:gap-4", compactLayout && "md:gap-3")}>
               {[0, 1, 2, 3].map((index) => {
                 const option = currentQuestion.options[index];
                 const isCorrectOption = phase === "reveal" && index === currentCorrectOptionIndex;
@@ -698,7 +717,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 return (
                   <GameButton
                     key={index}
-                    className="min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.5rem)] [&>span>span]:leading-[1.06]"
+                    className={cn(
+                      "min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.5rem)] [&>span>span]:leading-[1.06]",
+                      compactLayout &&
+                        "md:min-h-24 md:[&>span>span]:text-[clamp(1.2rem,2.35vw,1.95rem)]",
+                      tvLikeLayout &&
+                        "md:min-h-28 md:[&>span>span]:text-[clamp(1.8rem,3.5vw,2.9rem)]",
+                    )}
                     state={isCorrectOption ? "correct" : isWrongSelection ? "wrong" : "default"}
                     focused={phase === "question" && focusedAnswerIndex === index}
                     disabled={phase !== "question"}
@@ -720,11 +745,24 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                       ? `${currentPlayerName} is correct!`
                       : `${currentPlayerName} is incorrect.`}
                 </p>
-                <p className="text-[clamp(1.05rem,4.9vw,3rem)] leading-tight text-[#9394a5]">
+                <p
+                  className={cn(
+                    "text-[clamp(1.05rem,4.9vw,3rem)] leading-tight text-[#9394a5]",
+                    compactLayout && "md:text-[clamp(1.1rem,2vw,1.65rem)]",
+                    tvLikeLayout && "md:text-[clamp(1.65rem,3vw,2.5rem)]",
+                  )}
+                >
                   {correctExplanation || "No explanation provided for this question."}
                 </p>
                 <div className="flex justify-center">
-                  <GameButton centered className="min-h-12 max-w-sm text-sm md:min-h-16 md:text-xl" onClick={moveToNextTurn}>
+                  <GameButton
+                    centered
+                    className={cn(
+                      "min-h-12 max-w-sm text-sm md:min-h-16 md:text-xl",
+                      compactLayout && "md:min-h-14 md:text-base",
+                    )}
+                    onClick={moveToNextTurn}
+                  >
                     {currentQuestionIndex + 1 >= totalQuestions ? "Show Leaderboard" : "Next Turn"}
                   </GameButton>
                 </div>
@@ -732,10 +770,15 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             ) : null}
           </div>
 
-          <div className="border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5">
+          <div
+            className={cn(
+              "border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5",
+              compactLayout && "md:px-5 md:py-3",
+            )}
+          >
             <SlantedBar
               value={progressPercentage}
-              className="h-3 md:h-4"
+              className={cn("h-3 md:h-4", compactLayout && "md:h-3")}
               fillClassName="bg-gradient-to-r from-[#818cf8] to-[#6c8aff]"
             />
           </div>

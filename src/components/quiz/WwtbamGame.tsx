@@ -9,6 +9,7 @@ import { GameButton } from "@/components/quiz/GameButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
+import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { useHostCommunication } from "@/hooks/useHostCommunication";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
@@ -43,6 +44,8 @@ type WwtbamGameProps = {
 
 export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const router = useRouter();
+  const compactLayout = useCompactQuizLayout();
+  const tvLikeLayout = useTvLikeQuizLayout();
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -770,14 +773,19 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
 
   return (
-    <div className="min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10">
-      <main className="mx-auto w-full max-w-7xl space-y-4 md:space-y-7">
+    <div
+      className={cn(
+        "min-h-screen bg-[#0f1117] px-3 py-4 text-[#e4e4e9] sm:px-6 sm:py-7 md:px-10",
+        compactLayout && "md:px-7 md:py-5",
+      )}
+    >
+      <main className={cn("mx-auto w-full max-w-7xl space-y-4 md:space-y-7", compactLayout && "md:space-y-5")}>
         <QuizPlayHeader
           title={quiz.title}
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
         />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className={cn("grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]", compactLayout && "lg:grid-cols-1")}>
           <section className="space-y-5 md:space-y-6">
             <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
               <SlantedBar
@@ -786,19 +794,30 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 fillClassName="bg-gradient-to-r from-[#818cf8] to-[#fbbf24]"
               />
 
-              <div className="space-y-3 p-3 md:space-y-6 md:p-8">
-                <header className="space-y-2 md:space-y-3">
+              <div className={cn("space-y-3 p-3 md:space-y-6 md:p-8", compactLayout && "md:space-y-3 md:p-4")}>
+                <header className={cn("space-y-2 md:space-y-3", compactLayout && "md:space-y-2")}>
                   <div className="flex flex-wrap items-center justify-between gap-4">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-amber-300 md:text-xl">
+                    <p
+                      className={cn(
+                        "text-sm font-semibold uppercase tracking-wide text-amber-300 md:text-xl",
+                        compactLayout && "md:text-base",
+                      )}
+                    >
                       Question {currentQuestionIndex + 1} of {questions.length}
                     </p>
                   </div>
-                  <h1 className="text-[clamp(1.35rem,6.1vw,3.25rem)] leading-[1.03] font-bold">
+                  <h1
+                    className={cn(
+                      "text-[clamp(1.35rem,6.1vw,3.25rem)] leading-[1.03] font-bold",
+                      compactLayout && "md:text-[clamp(1.7rem,3.1vw,2.6rem)]",
+                      tvLikeLayout && "md:text-[clamp(2.55rem,4.65vw,3.9rem)]",
+                    )}
+                  >
                     {currentQuestion.questionText}
                   </h1>
                 </header>
 
-                <div className="grid gap-2.5 md:grid-cols-2 md:gap-4">
+                <div className={cn("grid gap-2.5 md:grid-cols-2 md:gap-4", compactLayout && "md:gap-3")}>
                   {[0, 1, 2, 3].map((index) => {
                     const option = currentQuestion.options[index];
                     const isEliminated = eliminatedOptions.includes(index);
@@ -810,7 +829,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     return (
                       <GameButton
                         key={index}
-                        className="min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.25rem)] [&>span>span]:leading-[1.06]"
+                        className={cn(
+                          "min-h-20 md:min-h-32 [&>span>span]:text-[clamp(1.2rem,5.8vw,3.25rem)] [&>span>span]:leading-[1.06]",
+                          compactLayout &&
+                            "md:min-h-24 md:[&>span>span]:text-[clamp(1.2rem,2.25vw,1.9rem)]",
+                          tvLikeLayout &&
+                            "md:min-h-28 md:[&>span>span]:text-[clamp(1.8rem,3.35vw,2.85rem)]",
+                        )}
                         disabled={optionsDisabled || isEliminated || !isVisible}
                         focused={focusedControl === `answer-${index}`}
                         state={
@@ -833,7 +858,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 {selectedAnswerIndex !== null && !revealedAnswer ? (
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm font-semibold text-[#9394a5] md:text-2xl">
+                    <p className={cn("text-sm font-semibold text-[#9394a5] md:text-2xl", compactLayout && "md:text-base")}>
                       Lock in your final answer?
                     </p>
                     <CircularButton
@@ -866,7 +891,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
                     centered
-                    className="min-h-12 text-sm md:min-h-16 md:text-xl"
+                    className={cn(
+                      "min-h-12 text-sm md:min-h-16 md:text-xl",
+                      compactLayout && "md:min-h-14 md:text-base",
+                    )}
                     focused={focusedControl === "lifeline-5050"}
                     disabled={usedLifelines.fiftyFifty || optionsDisabled || revealedAnswer}
                     onClick={() => void handleFiftyFifty()}
@@ -876,7 +904,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   <GameButton
                     centered
                     icon={<User size={20} />}
-                    className="min-h-12 text-sm md:min-h-16 md:text-xl"
+                    className={cn(
+                      "min-h-12 text-sm md:min-h-16 md:text-xl",
+                      compactLayout && "md:min-h-14 md:text-base",
+                    )}
                     focused={focusedControl === "lifeline-ask-host"}
                     disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
                     onClick={() => void handleAskHost()}
@@ -886,10 +917,15 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 </div>
               </div>
 
-              <div className="border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5">
+              <div
+                className={cn(
+                  "border-t border-[#252940] bg-[#0f1117]/82 px-3 py-2.5 md:px-8 md:py-5",
+                  compactLayout && "md:px-5 md:py-3",
+                )}
+              >
                 <SlantedBar
                   value={((currentQuestionIndex + 1) / questions.length) * 100}
-                  className="h-3 md:h-4"
+                  className={cn("h-3 md:h-4", compactLayout && "md:h-3")}
                   fillClassName="bg-gradient-to-r from-[#818cf8] to-[#6c8aff]"
                 />
               </div>
