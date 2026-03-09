@@ -30,6 +30,12 @@ type SetupFocusTarget =
   | "setup-start"
   | "setup-back";
 type RevealFocusTarget = HeaderActionTarget | "reveal-next";
+type CompleteFocusTarget =
+  | HeaderActionTarget
+  | `leaderboard-${number}`
+  | "complete-rematch"
+  | "complete-random"
+  | "complete-back";
 
 type PlayerResult = {
   questionId: string;
@@ -95,6 +101,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
   const [focusedHeaderTarget, setFocusedHeaderTarget] = useState<HeaderActionTarget | null>(null);
   const [focusedRevealTarget, setFocusedRevealTarget] = useState<RevealFocusTarget | null>(null);
+  const [focusedCompleteTarget, setFocusedCompleteTarget] = useState<CompleteFocusTarget | null>(null);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -107,6 +114,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   });
   const setupButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const setupInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const completeFocusRefs = useRef<Record<string, HTMLElement | null>>({});
   const nextTurnButtonRef = useRef<HTMLButtonElement | null>(null);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const questionStartedAtRef = useRef(0);
@@ -161,6 +169,17 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         return a.name.localeCompare(b.name);
       });
   }, [playerNames, results, scores]);
+
+  const completeFocusRows = useMemo<CompleteFocusTarget[][]>(() => {
+    const rows: CompleteFocusTarget[][] = [["header-quit", "header-next"]];
+
+    leaderboard.forEach((_, index) => {
+      rows.push([`leaderboard-${index}`]);
+    });
+
+    rows.push(["complete-rematch", "complete-random", "complete-back"]);
+    return rows;
+  }, [leaderboard]);
 
   useEffect(() => {
     rememberRecentQuiz("couch_coop", quiz.id);
@@ -639,6 +658,94 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   }, [focusedRevealTarget, moveToNextTurn, phase, pickAnotherCouchQuiz, router]);
 
   useEffect(() => {
+    if (phase === "complete") {
+      setFocusedCompleteTarget((previous) => {
+        if (previous && completeFocusRows.some((row) => row.includes(previous))) {
+          return previous;
+        }
+
+        return completeFocusRows[0]?.[0] ?? null;
+      });
+      return;
+    }
+
+    setFocusedCompleteTarget(null);
+  }, [completeFocusRows, phase]);
+
+  useEffect(() => {
+    if (phase !== "complete") return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Enter") {
+        if (!focusedCompleteTarget) return;
+
+        if (focusedCompleteTarget === "header-quit" || focusedCompleteTarget === "complete-back") {
+          router.push("/");
+          return;
+        }
+
+        if (focusedCompleteTarget === "header-next" || focusedCompleteTarget === "complete-random") {
+          void pickAnotherCouchQuiz();
+          return;
+        }
+
+        if (focusedCompleteTarget === "complete-rematch") {
+          rematch();
+        }
+        return;
+      }
+
+      setFocusedCompleteTarget((previous) => {
+        if (!previous) return completeFocusRows[0]?.[0] ?? null;
+
+        const rowIndex = completeFocusRows.findIndex((row) => row.includes(previous));
+        if (rowIndex === -1) return completeFocusRows[0]?.[0] ?? null;
+
+        const row = completeFocusRows[rowIndex] ?? [];
+        const colIndex = row.indexOf(previous);
+        const targetColumn = colIndex >= 0 ? colIndex : 0;
+
+        if (event.key === "ArrowLeft") {
+          return row[Math.max(0, targetColumn - 1)] ?? previous;
+        }
+
+        if (event.key === "ArrowRight") {
+          return row[Math.min(row.length - 1, targetColumn + 1)] ?? previous;
+        }
+
+        const verticalDirection = event.key === "ArrowUp" ? -1 : 1;
+        let nextRowIndex = rowIndex + verticalDirection;
+
+        while (nextRowIndex >= 0 && nextRowIndex < completeFocusRows.length) {
+          const nextRow = completeFocusRows[nextRowIndex];
+          if (!nextRow || nextRow.length === 0) {
+            nextRowIndex += verticalDirection;
+            continue;
+          }
+
+          return nextRow[Math.min(targetColumn, nextRow.length - 1)] ?? nextRow[0] ?? previous;
+        }
+
+        return previous;
+      });
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [completeFocusRows, focusedCompleteTarget, phase, pickAnotherCouchQuiz, rematch, router]);
+
+  useEffect(() => {
     return () => {
       stopCountdown();
     };
@@ -649,6 +756,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       setFocusedHeaderTarget(null);
       setFocusedAnswerIndex(null);
       setFocusedRevealTarget(null);
+      setFocusedCompleteTarget(null);
       setSetupFocusTarget((previous) => previous ?? "setup-start");
       return;
     }
@@ -720,6 +828,22 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     return () => window.cancelAnimationFrame(frame);
   }, [phase, setupFocusTarget]);
+
+  useEffect(() => {
+    if (phase !== "complete" || !focusedCompleteTarget) return;
+
+    const node =
+      focusedCompleteTarget === "header-quit" || focusedCompleteTarget === "header-next"
+        ? headerButtonRefs.current[focusedCompleteTarget]
+        : completeFocusRefs.current[focusedCompleteTarget];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      focusRemoteControl(node);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedCompleteTarget, phase]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -1000,11 +1124,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             leftActionLabel="Quit"
             leftActionOnClick={() => router.push("/")}
             leftActionButtonRef={registerHeaderButtonRef("header-quit")}
+            leftActionFocused={focusedCompleteTarget === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
             rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
             rightActionOnClick={() => void pickAnotherCouchQuiz()}
             rightActionDisabled={isLoadingNextQuiz}
             rightActionButtonRef={registerHeaderButtonRef("header-next")}
+            rightActionFocused={focusedCompleteTarget === "header-next"}
             rightActionIcon={
               <span className="inline-flex items-center justify-center">
                 {isLoadingNextQuiz ? (
@@ -1052,7 +1178,14 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               {leaderboard.map((entry, index) => (
                 <div
                   key={`${entry.name}-${index}`}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-6"
+                  ref={(node) => {
+                    completeFocusRefs.current[`leaderboard-${index}`] = node;
+                  }}
+                  tabIndex={-1}
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-6 focus-visible:outline-none",
+                    focusedCompleteTarget === `leaderboard-${index}` && "ring-4 ring-[#818cf8]/70",
+                  )}
                 >
                   <div className="flex items-center gap-3">
                     <span className="inline-flex size-14 items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e] text-xl font-bold">
@@ -1089,17 +1222,37 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              <GameButton centered className="min-h-20 text-2xl md:text-3xl" onClick={rematch}>
+              <GameButton
+                ref={(node) => {
+                  completeFocusRefs.current["complete-rematch"] = node;
+                }}
+                centered
+                focused={focusedCompleteTarget === "complete-rematch"}
+                className="min-h-20 text-2xl md:text-3xl"
+                onClick={rematch}
+              >
                 Rematch
               </GameButton>
               <GameButton
+                ref={(node) => {
+                  completeFocusRefs.current["complete-random"] = node;
+                }}
                 centered
+                focused={focusedCompleteTarget === "complete-random"}
                 className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
                 onClick={() => void pickAnotherCouchQuiz()}
               >
                 Pick Another Couch Quiz
               </GameButton>
-              <GameButton centered className="min-h-20 text-2xl md:text-3xl" onClick={() => router.push("/")}>
+              <GameButton
+                ref={(node) => {
+                  completeFocusRefs.current["complete-back"] = node;
+                }}
+                centered
+                focused={focusedCompleteTarget === "complete-back"}
+                className="min-h-20 text-2xl md:text-3xl"
+                onClick={() => router.push("/")}
+              >
                 Back to Hub
               </GameButton>
             </div>
