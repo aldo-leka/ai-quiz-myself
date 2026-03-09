@@ -588,8 +588,8 @@ function HomePageContent() {
                 QuizPlus Hub
               </h1>
 
-              <div className="flex flex-col gap-3 xl:items-end">
-                {sessionData?.user ? (
+              {sessionData?.user ? (
+                <div className="flex flex-col gap-3 xl:items-end">
                   <button
                     type="button"
                     onClick={() => router.push("/dashboard")}
@@ -611,19 +611,8 @@ function HomePageContent() {
                       {sessionData.user.name.trim() || "Player"}
                     </span>
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => router.push("/dashboard")}
-                    className={cn(
-                      "min-h-12 w-full select-none rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2.5 text-lg font-semibold whitespace-nowrap text-[#e4e4e9] transition md:min-h-20 md:px-8 md:py-3 md:text-3xl xl:w-auto xl:text-4xl",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
-                    )}
-                  >
-                    Not logged in
-                  </button>
-                )}
-              </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-3 md:gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -709,17 +698,37 @@ function HomePageContent() {
               </div>
             </div>
 
-            <div className="flex justify-center">
+            <div
+              className={cn(
+                "flex flex-col gap-3",
+                sessionData?.user
+                  ? "sm:flex-row sm:items-center sm:justify-center"
+                  : "sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:gap-4",
+              )}
+            >
+              {!sessionData?.user ? <div className="hidden sm:block" aria-hidden="true" /> : null}
               <GameButton
                 ref={surpriseButtonRef}
                 centered
-                className="min-h-14 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-xl text-[#e4e4e9] focus:outline-none focus:ring-4 focus:ring-[#818cf8]/70 md:min-h-20 md:text-3xl xl:max-w-[34rem] xl:text-5xl"
+                className="min-h-14 w-full max-w-full border-[#6c8aff]/45 bg-[#6c8aff]/18 text-xl text-[#e4e4e9] focus:outline-none focus:ring-4 focus:ring-[#818cf8]/70 sm:justify-self-center sm:w-auto sm:min-w-[18rem] md:min-h-20 md:text-3xl xl:min-w-[34rem] xl:text-5xl"
                 onClick={() => void handleSurpriseMe()}
                 disabled={isSurpriseLoading}
                 icon={<Shuffle className="size-8 md:size-10 xl:size-12" />}
               >
                 {surpriseButtonLabel}
               </GameButton>
+              {!sessionData?.user ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/sign-in?callbackURL=/dashboard")}
+                  className={cn(
+                    "min-h-12 w-full select-none rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2.5 text-lg font-semibold whitespace-nowrap text-[#e4e4e9] transition sm:justify-self-end sm:w-auto md:min-h-20 md:px-8 md:py-3 md:text-3xl xl:text-4xl",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
+                  )}
+                >
+                  Not logged in
+                </button>
+              ) : null}
             </div>
           </div>
         </section>

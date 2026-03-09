@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { focusRemoteControl } from "@/lib/remote-focus";
+import { cn } from "@/lib/utils";
 
 function normalizeCallbackUrl(url: string | null): string {
   if (!url) return "/dashboard";
@@ -13,9 +15,12 @@ function normalizeCallbackUrl(url: string | null): string {
   return url;
 }
 
+type SignInFocusTarget = "back" | "google";
+
 function SignInPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [focusedTarget, setFocusedTarget] = useState<SignInFocusTarget>("google");
   const pageRef = useRef<HTMLElement | null>(null);
   const googleButtonRef = useRef<HTMLButtonElement | null>(null);
   const didAutoFocusRef = useRef(false);
@@ -26,25 +31,34 @@ function SignInPageContent() {
     [params],
   );
 
+  const focusPrimaryAction = useCallback(() => {
+    const button = googleButtonRef.current;
+    if (!button) return false;
+
+    setFocusedTarget("google");
+    focusRemoteControl(button, { block: "nearest", inline: "nearest" });
+    return document.activeElement === button;
+  }, []);
+
   useEffect(() => {
     if (didAutoFocusRef.current) return;
-    const button = googleButtonRef.current;
-    if (!button) return;
 
     didAutoFocusRef.current = true;
 
     const frame = window.requestAnimationFrame(() => {
-      button.focus({ preventScroll: true });
-      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+      focusPrimaryAction();
     });
+    const retry = window.setTimeout(() => {
+      focusPrimaryAction();
+    }, 180);
 
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(retry);
+    };
+  }, [focusPrimaryAction]);
 
   useEffect(() => {
-    const rootNode = pageRef.current;
-    if (!rootNode) return;
-
     const handleArrowFocusNavigation = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (
@@ -56,8 +70,10 @@ function SignInPageContent() {
         return;
       }
 
+      const rootNode = pageRef.current;
+      if (!rootNode) return;
+
       const activeElement = document.activeElement as HTMLElement | null;
-      if (!activeElement || !rootNode.contains(activeElement)) return;
 
       const focusableElements = Array.from(
         rootNode.querySelectorAll<HTMLElement>(
@@ -69,8 +85,18 @@ function SignInPageContent() {
         return true;
       });
 
+      if (!activeElement || !rootNode.contains(activeElement)) {
+        event.preventDefault();
+        focusPrimaryAction();
+        return;
+      }
+
       const currentIndex = focusableElements.indexOf(activeElement);
-      if (currentIndex < 0) return;
+      if (currentIndex < 0) {
+        event.preventDefault();
+        focusPrimaryAction();
+        return;
+      }
 
       const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
       const nextIndex = Math.max(
@@ -80,15 +106,18 @@ function SignInPageContent() {
 
       if (nextIndex !== currentIndex) {
         event.preventDefault();
-        focusableElements[nextIndex]?.focus();
+        focusRemoteControl(focusableElements[nextIndex] ?? null, {
+          block: "nearest",
+          inline: "nearest",
+        });
       }
     };
 
-    rootNode.addEventListener("keydown", handleArrowFocusNavigation);
+    window.addEventListener("keydown", handleArrowFocusNavigation);
     return () => {
-      rootNode.removeEventListener("keydown", handleArrowFocusNavigation);
+      window.removeEventListener("keydown", handleArrowFocusNavigation);
     };
-  }, []);
+  }, [focusPrimaryAction]);
 
   async function continueWithGoogle() {
     setIsSubmitting(true);
@@ -123,7 +152,11 @@ function SignInPageContent() {
               <div>
                 <Link
                   href="/"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2 text-sm font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/18 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]"
+                  onFocus={() => setFocusedTarget("back")}
+                  className={cn(
+                    "inline-flex min-h-11 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2 text-sm font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/18 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
+                    focusedTarget === "back" && "ring-4 ring-[#818cf8] ring-offset-2 ring-offset-[#0f1117]",
+                  )}
                 >
                   <ArrowLeft className="size-4" />
                   Back to Hub
@@ -156,8 +189,12 @@ function SignInPageContent() {
                 ref={googleButtonRef}
                 type="button"
                 disabled={isSubmitting}
+                onFocus={() => setFocusedTarget("google")}
                 onClick={continueWithGoogle}
-                className="mt-6 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/14 px-5 py-3 text-base font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/22 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117] disabled:cursor-not-allowed disabled:opacity-70 md:mt-8"
+                className={cn(
+                  "mt-6 inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-3 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/14 px-5 py-3 text-base font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/22 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117] disabled:cursor-not-allowed disabled:opacity-70 md:mt-8",
+                  focusedTarget === "google" && "ring-4 ring-[#818cf8] ring-offset-2 ring-offset-[#0f1117]",
+                )}
               >
                 <Image src="/logos/google.svg" alt="Google" width={20} height={20} />
                 {isSubmitting ? "Connecting..." : "Continue with Google"}
