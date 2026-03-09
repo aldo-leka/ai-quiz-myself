@@ -20,6 +20,14 @@ type CouchCoopGameProps = {
 type GamePhase = "setup" | "question" | "reveal" | "complete";
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "anonymous";
 type HeaderActionTarget = "header-quit" | "header-next";
+type SetupFocusTarget =
+  | HeaderActionTarget
+  | `setup-input-${number}`
+  | `setup-remove-${number}`
+  | "setup-add"
+  | "setup-timer"
+  | "setup-start"
+  | "setup-back";
 type RevealFocusTarget = HeaderActionTarget | "reveal-next";
 
 type PlayerResult = {
@@ -82,6 +90,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [results, setResults] = useState<PlayerResult[]>([]);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [setupFocusTarget, setSetupFocusTarget] = useState<SetupFocusTarget | null>(null);
   const [focusedAnswerIndex, setFocusedAnswerIndex] = useState<number | null>(null);
   const [focusedHeaderTarget, setFocusedHeaderTarget] = useState<HeaderActionTarget | null>(null);
   const [focusedRevealTarget, setFocusedRevealTarget] = useState<RevealFocusTarget | null>(null);
@@ -95,6 +104,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     "header-quit": null,
     "header-next": null,
   });
+  const setupButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const setupInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const nextTurnButtonRef = useRef<HTMLButtonElement | null>(null);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const questionStartedAtRef = useRef(0);
@@ -297,6 +308,165 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   );
 
   useEffect(() => {
+    if (phase !== "setup") return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTextInputActive =
+        activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
+
+      if (isTextInputActive && event.key === "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Enter") {
+        if (!setupFocusTarget) return;
+
+        if (setupFocusTarget === "header-quit" || setupFocusTarget === "setup-back") {
+          router.push("/");
+          return;
+        }
+
+        if (setupFocusTarget === "header-next") {
+          void pickAnotherCouchQuiz();
+          return;
+        }
+
+        if (setupFocusTarget === "setup-add") {
+          setSetupNames((previous) => (previous.length >= MAX_PLAYERS ? previous : [...previous, ""]));
+          return;
+        }
+
+        if (setupFocusTarget === "setup-timer") {
+          setTimerEnabled((previous) => !previous);
+          return;
+        }
+
+        if (setupFocusTarget === "setup-start") {
+          startGameFromSetup();
+          return;
+        }
+
+        if (setupFocusTarget.startsWith("setup-input-")) {
+          const inputIndex = Number.parseInt(setupFocusTarget.replace("setup-input-", ""), 10);
+          if (Number.isNaN(inputIndex)) return;
+          setupInputRefs.current[inputIndex]?.focus();
+          return;
+        }
+
+        if (setupFocusTarget.startsWith("setup-remove-")) {
+          const removeIndex = Number.parseInt(setupFocusTarget.replace("setup-remove-", ""), 10);
+          if (Number.isNaN(removeIndex)) return;
+          setSetupNames((previous) =>
+            previous.length <= MIN_PLAYERS
+              ? previous
+              : previous.filter((_, currentIndex) => currentIndex !== removeIndex),
+          );
+        }
+        return;
+      }
+
+      setSetupFocusTarget((previous) => {
+        if (!previous) return "setup-start";
+
+        const canRemovePlayers = setupNames.length > MIN_PLAYERS;
+        const removeTargets = canRemovePlayers
+          ? setupNames.map((_, index) => `setup-remove-${index}` as const)
+          : [];
+        const lastRemoveTarget = removeTargets.at(-1) ?? null;
+        const lastInputTarget = `setup-input-${Math.max(0, setupNames.length - 1)}` as const;
+
+        if (previous === "header-quit") {
+          if (event.key === "ArrowRight") return "header-next";
+          if (event.key === "ArrowDown") return "setup-input-0";
+          return "header-quit";
+        }
+
+        if (previous === "header-next") {
+          if (event.key === "ArrowLeft") return "header-quit";
+          if (event.key === "ArrowDown") return removeTargets[0] ?? "setup-input-0";
+          return "header-next";
+        }
+
+        if (previous.startsWith("setup-input-")) {
+          const inputIndex = Number.parseInt(previous.replace("setup-input-", ""), 10);
+          if (Number.isNaN(inputIndex)) return "setup-add";
+
+          if (event.key === "ArrowUp") {
+            return inputIndex === 0 ? "header-quit" : `setup-input-${inputIndex - 1}`;
+          }
+
+          if (event.key === "ArrowDown") {
+            return inputIndex >= setupNames.length - 1 ? "setup-add" : `setup-input-${inputIndex + 1}`;
+          }
+
+          if (event.key === "ArrowRight" && canRemovePlayers) {
+            return `setup-remove-${Math.min(inputIndex, setupNames.length - 1)}`;
+          }
+
+          return previous;
+        }
+
+        if (previous === "setup-add") {
+          if (event.key === "ArrowUp") return lastInputTarget;
+          if (event.key === "ArrowRight") return "setup-timer";
+          if (event.key === "ArrowDown") return "setup-start";
+          return "setup-add";
+        }
+
+        if (previous === "setup-timer") {
+          if (event.key === "ArrowUp") return lastRemoveTarget ?? lastInputTarget;
+          if (event.key === "ArrowLeft") return "setup-add";
+          if (event.key === "ArrowDown") return "setup-back";
+          return "setup-timer";
+        }
+
+        if (previous === "setup-start") {
+          if (event.key === "ArrowUp") return "setup-add";
+          if (event.key === "ArrowRight") return "setup-back";
+          return "setup-start";
+        }
+
+        if (previous === "setup-back") {
+          if (event.key === "ArrowUp") return "setup-timer";
+          if (event.key === "ArrowLeft") return "setup-start";
+          return "setup-back";
+        }
+
+        if (previous.startsWith("setup-remove-")) {
+          const removeIndex = Number.parseInt(previous.replace("setup-remove-", ""), 10);
+          if (Number.isNaN(removeIndex)) return "setup-input-0";
+
+          if (event.key === "ArrowUp") {
+            return removeIndex === 0 ? "header-next" : `setup-remove-${removeIndex - 1}`;
+          }
+
+          if (event.key === "ArrowDown") {
+            return removeIndex >= removeTargets.length - 1 ? "setup-timer" : `setup-remove-${removeIndex + 1}`;
+          }
+
+          if (event.key === "ArrowLeft") {
+            return `setup-input-${Math.min(removeIndex, setupNames.length - 1)}`;
+          }
+
+          return previous;
+        }
+
+        return previous;
+      });
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [phase, pickAnotherCouchQuiz, router, setupFocusTarget, setupNames, startGameFromSetup]);
+
+  useEffect(() => {
     if (phase !== "question" || !currentQuestion) {
       stopCountdown();
       return;
@@ -474,6 +644,83 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   }, []);
 
   useEffect(() => {
+    if (phase === "setup") {
+      setFocusedHeaderTarget(null);
+      setFocusedAnswerIndex(null);
+      setFocusedRevealTarget(null);
+      setSetupFocusTarget((previous) => previous ?? "setup-start");
+      return;
+    }
+
+    setSetupFocusTarget(null);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "setup") return;
+
+    if (!setupFocusTarget) {
+      setSetupFocusTarget("setup-start");
+      return;
+    }
+
+    if (setupFocusTarget.startsWith("setup-input-")) {
+      const inputIndex = Number.parseInt(setupFocusTarget.replace("setup-input-", ""), 10);
+      if (Number.isNaN(inputIndex) || inputIndex >= setupNames.length) {
+        setSetupFocusTarget(`setup-input-${Math.max(0, setupNames.length - 1)}`);
+      }
+      return;
+    }
+
+    if (!setupFocusTarget.startsWith("setup-remove-")) return;
+
+    const removeIndex = Number.parseInt(setupFocusTarget.replace("setup-remove-", ""), 10);
+    const canRemovePlayers = setupNames.length > MIN_PLAYERS;
+
+    if (!canRemovePlayers) {
+      setSetupFocusTarget("setup-timer");
+      return;
+    }
+
+    if (Number.isNaN(removeIndex) || removeIndex >= setupNames.length) {
+      setSetupFocusTarget(`setup-remove-${Math.max(0, setupNames.length - 1)}`);
+    }
+  }, [phase, setupFocusTarget, setupNames.length]);
+
+  const registerSetupButtonRef = useCallback(
+    (target: SetupFocusTarget) => (node: HTMLButtonElement | null) => {
+      setupButtonRefs.current[target] = node;
+    },
+    [],
+  );
+
+  const registerSetupInputRef = useCallback(
+    (index: number) => (node: HTMLInputElement | null) => {
+      setupInputRefs.current[index] = node;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (phase !== "setup" || !setupFocusTarget) return;
+
+    const node =
+      setupFocusTarget === "header-quit" || setupFocusTarget === "header-next"
+        ? headerButtonRefs.current[setupFocusTarget]
+        : setupFocusTarget.startsWith("setup-input-")
+          ? setupInputRefs.current[
+              Number.parseInt(setupFocusTarget.replace("setup-input-", ""), 10)
+            ] ?? null
+          : setupButtonRefs.current[setupFocusTarget];
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      node.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [phase, setupFocusTarget]);
+
+  useEffect(() => {
     if (phase !== "question") return;
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return;
 
@@ -585,11 +832,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             leftActionLabel="Quit"
             leftActionOnClick={() => router.push("/")}
             leftActionButtonRef={registerHeaderButtonRef("header-quit")}
+            leftActionFocused={setupFocusTarget === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
             rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
             rightActionOnClick={() => void pickAnotherCouchQuiz()}
             rightActionDisabled={isLoadingNextQuiz}
             rightActionButtonRef={registerHeaderButtonRef("header-next")}
+            rightActionFocused={setupFocusTarget === "header-next"}
             rightActionIcon={
               <span className="inline-flex items-center justify-center">
                 {isLoadingNextQuiz ? (
@@ -620,10 +869,12 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                     Player {index + 1}
                   </label>
                   <input
+                    ref={registerSetupInputRef(index)}
                     id={`player-name-${index}`}
                     type="text"
                     value={name}
                     maxLength={MAX_NAME_LENGTH}
+                    onFocus={() => setSetupFocusTarget(`setup-input-${index}`)}
                     onChange={(event) => {
                       const nextName = event.target.value.slice(0, MAX_NAME_LENGTH);
                       setSetupNames((previous) => {
@@ -636,6 +887,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                     className={cn(
                       "min-h-14 w-full rounded-2xl border border-[#252940] bg-[#0f1117] px-5 text-lg text-[#e4e4e9] md:min-h-16 md:text-xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8]/50",
+                      setupFocusTarget === `setup-input-${index}` && "ring-4 ring-[#818cf8]/50",
                     )}
                   />
                   <GameButton
@@ -643,6 +895,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                     iconOnly
                     aria-label={`Remove Player ${index + 1}`}
                     title={`Remove Player ${index + 1}`}
+                    focused={setupFocusTarget === `setup-remove-${index}`}
+                    ref={registerSetupButtonRef(`setup-remove-${index}`)}
                     disabled={setupNames.length <= MIN_PLAYERS}
                     className="min-h-14 w-14 shrink-0 px-0 md:min-h-16 md:w-16"
                     icon={<Trash2 className="h-6 w-6 md:h-7 md:w-7" />}
@@ -661,6 +915,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             <div className="flex flex-wrap justify-center gap-3">
               <GameButton
                 centered
+                focused={setupFocusTarget === "setup-add"}
+                ref={registerSetupButtonRef("setup-add")}
                 disabled={setupNames.length >= MAX_PLAYERS}
                 className="min-h-14 max-w-52 text-base md:text-lg"
                 onClick={() =>
@@ -674,6 +930,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               <GameButton
                 centered
                 state={timerEnabled ? "selected" : "default"}
+                focused={setupFocusTarget === "setup-timer"}
+                ref={registerSetupButtonRef("setup-timer")}
                 className="min-h-14 max-w-52 text-base md:text-lg"
                 onClick={() => setTimerEnabled((previous) => !previous)}
               >
@@ -690,6 +948,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <GameButton
                 centered
+                focused={setupFocusTarget === "setup-start"}
+                ref={registerSetupButtonRef("setup-start")}
                 className="min-h-16 max-w-sm border-[#6c8aff]/45 bg-[#6c8aff]/18 text-lg text-[#e4e4e9] md:text-xl"
                 onClick={startGameFromSetup}
               >
@@ -697,6 +957,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               </GameButton>
               <GameButton
                 centered
+                focused={setupFocusTarget === "setup-back"}
+                ref={registerSetupButtonRef("setup-back")}
                 className="min-h-16 max-w-sm text-lg md:text-xl"
                 onClick={() => router.push("/")}
               >
