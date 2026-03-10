@@ -105,15 +105,6 @@ export function DashboardSettingsPageClient({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
-        <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
-          Settings
-        </h2>
-        <p className="mt-3 max-w-3xl text-xl text-[#9394a5] md:text-2xl">
-          Manage your preferences, personal API keys, and generation defaults.
-        </p>
-      </section>
-
       <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
         <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Preferences</h3>
         <div className="space-y-3">

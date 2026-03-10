@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, FileText, Link2, Sparkles, Target, Wallet } from "lucide-react";
+import { CreditCard, FileText, Link2, Sparkles, Target } from "lucide-react";
 import { FilterPill } from "@/components/quiz/FilterPill";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
@@ -493,15 +493,6 @@ export function DashboardCreatePageClient({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
-        <h2 className="text-[clamp(2.6rem,4vw,4.6rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
-          Create Quiz
-        </h2>
-        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
-          Pick a source, tune the game mode, and launch generation.
-        </p>
-      </section>
-
       <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
@@ -512,15 +503,6 @@ export function DashboardCreatePageClient({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#252940] bg-[#0f1117]/82 px-4 py-2.5 text-base text-[#e4e4e9] md:text-lg">
-              <Wallet className="size-5 text-[#818cf8]" />
-              Mode:{" "}
-              {sourceType === "pdf"
-                ? "Platform credits"
-                : effectiveBillingMode === "platform_credits"
-                  ? "Platform credits"
-                  : "Use my API key"}
-            </div>
             <Button
               type="button"
               variant="outline"
@@ -583,13 +565,13 @@ export function DashboardCreatePageClient({
                 isActive={effectiveBillingMode === "platform_credits"}
                 onClick={() => setBillingMode("platform_credits")}
               >
-                Use platform credits ({formatUsd(generationCostCents)}/quiz)
+                Use platform credits
               </FilterPill>
               <FilterPill
                 isActive={effectiveBillingMode === "byok"}
                 onClick={() => setBillingMode("byok")}
               >
-                Use my API key (free)
+                Use my API key
               </FilterPill>
             </div>
           </div>

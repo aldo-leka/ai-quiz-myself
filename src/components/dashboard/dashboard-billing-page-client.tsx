@@ -283,15 +283,6 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
-        <h2 className="text-[clamp(2.6rem,4vw,4.6rem)] font-black leading-[0.95] tracking-tight text-[#e4e4e9]">
-          Billing & Wallet
-        </h2>
-        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
-          Manage credit balance, payment method, and auto recharge.
-        </p>
-      </section>
-
       {loading ? (
         <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 text-[#9394a5]">
           Loading billing data...
