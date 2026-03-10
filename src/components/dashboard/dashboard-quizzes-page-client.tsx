@@ -80,15 +80,15 @@ const playerButtonSecondaryClass =
 const playerButtonDangerClass =
   "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100";
 
-type MyQuizzesPageClientProps = {
+type DashboardQuizzesPageClientProps = {
   creatorImage: string | null;
   creatorName: string | null;
 };
 
-export function MyQuizzesPageClient({
+export function DashboardQuizzesPageClient({
   creatorImage,
   creatorName,
-}: MyQuizzesPageClientProps) {
+}: DashboardQuizzesPageClientProps) {
   const [rows, setRows] = useState<UserQuizRow[]>([]);
   const [jobs, setJobs] = useState<GenerationJobRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -395,7 +395,7 @@ export function MyQuizzesPageClient({
                       variant="outline"
                       className={playerButtonBaseClass + " " + playerButtonSecondaryClass}
                     >
-                      <Link href={`/dashboard/my-quizzes/${quiz.id}`}>View Details</Link>
+                      <Link href={`/dashboard/${quiz.id}`}>View Details</Link>
                     </Button>
                     <Button
                       variant="outline"

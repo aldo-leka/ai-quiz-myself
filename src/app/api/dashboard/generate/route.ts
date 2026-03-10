@@ -372,7 +372,7 @@ export async function POST(request: Request) {
 
     if (!selectedKey) {
       return NextResponse.json(
-        { error: "No API key found. Add one in Dashboard > API Keys." },
+        { error: "No API key found. Add one in Dashboard > Settings." },
         { status: 412 },
       );
     }

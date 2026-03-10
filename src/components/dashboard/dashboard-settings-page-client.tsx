@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DashboardApiKeysPageClient } from "@/components/dashboard/dashboard-api-keys-page-client";
 import { Button } from "@/components/ui/button";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 
@@ -54,12 +55,26 @@ export function DashboardSettingsPageClient({
   const [preferredProvider, setPreferredProvider] = useState<ProviderOption | "none">(
     initialPreferredProvider ?? "none",
   );
+  const [availableProvidersState, setAvailableProvidersState] = useState<ProviderOption[]>(
+    () => Array.from(new Set(availableProviders)),
+  );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const selectableProviders = useMemo(() => {
-    return Array.from(new Set(availableProviders));
-  }, [availableProviders]);
+    return Array.from(new Set(availableProvidersState));
+  }, [availableProvidersState]);
+
+  useEffect(() => {
+    if (preferredProvider === "none") {
+      return;
+    }
+
+    if (!selectableProviders.includes(preferredProvider)) {
+      setPreferredProvider("none");
+      setStatus("Preferred AI provider cleared. Save settings to apply the change.");
+    }
+  }, [preferredProvider, selectableProviders]);
 
   async function saveSettings() {
     setSaving(true);
@@ -92,14 +107,15 @@ export function DashboardSettingsPageClient({
     <div className="space-y-8">
       <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
         <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
-          Preferences
+          Settings
         </h2>
         <p className="mt-3 max-w-3xl text-xl text-[#9394a5] md:text-2xl">
-          Control your generation defaults and language preferences.
+          Manage your preferences, personal API keys, and generation defaults.
         </p>
       </section>
 
       <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+        <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Preferences</h3>
         <div className="space-y-3">
           <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Preferred Language</p>
           <PlayerSelect
@@ -126,7 +142,7 @@ export function DashboardSettingsPageClient({
           />
           {selectableProviders.length === 0 ? (
             <p className="text-base text-[#9394a5] md:text-lg">
-              Add an API key first in API Keys before selecting a preferred provider.
+              Add an API key in the API Keys section below before selecting a preferred provider.
             </p>
           ) : null}
         </div>
@@ -140,6 +156,23 @@ export function DashboardSettingsPageClient({
         </Button>
         {status ? <p className="text-base text-[#9394a5] md:text-lg">{status}</p> : null}
       </section>
+
+      <section
+        id="api-keys"
+        className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9"
+      >
+        <h3 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
+          API Keys
+        </h3>
+        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
+          Keys are encrypted at rest and used for your generation and gameplay assistants.
+        </p>
+      </section>
+
+      <DashboardApiKeysPageClient
+        showIntro={false}
+        onProvidersChange={setAvailableProvidersState}
+      />
     </div>
   );
 }

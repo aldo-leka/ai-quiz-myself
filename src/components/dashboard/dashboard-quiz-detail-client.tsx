@@ -236,14 +236,14 @@ export function DashboardQuizDetailClient({
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/dashboard/my-quizzes"
+              href="/dashboard"
               className={cn(
                 pillClassName,
                 "border-[#6c8aff]/45 bg-[#6c8aff]/12 text-[#e4e4e9] hover:bg-[#6c8aff]/18",
               )}
             >
               <ArrowLeft className="size-4" />
-              Back to My Quizzes
+              Back to Dashboard
             </Link>
 
             {editMode ? (

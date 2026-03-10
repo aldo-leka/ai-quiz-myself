@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Trash2 } from "lucide-react";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,19 @@ type ApiKeysResponse = {
   error?: string;
 };
 
-export function DashboardApiKeysPageClient() {
+type DashboardApiKeysPageClientProps = {
+  showIntro?: boolean;
+  onProvidersChange?: (providers: Array<ApiKeyRow["provider"]>) => void;
+};
+
+function providersFromRows(rows: ApiKeyRow[]): Array<ApiKeyRow["provider"]> {
+  return Array.from(new Set(rows.map((row) => row.provider)));
+}
+
+export function DashboardApiKeysPageClient({
+  showIntro = true,
+  onProvidersChange,
+}: DashboardApiKeysPageClientProps) {
   const [rows, setRows] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +41,12 @@ export function DashboardApiKeysPageClient() {
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
 
-  async function load() {
+  const applyRows = useCallback((nextRows: ApiKeyRow[]) => {
+    setRows(nextRows);
+    onProvidersChange?.(providersFromRows(nextRows));
+  }, [onProvidersChange]);
+
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -41,17 +58,17 @@ export function DashboardApiKeysPageClient() {
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to load API keys");
       }
-      setRows(payload.keys);
+      applyRows(payload.keys);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load API keys");
     } finally {
       setLoading(false);
     }
-  }
+  }, [applyRows]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function saveKey() {
     setSaving(true);
@@ -74,7 +91,7 @@ export function DashboardApiKeysPageClient() {
         throw new Error(payload.error ?? "Failed to save API key");
       }
 
-      setRows(payload.keys);
+      applyRows(payload.keys);
       setApiKey("");
       setStatus("API key saved.");
     } catch (saveError) {
@@ -94,7 +111,7 @@ export function DashboardApiKeysPageClient() {
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to delete API key");
       }
-      setRows((previous) => previous.filter((row) => row.id !== keyId));
+      applyRows(rows.filter((row) => row.id !== keyId));
       setStatus("API key deleted.");
     } catch (deleteError) {
       setStatus(deleteError instanceof Error ? deleteError.message : "Failed to delete API key");
@@ -103,14 +120,16 @@ export function DashboardApiKeysPageClient() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
-        <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
-          API Keys
-        </h2>
-        <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
-          Keys are encrypted at rest and used for your generation and gameplay assistants.
-        </p>
-      </section>
+      {showIntro ? (
+        <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
+          <h2 className="text-[clamp(2.6rem,4vw,4.4rem)] font-black leading-[0.95] text-[#e4e4e9]">
+            API Keys
+          </h2>
+          <p className="mt-3 max-w-4xl text-xl text-[#9394a5] md:text-2xl">
+            Keys are encrypted at rest and used for your generation and gameplay assistants.
+          </p>
+        </section>
+      ) : null}
 
       <section className="space-y-5 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-9">
         <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Add or Update Key</h3>

@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
   if (!credentials && !platformApiKey) {
     return NextResponse.json(
-      { error: "No API key found. Add one in Dashboard > API Keys, or configure platform billing." },
+      { error: "No API key found. Add one in Dashboard > Settings, or configure platform billing." },
       { status: 412 },
     );
   }

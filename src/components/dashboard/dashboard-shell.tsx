@@ -7,13 +7,12 @@ import {
   ArrowLeft,
   CreditCard,
   History,
-  KeyRound,
-  LayoutGrid,
   LibraryBig,
   LogOut,
   PlusCircle,
   Settings,
   ShieldCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,17 +38,17 @@ type DashboardShellProps = {
 const navItems: Array<{
   href: string;
   label: string;
-  icon: typeof LayoutGrid;
+  icon: LucideIcon;
   accent?: boolean;
 }> = [
   { href: "/dashboard/create", label: "Create Quiz", icon: PlusCircle, accent: true },
-  { href: "/dashboard", label: "Overview", icon: LayoutGrid },
-  { href: "/dashboard/my-quizzes", label: "My Quizzes", icon: LibraryBig },
+  { href: "/dashboard", label: "My Quizzes", icon: LibraryBig },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-  { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
   { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;
+
+const dashboardSubpages = new Set(["billing", "create", "history", "settings"]);
 
 function userInitials(name: string): string {
   const parts = name
@@ -63,7 +62,20 @@ function userInitials(name: string): string {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/dashboard") return pathname === href;
+  if (href === "/dashboard") {
+    if (pathname === href) {
+      return true;
+    }
+
+    if (!pathname.startsWith("/dashboard/")) {
+      return false;
+    }
+
+    const subpath = pathname.slice("/dashboard/".length);
+    const firstSegment = subpath.split("/")[0] ?? "";
+    return !dashboardSubpages.has(firstSegment);
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -149,7 +161,7 @@ export function DashboardShell({
         <section className="rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 shadow-2xl md:p-10">
           <div className="flex flex-col gap-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-3">
+              <div>
                 <Link
                   href="/"
                   className={cn(
@@ -160,9 +172,6 @@ export function DashboardShell({
                   <ArrowLeft className="size-5" />
                   Back to Hub
                 </Link>
-                <h1 className="text-[clamp(3.5rem,6vw,6.5rem)] leading-[0.92] font-black tracking-tight text-[#e4e4e9]">
-                  Player Dashboard
-                </h1>
               </div>
 
               <Popover>

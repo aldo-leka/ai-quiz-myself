@@ -23,7 +23,7 @@ function parseOptions(value: unknown): Array<{ text: string; explanation: string
     .filter((option): option is { text: string; explanation: string } => option !== null);
 }
 
-export default async function DashboardMyQuizDetailPage({ params }: PageProps) {
+export default async function DashboardQuizDetailPage({ params }: PageProps) {
   const session = await getUserSessionOrNull();
   if (!session?.user?.id) {
     notFound();

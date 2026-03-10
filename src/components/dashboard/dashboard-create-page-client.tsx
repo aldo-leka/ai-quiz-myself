@@ -482,7 +482,7 @@ export function DashboardCreatePageClient({
         throw new Error(payload.error ?? "Failed to start generation");
       }
 
-      router.push("/dashboard/my-quizzes");
+      router.push("/dashboard");
       router.refresh();
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Failed to start generation");
@@ -597,7 +597,7 @@ export function DashboardCreatePageClient({
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
             No API key found, so this will run in platform credits mode.
             {" "}
-            <Link href="/dashboard/api-keys" className="font-semibold underline">
+            <Link href="/dashboard/settings#api-keys" className="font-semibold underline">
               Add API key
             </Link>
           </div>
@@ -787,9 +787,9 @@ export function DashboardCreatePageClient({
             type="button"
             variant="outline"
             className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-7 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
-            onClick={() => router.push("/dashboard/my-quizzes")}
+            onClick={() => router.push("/dashboard")}
           >
-            Back to My Quizzes
+            Back to Dashboard
           </Button>
         </div>
 
