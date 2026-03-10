@@ -10,6 +10,24 @@ import { detectLocaleFromRequest } from "@/lib/locale";
 import { requireEnv } from "@/lib/env";
 
 const betterAuthUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const localhostHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function resolveLocalCookiePrefix() {
+  try {
+    const url = new URL(betterAuthUrl);
+    if (!localhostHosts.has(url.hostname)) {
+      return undefined;
+    }
+
+    const host = url.hostname.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
+    return `ai-quiz-myself-${host}-${port}`;
+  } catch {
+    return undefined;
+  }
+}
+
+const localCookiePrefix = resolveLocalCookiePrefix();
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -125,6 +143,13 @@ export const auth = betterAuth({
   },
   secret: requireEnv("BETTER_AUTH_SECRET"),
   baseURL: betterAuthUrl,
+  ...(localCookiePrefix
+    ? {
+        advanced: {
+          cookiePrefix: localCookiePrefix,
+        },
+      }
+    : {}),
   trustedOrigins(request) {
     const origin = request?.headers.get("origin");
     const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined;

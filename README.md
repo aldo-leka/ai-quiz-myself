@@ -203,6 +203,8 @@ Use `.env.example` as the source of truth. The sections below explain what each 
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | Yes | Client auth base URL |
 | `ADMIN_EMAILS` | Yes for admin access | Comma-separated admin allowlist |
 
+This app keeps Better Auth's default cookie names outside `localhost`. On `localhost`, it uses an app-specific cookie prefix scoped to the configured port so Google OAuth/session cookies do not collide with other local Better Auth apps.
+
 ### Google auth
 
 Google sign-in is the only enabled auth provider right now.
