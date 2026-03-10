@@ -15,13 +15,25 @@ import {
 
 export const runtime = "nodejs";
 
-const CANDIDATE_COUNT = 8;
+const MIN_CANDIDATE_COUNT = 8;
+const MAX_CANDIDATE_COUNT = 48;
+const MAX_BATCH_COUNT = 100;
+const MAX_GENERATION_ROUNDS = 5;
 const HISTORY_LIMIT = 200;
 const THEME_SIMILARITY_THRESHOLD = 0.9;
 
 const requestSchema = z.object({
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   language: z.string().trim().min(2).max(16).default("en"),
+  count: z.preprocess(
+    (value) => {
+      if (typeof value === "string" && value.trim().length > 0) {
+        return Number.parseInt(value, 10);
+      }
+      return value;
+    },
+    z.number().int().min(1).max(MAX_BATCH_COUNT).default(1),
+  ),
   excludeThemes: z.array(z.string().trim().min(2).max(80)).max(100).optional(),
 });
 
@@ -46,6 +58,30 @@ function toThemeKey(theme: string): string {
 
 function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(",")}]`;
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) {
+    return 0;
+  }
+
+  let dot = 0;
+  let magnitudeA = 0;
+  let magnitudeB = 0;
+
+  for (let index = 0; index < a.length; index += 1) {
+    const valueA = a[index] ?? 0;
+    const valueB = b[index] ?? 0;
+    dot += valueA * valueB;
+    magnitudeA += valueA * valueA;
+    magnitudeB += valueB * valueB;
+  }
+
+  if (magnitudeA <= 0 || magnitudeB <= 0) {
+    return 0;
+  }
+
+  return dot / Math.sqrt(magnitudeA * magnitudeB);
 }
 
 export async function POST(request: Request) {
@@ -98,7 +134,7 @@ export async function POST(request: Request) {
 
   if (!credentials && !platformApiKey) {
     return NextResponse.json(
-      { error: "No API key found. Add one in Dashboard > Settings, or configure platform billing." },
+      { error: "No API key found. Add one in Settings, or configure platform billing." },
       { status: 412 },
     );
   }
@@ -107,108 +143,150 @@ export async function POST(request: Request) {
     ? getLanguageModel(credentials.provider, credentials.apiKey)
     : getLanguageModel("openai", platformApiKey!);
 
-  const { object } = await generateObject({
-    model,
-    schema: z.object({
-      themes: z.array(z.string().min(3).max(80)).min(CANDIDATE_COUNT).max(12),
-    }),
-    prompt: [
-      `Suggest ${CANDIDATE_COUNT} family-friendly quiz themes.`,
-      `Language/locale: ${parsed.data.language}`,
-      `Game mode: ${parsed.data.gameMode}`,
-      "Constraints:",
-      "- Keep each theme specific and engaging.",
-      "- Keep each theme under 80 characters.",
-      "- Do not repeat or rephrase themes from the avoid list.",
-      "- Return distinct themes only.",
-      "",
-      "Avoid list:",
-      avoidList.length > 0 ? avoidList.join("\n") : "none",
-    ].join("\n"),
-  });
+  const requestedCount = parsed.data.count;
+  const selectedThemes: Array<{
+    theme: string;
+    themeKey: string;
+    embedding: number[] | null;
+  }> = [];
+  const selectedThemeKeys = new Set<string>();
 
-  const candidates: string[] = [];
-  const seenCandidateKeys = new Set<string>();
-  for (const rawTheme of object.themes) {
-    const normalized = normalizeTheme(rawTheme);
-    if (!normalized) continue;
-
-    const key = toThemeKey(normalized);
-    if (seenCandidateKeys.has(key)) continue;
-
-    seenCandidateKeys.add(key);
-    candidates.push(normalized);
-  }
-
-  let selectedTheme: string | null = null;
-  let selectedThemeKey: string | null = null;
-  let selectedEmbedding: number[] | null = null;
-
-  for (const candidate of candidates) {
-    const key = toThemeKey(candidate);
-    if (historyThemeKeys.has(key)) {
-      continue;
+  for (let round = 0; round < MAX_GENERATION_ROUNDS; round += 1) {
+    if (selectedThemes.length >= requestedCount) {
+      break;
     }
 
-    try {
-      const embedding = await generateEmbedding([candidate]);
-      const vectorLiteral = toVectorLiteral(embedding);
-      const similarityResult = await db.execute<{
-        similarity: string | number | null;
-      }>(sql`
-        select
-          1 - (${surpriseThemeHistory.embedding} <=> ${vectorLiteral}::vector) as "similarity"
-        from ${surpriseThemeHistory}
-        where ${surpriseThemeHistory.userId} = ${session.user.id}
-          and ${surpriseThemeHistory.gameMode} = ${parsed.data.gameMode}
-          and ${surpriseThemeHistory.language} = ${normalizedLanguage}
-          and ${surpriseThemeHistory.embedding} is not null
-        order by ${surpriseThemeHistory.embedding} <=> ${vectorLiteral}::vector
-        limit 1
-      `);
+    const remainingCount = requestedCount - selectedThemes.length;
+    const candidateCount = Math.min(
+      MAX_CANDIDATE_COUNT,
+      Math.max(MIN_CANDIDATE_COUNT, remainingCount * 4),
+    );
+    const minimumReturnedCount = Math.min(candidateCount, Math.max(1, Math.min(remainingCount, 4)));
+    const roundAvoidList = avoidList.concat(selectedThemes.map((entry) => entry.theme));
 
-      const nearest = similarityResult.rows[0];
-      const similarity =
-        nearest?.similarity === null || nearest?.similarity === undefined
-          ? 0
-          : typeof nearest.similarity === "number"
-            ? nearest.similarity
-            : Number.parseFloat(nearest.similarity);
+    const { object } = await generateObject({
+      model,
+      schema: z.object({
+        themes: z.array(z.string().min(3).max(80)).min(minimumReturnedCount).max(candidateCount),
+      }),
+      prompt: [
+        `Suggest ${candidateCount} family-friendly quiz themes.`,
+        `Need ${remainingCount} more unique themes for this batch.`,
+        `Language/locale: ${parsed.data.language}`,
+        `Game mode: ${parsed.data.gameMode}`,
+        "Constraints:",
+        "- Keep each theme specific and engaging.",
+        "- Keep each theme under 80 characters.",
+        "- Do not repeat or rephrase themes from the avoid list.",
+        "- Return distinct themes only.",
+        "",
+        "Avoid list:",
+        roundAvoidList.length > 0 ? roundAvoidList.join("\n") : "none",
+      ].join("\n"),
+    });
 
-      if (Number.isFinite(similarity) && similarity >= THEME_SIMILARITY_THRESHOLD) {
+    const candidates: string[] = [];
+    const seenCandidateKeys = new Set<string>();
+    for (const rawTheme of object.themes) {
+      const normalized = normalizeTheme(rawTheme);
+      if (!normalized) continue;
+
+      const key = toThemeKey(normalized);
+      if (seenCandidateKeys.has(key)) continue;
+
+      seenCandidateKeys.add(key);
+      candidates.push(normalized);
+    }
+
+    for (const candidate of candidates) {
+      if (selectedThemes.length >= requestedCount) {
+        break;
+      }
+
+      const key = toThemeKey(candidate);
+      if (historyThemeKeys.has(key) || selectedThemeKeys.has(key)) {
         continue;
       }
 
-      selectedTheme = candidate;
-      selectedThemeKey = key;
-      selectedEmbedding = embedding;
-      break;
-    } catch {
-      // If embedding infrastructure is unavailable, fall back to exact-match dedupe only.
-      selectedTheme = candidate;
-      selectedThemeKey = key;
-      selectedEmbedding = null;
-      break;
+      try {
+        const embedding = await generateEmbedding([candidate]);
+        const vectorLiteral = toVectorLiteral(embedding);
+        const similarityResult = await db.execute<{
+          similarity: string | number | null;
+        }>(sql`
+          select
+            1 - (${surpriseThemeHistory.embedding} <=> ${vectorLiteral}::vector) as "similarity"
+          from ${surpriseThemeHistory}
+          where ${surpriseThemeHistory.userId} = ${session.user.id}
+            and ${surpriseThemeHistory.gameMode} = ${parsed.data.gameMode}
+            and ${surpriseThemeHistory.language} = ${normalizedLanguage}
+            and ${surpriseThemeHistory.embedding} is not null
+          order by ${surpriseThemeHistory.embedding} <=> ${vectorLiteral}::vector
+          limit 1
+        `);
+
+        const nearest = similarityResult.rows[0];
+        const similarity =
+          nearest?.similarity === null || nearest?.similarity === undefined
+            ? 0
+            : typeof nearest.similarity === "number"
+              ? nearest.similarity
+              : Number.parseFloat(nearest.similarity);
+
+        if (Number.isFinite(similarity) && similarity >= THEME_SIMILARITY_THRESHOLD) {
+          continue;
+        }
+
+        const tooSimilarToSelection = selectedThemes.some((entry) => {
+          if (!entry.embedding) return false;
+          return cosineSimilarity(entry.embedding, embedding) >= THEME_SIMILARITY_THRESHOLD;
+        });
+        if (tooSimilarToSelection) {
+          continue;
+        }
+
+        selectedThemes.push({
+          theme: candidate,
+          themeKey: key,
+          embedding,
+        });
+        selectedThemeKeys.add(key);
+      } catch {
+        // If embedding infrastructure is unavailable, fall back to exact-match dedupe only.
+        selectedThemes.push({
+          theme: candidate,
+          themeKey: key,
+          embedding: null,
+        });
+        selectedThemeKeys.add(key);
+      }
     }
   }
 
-  if (!selectedTheme || !selectedThemeKey) {
+  if (selectedThemes.length < requestedCount) {
     return NextResponse.json(
-      { error: "Could not find a sufficiently unique surprise theme. Try again." },
+      {
+        error:
+          requestedCount === 1
+            ? "Could not find a sufficiently unique surprise theme. Try again."
+            : "Could not find enough sufficiently unique surprise themes. Try a smaller batch or different settings.",
+      },
       { status: 409 },
     );
   }
 
   await db
     .insert(surpriseThemeHistory)
-    .values({
-      userId: session.user.id,
-      gameMode: parsed.data.gameMode,
-      language: normalizedLanguage,
-      theme: selectedTheme,
-      themeKey: selectedThemeKey,
-      embedding: selectedEmbedding,
-    })
+    .values(
+      selectedThemes.map((entry) => ({
+        userId: session.user.id,
+        gameMode: parsed.data.gameMode,
+        language: normalizedLanguage,
+        theme: entry.theme,
+        themeKey: entry.themeKey,
+        embedding: entry.embedding,
+      })),
+    )
     .onConflictDoNothing({
       target: [
         surpriseThemeHistory.userId,
@@ -218,7 +296,10 @@ export async function POST(request: Request) {
       ],
     });
 
+  const themes = selectedThemes.map((entry) => entry.theme);
+
   return NextResponse.json({
-    theme: selectedTheme,
+    theme: themes[0],
+    themes,
   });
 }

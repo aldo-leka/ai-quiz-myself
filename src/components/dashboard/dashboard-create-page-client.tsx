@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type SourceType = "theme" | "url" | "pdf";
@@ -30,7 +31,6 @@ type DashboardCreatePageClientProps = {
   standardGenerationCostCents: number;
   pdfGenerationCostCents: number;
   platformBillingAvailable: boolean;
-  r2UploadAvailable: boolean;
   pdfMaxFileSizeBytes: number;
 };
 
@@ -85,6 +85,12 @@ const languageOptions = [
 ];
 
 const topUpOptionsCents = [500, 1000, 2000, 5000, 10000];
+const batchCountPresets = [1, 5, 10, 15, 25, 50, 100];
+const maxBatchCounts: Record<SourceType, number> = {
+  theme: 100,
+  url: 1,
+  pdf: 1,
+};
 
 function normalizeLocale(value: string): string {
   const raw = value.trim().toLowerCase();
@@ -118,6 +124,38 @@ function formatPdfFileName(fileName: string): string {
 
 function formatUsd(amountCents: number): string {
   return `$${(amountCents / 100).toFixed(2)}`;
+}
+
+function parseThemeBatchLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 0);
+}
+
+function hasDuplicateValues(values: string[]): boolean {
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      return true;
+    }
+
+    seen.add(key);
+  }
+
+  return false;
+}
+
+function getMaxBatchCountForSource(sourceType: SourceType): number {
+  return maxBatchCounts[sourceType];
+}
+
+function clampBatchCount(sourceType: SourceType, value: number): number {
+  const maxCount = getMaxBatchCountForSource(sourceType);
+  const normalized = Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.min(Math.max(normalized, 1), maxCount);
 }
 
 function computeInitialBillingMode(params: {
@@ -174,7 +212,6 @@ export function DashboardCreatePageClient({
   standardGenerationCostCents,
   pdfGenerationCostCents,
   platformBillingAvailable,
-  r2UploadAvailable,
   pdfMaxFileSizeBytes,
 }: DashboardCreatePageClientProps) {
   const router = useRouter();
@@ -182,7 +219,9 @@ export function DashboardCreatePageClient({
 
   const [sourceType, setSourceType] = useState<SourceType>("theme");
   const [theme, setTheme] = useState("");
+  const [themeBatchText, setThemeBatchText] = useState("");
   const [url, setUrl] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [gameMode, setGameMode] = useState<GameMode>("single");
   const [difficulty, setDifficulty] = useState<Difficulty>("mixed");
   const [language, setLanguage] = useState(normalizeLocale(initialLocale));
@@ -200,6 +239,7 @@ export function DashboardCreatePageClient({
   const [submitting, setSubmitting] = useState(false);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [partialBalanceModalOpen, setPartialBalanceModalOpen] = useState(false);
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
   const [topUpLoading, setTopUpLoading] = useState(false);
@@ -220,13 +260,42 @@ export function DashboardCreatePageClient({
   const canUseByok = sourceType !== "pdf" && hasApiKey;
   const canUseCredits = platformBillingAvailable;
   const showBillingToggle = sourceType !== "pdf" && canUseByok && canUseCredits;
-  const hasEnoughBalance = walletBalanceCents >= generationCostCents;
+  const maxBatchCount = getMaxBatchCountForSource(sourceType);
+  const quantityOptions = useMemo(() => {
+    const values = new Set(batchCountPresets.filter((value) => value <= maxBatchCount));
+    values.add(maxBatchCount);
+    return [...values].sort((left, right) => left - right);
+  }, [maxBatchCount]);
+  const parsedThemeBatchLines = useMemo(() => parseThemeBatchLines(themeBatchText), [themeBatchText]);
+  const selectedThemeBatchLines = useMemo(
+    () => parsedThemeBatchLines.slice(0, quantity),
+    [parsedThemeBatchLines, quantity],
+  );
+  const themeBatchHasDuplicates = useMemo(
+    () => hasDuplicateValues(selectedThemeBatchLines),
+    [selectedThemeBatchLines],
+  );
+  const affordableGenerationCount =
+    effectiveBillingMode === "platform_credits"
+      ? Math.min(quantity, Math.floor(walletBalanceCents / generationCostCents))
+      : quantity;
+  const estimatedTotalCostCents = generationCostCents * quantity;
+  const needsPartialBalanceConfirmation =
+    effectiveBillingMode === "platform_credits" &&
+    affordableGenerationCount > 0 &&
+    affordableGenerationCount < quantity;
+  const quantityLabel = quantity === 1 ? "quiz" : "quizzes";
 
   const canGenerate = useMemo(() => {
     if (submitting) return false;
 
     if (sourceType === "theme") {
-      if (theme.trim().length < 2) return false;
+      if (quantity === 1) {
+        if (theme.trim().length < 2) return false;
+      } else {
+        if (selectedThemeBatchLines.length < quantity) return false;
+        if (themeBatchHasDuplicates) return false;
+      }
     } else if (sourceType === "url") {
       if (!isValidHttpUrl(url)) return false;
     } else if (!pdfFile) {
@@ -237,16 +306,19 @@ export function DashboardCreatePageClient({
       return canUseByok;
     }
 
-    return canUseCredits && hasEnoughBalance;
+    return canUseCredits && affordableGenerationCount > 0;
   }, [
+    affordableGenerationCount,
     canUseByok,
     canUseCredits,
     effectiveBillingMode,
-    hasEnoughBalance,
     pdfFile,
+    quantity,
+    selectedThemeBatchLines.length,
     sourceType,
     submitting,
     theme,
+    themeBatchHasDuplicates,
     url,
   ]);
 
@@ -273,6 +345,7 @@ export function DashboardCreatePageClient({
   function applySourceType(nextSourceType: SourceType) {
     setStatusMessage(null);
     setSourceType(nextSourceType);
+    setQuantity((current) => clampBatchCount(nextSourceType, current));
     setBillingMode((current) =>
       normalizeBillingModeForSource({
         current,
@@ -281,6 +354,24 @@ export function DashboardCreatePageClient({
         platformBillingAvailable,
       }),
     );
+  }
+
+  function applyQuantity(nextQuantity: number) {
+    const clampedQuantity = clampBatchCount(sourceType, nextQuantity);
+    setQuantity(clampedQuantity);
+    setStatusMessage(null);
+
+    if (clampedQuantity === 1) {
+      const firstTheme = parseThemeBatchLines(themeBatchText)[0];
+      if (firstTheme) {
+        setTheme(firstTheme);
+      }
+      return;
+    }
+
+    if (!themeBatchText.trim() && theme.trim().length >= 2) {
+      setThemeBatchText(theme.trim());
+    }
   }
 
   function setPdfFileFromInput(file: File | null) {
@@ -321,13 +412,33 @@ export function DashboardCreatePageClient({
         body: JSON.stringify({
           gameMode,
           language,
+          count: quantity,
+          excludeThemes:
+            quantity === 1
+              ? theme.trim().length >= 2
+                ? [theme.trim()]
+                : []
+              : parsedThemeBatchLines,
         }),
       });
-      const payload = (await response.json()) as { theme?: string; error?: string };
-      if (!response.ok || !payload.theme) {
+      const payload = (await response.json()) as {
+        theme?: string;
+        themes?: string[];
+        error?: string;
+      };
+      const suggestedThemes = payload.themes?.filter((value) => value.trim().length > 0) ?? [];
+      if (!response.ok || (quantity === 1 ? !payload.theme : suggestedThemes.length < quantity)) {
         throw new Error(payload.error ?? "Could not suggest a theme");
       }
-      setTheme(payload.theme);
+
+      if (quantity === 1) {
+        setTheme(payload.theme ?? suggestedThemes[0] ?? "");
+        return;
+      }
+
+      const nextThemes = suggestedThemes.slice(0, quantity);
+      setTheme(nextThemes[0] ?? "");
+      setThemeBatchText(nextThemes.join("\n"));
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not suggest a theme");
     } finally {
@@ -380,76 +491,68 @@ export function DashboardCreatePageClient({
     }
   }
 
-  async function generateQuiz() {
+  async function startGeneration(options?: { allowPartialBalance?: boolean }) {
     if (!canGenerate) return;
+
+    if (needsPartialBalanceConfirmation && !options?.allowPartialBalance) {
+      setPartialBalanceModalOpen(true);
+      return;
+    }
 
     setSubmitting(true);
     setStatusMessage(null);
+    setPartialBalanceModalOpen(false);
 
     try {
       const response =
         sourceType === "pdf" && pdfFile
           ? await (async () => {
-            if (r2UploadAvailable) {
-              const uploadResponse = await fetch("/api/dashboard/generate/pdf-upload", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  fileName: pdfFile.name,
-                  fileSizeBytes: pdfFile.size,
-                  contentType: pdfFile.type || "application/pdf",
-                }),
-              });
-              const uploadPayload = (await uploadResponse.json()) as {
-                uploadUrl?: string;
-                objectKey?: string;
-                uploadHeaders?: Record<string, string>;
-                error?: string;
-              };
-              if (!uploadResponse.ok || !uploadPayload.uploadUrl || !uploadPayload.objectKey) {
-                throw new Error(uploadPayload.error ?? "Failed to prepare PDF upload");
-              }
-
-              const putResponse = await fetch(uploadPayload.uploadUrl, {
-                method: "PUT",
-                headers: uploadPayload.uploadHeaders,
-                body: pdfFile,
-              });
-              if (!putResponse.ok) {
-                throw new Error(`Failed to upload PDF (HTTP ${putResponse.status})`);
-              }
-
-              return fetch("/api/dashboard/generate", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  sourceType: "pdf",
-                  gameMode,
-                  difficulty: effectiveDifficulty,
-                  language,
-                  billingMode: "platform_credits" as const,
-                  fileName: pdfFile.name,
-                  fileSizeBytes: pdfFile.size,
-                  pdfObjectKey: uploadPayload.objectKey,
-                }),
-              });
+            const uploadResponse = await fetch("/api/dashboard/generate/pdf-upload", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                fileName: pdfFile.name,
+                fileSizeBytes: pdfFile.size,
+                contentType: pdfFile.type || "application/pdf",
+              }),
+            });
+            const uploadPayload = (await uploadResponse.json()) as {
+              uploadUrl?: string;
+              objectKey?: string;
+              uploadHeaders?: Record<string, string>;
+              error?: string;
+            };
+            if (!uploadResponse.ok || !uploadPayload.uploadUrl || !uploadPayload.objectKey) {
+              throw new Error(uploadPayload.error ?? "Failed to prepare PDF upload");
             }
 
-            const formData = new FormData();
-            formData.append("sourceType", "pdf");
-            formData.append("gameMode", gameMode);
-            formData.append("difficulty", effectiveDifficulty);
-            formData.append("language", language);
-            formData.append("billingMode", "platform_credits");
-            formData.append("file", pdfFile);
+            const putResponse = await fetch(uploadPayload.uploadUrl, {
+              method: "PUT",
+              headers: uploadPayload.uploadHeaders,
+              body: pdfFile,
+            });
+            if (!putResponse.ok) {
+              throw new Error(`Failed to upload PDF (HTTP ${putResponse.status})`);
+            }
 
             return fetch("/api/dashboard/generate", {
               method: "POST",
-              body: formData,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                sourceType: "pdf",
+                quantity,
+                gameMode,
+                difficulty: effectiveDifficulty,
+                language,
+                billingMode: "platform_credits" as const,
+                fileName: pdfFile.name,
+                fileSizeBytes: pdfFile.size,
+                pdfObjectKey: uploadPayload.objectKey,
+              }),
             });
           })()
           : await fetch("/api/dashboard/generate", {
@@ -461,7 +564,9 @@ export function DashboardCreatePageClient({
               sourceType === "theme"
                 ? {
                     sourceType,
-                    theme: theme.trim(),
+                    theme: quantity === 1 ? theme.trim() : undefined,
+                    themes: quantity > 1 ? selectedThemeBatchLines : undefined,
+                    quantity,
                     gameMode,
                     difficulty: effectiveDifficulty,
                     language,
@@ -470,6 +575,7 @@ export function DashboardCreatePageClient({
                 : {
                     sourceType,
                     url: url.trim(),
+                    quantity,
                     gameMode,
                     difficulty: effectiveDifficulty,
                     language,
@@ -477,7 +583,9 @@ export function DashboardCreatePageClient({
                   },
             ),
           });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as {
+        error?: string;
+      };
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to start generation");
       }
@@ -585,7 +693,7 @@ export function DashboardCreatePageClient({
           </div>
         ) : null}
 
-        {effectiveBillingMode === "platform_credits" && !hasEnoughBalance ? (
+        {effectiveBillingMode === "platform_credits" && affordableGenerationCount <= 0 ? (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-base text-rose-100 md:text-lg">
             Insufficient balance for this generation.
             {" "}
@@ -601,10 +709,70 @@ export function DashboardCreatePageClient({
           </div>
         ) : null}
 
+        {needsPartialBalanceConfirmation ? (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
+            Current balance covers {affordableGenerationCount} of {quantity} {quantityLabel}.
+            {" "}
+            You can start those now or{" "}
+            <button
+              type="button"
+              className="font-semibold underline"
+              onClick={() => setTopUpModalOpen(true)}
+            >
+              top up first
+            </button>
+            .
+          </div>
+        ) : null}
+
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">How many quizzes?</p>
+            <p className="text-sm text-[#9394a5] md:text-base">
+              Max {maxBatchCount} for {sourceType === "theme" ? "themes" : sourceType.toUpperCase()}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {quantityOptions.map((option) => (
+              <FilterPill
+                key={option}
+                isActive={quantity === option}
+                onClick={() => applyQuantity(option)}
+              >
+                {option}
+              </FilterPill>
+            ))}
+          </div>
+          <div className="max-w-32">
+            <Input
+              type="number"
+              min={1}
+              max={maxBatchCount}
+              value={quantity}
+              onChange={(event) => {
+                const parsedValue = Number.parseInt(event.target.value, 10);
+                applyQuantity(Number.isFinite(parsedValue) ? parsedValue : 1);
+              }}
+              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] md:h-16 md:text-2xl"
+            />
+          </div>
+          <p className="text-sm text-[#9394a5] md:text-base">
+            {sourceType === "theme"
+              ? quantity === 1
+                ? "Generate one quiz now, or raise the count for a batch."
+                : "Use one distinct theme per line below, or click Surprise Me to fill the whole batch."
+              : sourceType === "url"
+                ? "URL batch generation is paused until source-aware uniqueness planning ships."
+                : "PDF batch generation is paused until source-aware uniqueness planning ships."}
+          </p>
+        </div>
+
         {sourceType === "theme" ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Theme</p>
+              <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
+                {quantity === 1 ? "Theme" : "Themes"}
+              </p>
               <Button
                 type="button"
                 size="sm"
@@ -614,15 +782,44 @@ export function DashboardCreatePageClient({
                 onClick={() => void surpriseMeTheme()}
               >
                 <Sparkles className="mr-2 size-5" />
-                {surpriseLoading ? "Thinking..." : "Surprise Me"}
+                {surpriseLoading
+                  ? "Thinking..."
+                  : quantity === 1
+                    ? "Surprise Me"
+                    : `Surprise Me x${quantity}`}
               </Button>
             </div>
-            <Input
-              value={theme}
-              onChange={(event) => setTheme(event.target.value)}
-              placeholder="e.g. Ancient Civilizations, Ocean Creatures, Space Exploration"
-              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
-            />
+            {quantity === 1 ? (
+              <Input
+                value={theme}
+                onChange={(event) => setTheme(event.target.value)}
+                placeholder="e.g. Ancient Civilizations, Ocean Creatures, Space Exploration"
+                className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
+              />
+            ) : (
+              <>
+                <Textarea
+                  value={themeBatchText}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    const nextThemes = parseThemeBatchLines(nextValue);
+                    setThemeBatchText(nextValue);
+                    setTheme(nextThemes[0] ?? "");
+                  }}
+                  placeholder={"One theme per line.\nAncient Civilizations\nOcean Creatures\nSpace Exploration"}
+                  className="min-h-56 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 py-4 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:text-xl"
+                />
+                <p className="text-sm text-[#9394a5] md:text-base">
+                  {themeBatchHasDuplicates
+                    ? `Remove duplicate themes in the first ${quantity} lines.`
+                    : selectedThemeBatchLines.length < quantity
+                      ? `${selectedThemeBatchLines.length}/${quantity} themes ready.`
+                      : parsedThemeBatchLines.length > quantity
+                        ? `Using the first ${quantity} themes.`
+                        : `${quantity}/${quantity} themes ready.`}
+                </p>
+              </>
+            )}
           </div>
         ) : null}
 
@@ -688,15 +885,6 @@ export function DashboardCreatePageClient({
                 </p>
               ) : null}
             </div>
-            {r2UploadAvailable ? (
-              <p className="text-sm text-[#9394a5] md:text-base">
-                Large PDFs upload to cloud storage first, then the generation task downloads them asynchronously.
-              </p>
-            ) : (
-              <p className="text-sm text-[#9394a5] md:text-base">
-                R2 is not configured, so PDF uploads use the smaller direct-upload fallback.
-              </p>
-            )}
           </div>
         ) : null}
 
@@ -752,18 +940,60 @@ export function DashboardCreatePageClient({
           />
         </div>
 
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+            <p className="text-sm uppercase tracking-wide text-[#9394a5]">Requested</p>
+            <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">{quantity}</p>
+          </div>
+          {effectiveBillingMode === "platform_credits" ? (
+            <>
+              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Unit Cost</p>
+                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
+                  {formatUsd(generationCostCents)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Estimated Total</p>
+                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
+                  {formatUsd(estimatedTotalCostCents)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Can Start Now</p>
+                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
+                  {affordableGenerationCount}
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:col-span-1 xl:col-span-3">
+              <p className="text-sm uppercase tracking-wide text-[#9394a5]">Billing</p>
+              <p className="mt-2 text-lg text-[#e4e4e9] md:text-xl">
+                Using your API key for {quantity} {quantityLabel}.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
             disabled={!canGenerate}
-            onClick={() => void generateQuiz()}
+            onClick={() => void startGeneration()}
             className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-7 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
           >
             {submitting
-              ? "Starting..."
+              ? quantity === 1
+                ? "Starting..."
+                : `Starting ${quantity} quizzes...`
               : effectiveBillingMode === "platform_credits"
-                ? `Generate (${formatUsd(generationCostCents)})`
-                : "Generate"}
+                ? quantity === 1
+                  ? `Generate (${formatUsd(generationCostCents)})`
+                  : `Generate ${quantity} quizzes (${formatUsd(estimatedTotalCostCents)})`
+                : quantity === 1
+                  ? "Generate"
+                  : `Generate ${quantity} quizzes`}
           </Button>
           <Button
             type="button"
@@ -781,6 +1011,55 @@ export function DashboardCreatePageClient({
           </p>
         ) : null}
       </section>
+
+      <Dialog open={partialBalanceModalOpen} onOpenChange={setPartialBalanceModalOpen}>
+        <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-3xl font-black text-[#e4e4e9]">
+              Generate {affordableGenerationCount} now?
+            </DialogTitle>
+            <DialogDescription className="text-lg text-[#9394a5]">
+              Your balance does not cover all {quantity} requested quizzes. You can start the
+              {` ${affordableGenerationCount} `}that fit now and leave the rest unscheduled.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+            <p className="text-base text-[#9394a5]">Current balance: {formatUsd(walletBalanceCents)}</p>
+            <p className="mt-1 text-base text-[#9394a5]">
+              Starting now: {affordableGenerationCount} of {quantity} {quantityLabel}
+            </p>
+            <p className="mt-1 text-base text-[#9394a5]">
+              Estimated charge now: {formatUsd(affordableGenerationCount * generationCostCents)}
+            </p>
+          </div>
+
+          <DialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-5 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]"
+              disabled={submitting}
+              onClick={() => {
+                setPartialBalanceModalOpen(false);
+                setTopUpModalOpen(true);
+              }}
+            >
+              Top up first
+            </Button>
+            <Button
+              type="button"
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-5 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24"
+              disabled={submitting}
+              onClick={() => void startGeneration({ allowPartialBalance: true })}
+            >
+              {submitting
+                ? `Starting ${affordableGenerationCount}...`
+                : `Generate ${affordableGenerationCount} now`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
         <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
