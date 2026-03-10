@@ -587,32 +587,6 @@ function HomePageContent() {
               <h1 className="text-4xl leading-[0.92] font-black tracking-tight text-[#e4e4e9] sm:text-5xl md:text-8xl xl:text-[6.5rem]">
                 QuizPlus Hub
               </h1>
-
-              {sessionData?.user ? (
-                <div className="flex flex-col gap-3 xl:items-end">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/dashboard")}
-                    className={cn(
-                      "inline-flex min-h-12 w-full select-none items-center justify-center gap-3 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-2.5 text-lg font-semibold text-[#e4e4e9] transition md:min-h-20 md:gap-4 md:px-7 md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
-                      "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
-                    )}
-                  >
-                    <Avatar size="lg" className="size-9 border border-[#252940] md:size-14">
-                      <AvatarImage
-                        src={sessionData.user.image ?? undefined}
-                        alt={sessionData.user.name}
-                      />
-                      <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
-                        {userInitials(sessionData.user.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="select-none">
-                      {sessionData.user.name.trim() || "Player"}
-                    </span>
-                  </button>
-                </div>
-              ) : null}
             </div>
 
             <div className="grid gap-3 md:gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -698,15 +672,8 @@ function HomePageContent() {
               </div>
             </div>
 
-            <div
-              className={cn(
-                "flex flex-col gap-3",
-                sessionData?.user
-                  ? "sm:flex-row sm:items-center sm:justify-center"
-                  : "sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:gap-4",
-              )}
-            >
-              {!sessionData?.user ? <div className="hidden sm:block" aria-hidden="true" /> : null}
+            <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:gap-4">
+              <div className="hidden sm:block" aria-hidden="true" />
               <GameButton
                 ref={surpriseButtonRef}
                 centered
@@ -717,7 +684,27 @@ function HomePageContent() {
               >
                 {surpriseButtonLabel}
               </GameButton>
-              {!sessionData?.user ? (
+              {sessionData?.user ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className={cn(
+                    "inline-flex min-h-12 w-full select-none items-center justify-center gap-3 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-2.5 text-lg font-semibold text-[#e4e4e9] transition sm:justify-self-end md:min-h-20 md:gap-4 md:px-7 md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
+                    "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
+                  )}
+                >
+                  <Avatar size="lg" className="size-9 border border-[#252940] md:size-14">
+                    <AvatarImage
+                      src={sessionData.user.image ?? undefined}
+                      alt={sessionData.user.name}
+                    />
+                    <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
+                      {userInitials(sessionData.user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="select-none">{sessionData.user.name.trim() || "Player"}</span>
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => router.push("/sign-in?callbackURL=/dashboard")}
@@ -728,7 +715,7 @@ function HomePageContent() {
                 >
                   Not logged in
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         </section>
