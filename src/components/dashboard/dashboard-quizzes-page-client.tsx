@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Play, Trash2 } from "lucide-react";
-import { FilterPill } from "@/components/quiz/FilterPill";
+import { AlertTriangle, Loader2, Play, RotateCcw, Trash2 } from "lucide-react";
+import { PlayerSelect } from "@/components/dashboard/player-select";
 import { QuizCard } from "@/components/quiz/QuizCard";
 import {
   AlertDialog,
@@ -101,6 +101,7 @@ export function DashboardQuizzesPageClient({
   const [hasMore, setHasMore] = useState(false);
   const [quizPendingDelete, setQuizPendingDelete] = useState<UserQuizRow | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
+  const hasCustomFilters = mode !== "all" || status !== "all" || sort !== "newest";
 
   const displayItems = useMemo(() => {
     const quizItems = rows.map((quiz) => ({
@@ -220,64 +221,75 @@ export function DashboardQuizzesPageClient({
 
   return (
     <div className="space-y-8">
-      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-8">
-        <div className="space-y-3">
-          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
-            Game Mode
-          </h2>
-          <div className="flex flex-wrap gap-3">
-            {modeOptions.map((option) => (
-              <FilterPill
-                key={option.value}
-                isActive={mode === option.value}
-                onClick={() => {
+      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap xl:justify-end">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9394a5]">
+                Game Mode
+              </p>
+              <PlayerSelect
+                value={mode}
+                onValueChange={(value) => {
                   setPage(1);
-                  setMode(option.value);
+                  setMode(value);
                 }}
-              >
-                {option.label}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
+                options={modeOptions}
+                widthClassName="w-full min-w-[190px] sm:w-[220px]"
+              />
+            </div>
 
-        <div className="space-y-3">
-          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
-            Status
-          </h2>
-          <div className="flex flex-wrap gap-3">
-            {statusOptions.map((option) => (
-              <FilterPill
-                key={option.value}
-                isActive={status === option.value}
-                onClick={() => {
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9394a5]">
+                Status
+              </p>
+              <PlayerSelect
+                value={status}
+                onValueChange={(value) => {
                   setPage(1);
-                  setStatus(option.value);
+                  setStatus(value);
                 }}
-              >
-                {option.label}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
+                options={statusOptions}
+                widthClassName="w-full min-w-[190px] sm:w-[220px]"
+              />
+            </div>
 
-        <div className="space-y-3">
-          <h2 className="text-3xl font-black tracking-tight text-[#e4e4e9] md:text-4xl">
-            Sort
-          </h2>
-          <div className="flex flex-wrap gap-3">
-            {sortOptions.map((option) => (
-              <FilterPill
-                key={option.value}
-                isActive={sort === option.value}
-                onClick={() => {
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9394a5]">
+                Sort
+              </p>
+              <PlayerSelect
+                value={sort}
+                onValueChange={(value) => {
                   setPage(1);
-                  setSort(option.value);
+                  setSort(value);
                 }}
-              >
-                {option.label}
-              </FilterPill>
-            ))}
+                options={sortOptions}
+                widthClassName="w-full min-w-[190px] sm:w-[220px]"
+              />
+            </div>
+
+            {hasCustomFilters ? (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-transparent">
+                  Reset
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={playerButtonBaseClass + " " + playerButtonSecondaryClass}
+                  onClick={() => {
+                    setPage(1);
+                    setMode("all");
+                    setStatus("all");
+                    setSort("newest");
+                  }}
+                >
+                  <RotateCcw className="mr-2 size-5" />
+                  Reset
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
