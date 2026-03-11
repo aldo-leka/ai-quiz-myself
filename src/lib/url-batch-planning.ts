@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const MAX_SOURCE_CONTEXT_CHARS = 14_000;
 const MAX_SUBTOPIC_ROUNDS = 4;
+const MAX_SUBTOPIC_CANDIDATES = 24;
 
 function normalizeValue(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -78,12 +79,18 @@ export async function generateUniqueSourceSubtopics(params: {
     }
 
     const remaining = requestedCount - accepted.length;
-    const candidateCount = Math.min(Math.max(remaining * 3, remaining + 2), 24);
+    const candidateCount = Math.min(
+      Math.max(remaining * 3, remaining + 2),
+      MAX_SUBTOPIC_CANDIDATES,
+    );
     const minimumCount = Math.min(candidateCount, Math.max(1, remaining));
     const { object } = await generateObject({
       model: params.model,
       schema: z.object({
-        subtopics: z.array(z.string().min(2).max(80)).min(minimumCount).max(candidateCount),
+        subtopics: z
+          .array(z.string().min(2).max(80))
+          .min(minimumCount)
+          .max(MAX_SUBTOPIC_CANDIDATES),
       }),
       prompt: [
         "You are planning multiple distinct quiz angles from one source document.",

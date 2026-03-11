@@ -421,14 +421,30 @@ export function DashboardCreatePageClient({
               : parsedThemeBatchLines,
         }),
       });
-      const payload = (await response.json()) as {
+      const raw = await response.text();
+      let payload: {
         theme?: string;
         themes?: string[];
         error?: string;
-      };
+      } = {};
+      try {
+        payload = raw
+          ? (JSON.parse(raw) as {
+              theme?: string;
+              themes?: string[];
+              error?: string;
+            })
+          : {};
+      } catch {
+        payload = {};
+      }
       const suggestedThemes = payload.themes?.filter((value) => value.trim().length > 0) ?? [];
       if (!response.ok || (quantity === 1 ? !payload.theme : suggestedThemes.length < quantity)) {
-        throw new Error(payload.error ?? "Could not suggest a theme");
+        const fallback =
+          raw && !raw.startsWith("<!DOCTYPE")
+            ? raw.slice(0, 180)
+            : `Could not suggest a theme (HTTP ${response.status})`;
+        throw new Error(payload.error ?? fallback);
       }
 
       if (quantity === 1) {

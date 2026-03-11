@@ -102,7 +102,10 @@ export async function generateUniqueSubtopics(params: {
 
   const maxGenerated = Math.max(params.count * 3, params.count);
   const schema = z.object({
-    subtopics: z.array(z.string().min(2).max(80)).min(params.count).max(maxGenerated),
+    subtopics: z
+      .array(z.string().min(2).max(80))
+      .min(params.count)
+      .max(Math.max(maxGenerated, params.count + 8)),
   });
 
   const existingThemeList =
