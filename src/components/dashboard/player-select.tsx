@@ -35,7 +35,7 @@ export function PlayerSelect<T extends string>({
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] transition md:h-16 md:text-2xl",
+          "min-h-14 rounded-full border-[#252940] bg-[#0f1117]/88 px-6 py-2.5 text-lg font-semibold text-[#e4e4e9] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] transition md:min-h-16 md:px-7 md:text-2xl data-[size=default]:h-auto",
           "data-[state=open]:border-[#818cf8]/55 data-[state=open]:shadow-[0_0_0_1px_rgba(129,140,248,0.24),0_16px_40px_rgba(15,17,23,0.46)]",
           "focus-visible:ring-[#818cf8]/55",
           widthClassName,

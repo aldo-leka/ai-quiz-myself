@@ -16,7 +16,6 @@ export default async function DashboardSettingsPage() {
       .select({
         locale: user.locale,
         preferredProvider: user.preferredProvider,
-        readAloudEnabled: user.readAloudEnabled,
       })
       .from(user)
       .where(eq(user.id, session.user.id))
@@ -31,7 +30,6 @@ export default async function DashboardSettingsPage() {
 
   const locale = userRow[0]?.locale ?? "en";
   const preferredProvider = userRow[0]?.preferredProvider;
-  const readAloudEnabled = userRow[0]?.readAloudEnabled ?? false;
   const availableProviders = keyRows.map((row) => row.provider);
 
   return (
@@ -44,7 +42,6 @@ export default async function DashboardSettingsPage() {
           ? preferredProvider
           : null
       }
-      initialReadAloudEnabled={readAloudEnabled}
       availableProviders={availableProviders}
     />
   );

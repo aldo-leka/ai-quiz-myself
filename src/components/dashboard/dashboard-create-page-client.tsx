@@ -43,19 +43,19 @@ const sourceCards: Array<{
   {
     value: "theme",
     title: "From Theme",
-    description: "Type a topic and generate a fresh quiz instantly.",
+    description: "Start from a topic.",
     icon: Target,
   },
   {
     value: "url",
     title: "From URL",
-    description: "Paste an article URL and transform it into a quiz.",
+    description: "Turn an article into a quiz.",
     icon: Link2,
   },
   {
     value: "pdf",
     title: "From PDF",
-    description: "Upload a PDF document (platform credits mode).",
+    description: "Upload a PDF source.",
     icon: FileText,
   },
 ];
@@ -279,7 +279,6 @@ export function DashboardCreatePageClient({
     effectiveBillingMode === "platform_credits"
       ? Math.min(quantity, Math.floor(walletBalanceCents / generationCostCents))
       : quantity;
-  const estimatedTotalCostCents = generationCostCents * quantity;
   const needsPartialBalanceConfirmation =
     effectiveBillingMode === "platform_credits" &&
     affordableGenerationCount > 0 &&
@@ -616,105 +615,86 @@ export function DashboardCreatePageClient({
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-6 md:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-base font-semibold uppercase tracking-wide text-[#9394a5] md:text-lg">Wallet</p>
-            <p className="text-5xl font-black text-[#e4e4e9] md:text-6xl">{formatUsd(walletBalanceCents)}</p>
-            <p className="text-base text-[#9394a5] md:text-lg">
-              Cost per generation: {formatUsd(generationCostCents)}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setTopUpModalOpen(true)}
-              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-6 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
-            >
-              <CreditCard className="mr-2 size-5" />
-              Add to credit balance
-            </Button>
-            <Button
-              asChild
-              type="button"
-              variant="outline"
-              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-6 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
-            >
-              <Link href="/dashboard/billing">Billing & Auto Recharge</Link>
-            </Button>
+    <div className="space-y-6">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.45fr)]">
+        <div className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 md:p-6 xl:min-h-[220px]">
+          <div className="flex h-full flex-col justify-between gap-5">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9394a5] md:text-base">
+                Wallet
+              </p>
+              <p className="text-4xl font-black text-[#e4e4e9] md:text-5xl xl:text-[4.15rem]">
+                {formatUsd(walletBalanceCents)}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-[#9394a5] md:text-base">
+                <span>Cost per generation: {formatUsd(generationCostCents)}</span>
+                {effectiveBillingMode === "platform_credits" ? (
+                  <span>Can start now: {affordableGenerationCount}</span>
+                ) : (
+                  <span>Using your API key</span>
+                )}
+              </div>
+              {!platformBillingAvailable ? (
+                <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 md:text-base">
+                  Platform billing is not configured yet (`OPENAI_API_KEY` missing), so only BYOK mode is available.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTopUpModalOpen(true)}
+                className="min-h-12 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-5 text-base text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-lg"
+              >
+                <CreditCard className="mr-2 size-5" />
+                Add to credit balance
+              </Button>
+              <Button
+                asChild
+                type="button"
+                variant="outline"
+                className="min-h-12 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-5 text-base text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-lg"
+              >
+                <Link href="/dashboard/billing">Billing & Auto Recharge</Link>
+              </Button>
+            </div>
           </div>
         </div>
 
-        {!platformBillingAvailable ? (
-          <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
-            Platform billing is not configured yet (`OPENAI_API_KEY` missing), so only BYOK mode is available.
-          </p>
-        ) : null}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {sourceCards.map((card) => {
+            const Icon = card.icon;
+            const active = sourceType === card.value;
+            return (
+              <button
+                key={card.value}
+                type="button"
+                onClick={() => applySourceType(card.value)}
+                className={cn(
+                  "rounded-3xl border p-5 text-left transition md:p-6",
+                  active
+                    ? "border-[#818cf8]/55 bg-[#6c8aff]/14 shadow-[0_0_0_1px_rgba(129,140,248,0.28)]"
+                    : "border-[#252940] bg-[#1a1d2e]/78 hover:border-[#6c8aff]/35 hover:bg-[#6c8aff]/8",
+                )}
+              >
+                <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
+                  <Icon className="size-6 text-[#818cf8]" />
+                </div>
+                <p className="mt-4 text-2xl font-bold text-[#e4e4e9] md:text-3xl">{card.title}</p>
+                <p className="mt-2 text-sm text-[#9394a5] md:text-base">{card.description}</p>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {sourceCards.map((card) => {
-          const Icon = card.icon;
-          const active = sourceType === card.value;
-          return (
-            <button
-              key={card.value}
-              type="button"
-              onClick={() => applySourceType(card.value)}
-              className={cn(
-                "rounded-3xl border p-6 text-left transition md:p-7",
-                active
-                  ? "border-[#818cf8]/55 bg-[#6c8aff]/14 shadow-[0_0_0_1px_rgba(129,140,248,0.28)]"
-                  : "border-[#252940] bg-[#1a1d2e]/78 hover:border-[#6c8aff]/35 hover:bg-[#6c8aff]/8",
-              )}
-            >
-              <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
-                <Icon className="size-7 text-[#818cf8]" />
-              </div>
-              <p className="mt-4 text-3xl font-bold text-[#e4e4e9] md:text-4xl">{card.title}</p>
-              <p className="mt-2 text-base text-[#9394a5] md:text-xl">{card.description}</p>
-            </button>
-          );
-        })}
-      </section>
-
-      <section className="space-y-6 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
-        {showBillingToggle ? (
-          <div className="space-y-3">
-            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Billing Mode</p>
-            <div className="flex flex-wrap gap-3">
-              <FilterPill
-                isActive={effectiveBillingMode === "platform_credits"}
-                onClick={() => setBillingMode("platform_credits")}
-              >
-                Use platform credits
-              </FilterPill>
-              <FilterPill
-                isActive={effectiveBillingMode === "byok"}
-                onClick={() => setBillingMode("byok")}
-              >
-                Use my API key
-              </FilterPill>
-            </div>
-          </div>
-        ) : sourceType !== "pdf" && !canUseByok ? (
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
-            No API key found, so this will run in platform credits mode.
-            {" "}
-            <Link href="/dashboard/settings#api-keys" className="font-semibold underline">
-              Add API key
-            </Link>
-          </div>
-        ) : null}
-
+      <section className="space-y-5 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 md:p-7 xl:space-y-4">
         {effectiveBillingMode === "platform_credits" && affordableGenerationCount <= 0 ? (
-          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-base text-rose-100 md:text-lg">
-            Insufficient balance for this generation.
-            {" "}
-            Required: {formatUsd(generationCostCents)}. Current: {formatUsd(walletBalanceCents)}.
-            {" "}
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100 md:text-base">
+            Insufficient balance for this generation. Required: {formatUsd(generationCostCents)}. Current:{" "}
+            {formatUsd(walletBalanceCents)}.{" "}
             <button
               type="button"
               className="font-semibold underline"
@@ -726,10 +706,8 @@ export function DashboardCreatePageClient({
         ) : null}
 
         {needsPartialBalanceConfirmation ? (
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
-            Current balance covers {affordableGenerationCount} of {quantity} {quantityLabel}.
-            {" "}
-            You can start those now or{" "}
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 md:text-base">
+            Current balance covers {affordableGenerationCount} of {quantity} {quantityLabel}. You can start those now or{" "}
             <button
               type="button"
               className="font-semibold underline"
@@ -741,25 +719,69 @@ export function DashboardCreatePageClient({
           </div>
         ) : null}
 
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">How many quizzes?</p>
-            <p className="text-sm text-[#9394a5] md:text-base">
-              Max {maxBatchCount} for {sourceType === "theme" ? "themes" : sourceType.toUpperCase()}
+        <div className="grid gap-4 xl:grid-cols-12">
+          {showBillingToggle ? (
+            <div className="space-y-2 xl:col-span-4">
+              <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+                Billing mode
+              </p>
+              <div className="flex flex-wrap gap-2.5">
+                <FilterPill
+                  isActive={effectiveBillingMode === "platform_credits"}
+                  onClick={() => setBillingMode("platform_credits")}
+                >
+                  Platform credits
+                </FilterPill>
+                <FilterPill
+                  isActive={effectiveBillingMode === "byok"}
+                  onClick={() => setBillingMode("byok")}
+                >
+                  My API key
+                </FilterPill>
+              </div>
+            </div>
+          ) : sourceType !== "pdf" && !canUseByok ? (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 md:text-base xl:col-span-4">
+              No API key found, so this will run in platform credits mode.{" "}
+              <Link href="/dashboard/settings#api-keys" className="font-semibold underline">
+                Add API key
+              </Link>
+            </div>
+          ) : null}
+
+          <div
+            className={cn(
+              "space-y-2",
+              showBillingToggle || (sourceType !== "pdf" && !canUseByok)
+                ? "xl:col-span-6"
+                : "xl:col-span-10",
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+                How many quizzes?
+              </p>
+              <p className="text-xs text-[#9394a5] md:text-sm">
+                Max {maxBatchCount} for {sourceType === "theme" ? "themes" : sourceType.toUpperCase()}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              {quantityOptions.map((option) => (
+                <FilterPill
+                  key={option}
+                  isActive={quantity === option}
+                  onClick={() => applyQuantity(option)}
+                >
+                  {option}
+                </FilterPill>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 xl:col-span-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+              Custom
             </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {quantityOptions.map((option) => (
-              <FilterPill
-                key={option}
-                isActive={quantity === option}
-                onClick={() => applyQuantity(option)}
-              >
-                {option}
-              </FilterPill>
-            ))}
-          </div>
-          <div className="max-w-32">
             <Input
               type="number"
               min={1}
@@ -769,267 +791,227 @@ export function DashboardCreatePageClient({
                 const parsedValue = Number.parseInt(event.target.value, 10);
                 applyQuantity(Number.isFinite(parsedValue) ? parsedValue : 1);
               }}
-              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] md:h-16 md:text-2xl"
+              className="h-12 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-4 text-lg text-[#e4e4e9] md:h-14 md:text-xl"
             />
           </div>
-          <p className="text-sm text-[#9394a5] md:text-base">
-            {sourceType === "theme"
-              ? quantity === 1
-                ? "Generate one quiz now, or raise the count for a batch."
-                : "Use one distinct theme per line below, or click Surprise Me to fill the whole batch."
-              : sourceType === "url"
-                ? quantity === 1
-                  ? "Generate one quiz from this article now."
-                  : "Batch mode plans distinct angles from the article first, then generates quizzes sequentially to reduce overlap."
-                : quantity === 1
-                  ? "Generate one quiz from this PDF now."
-                  : "Batch mode extracts the PDF once, plans distinct angles, then generates quizzes sequentially to reduce overlap."}
-          </p>
         </div>
 
-        {sourceType === "theme" ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
-                {quantity === 1 ? "Theme" : "Themes"}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={(!hasApiKey && !platformBillingAvailable) || surpriseLoading}
-                className="min-h-14 rounded-2xl border-[#6c8aff]/35 bg-[#6c8aff]/12 px-5 text-lg text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-xl"
-                onClick={() => void surpriseMeTheme()}
-              >
-                <Sparkles className="mr-2 size-5" />
-                {surpriseLoading
-                  ? "Thinking..."
-                  : quantity === 1
-                    ? "Surprise Me"
-                    : `Surprise Me x${quantity}`}
-              </Button>
-            </div>
-            {quantity === 1 ? (
-              <Input
-                value={theme}
-                onChange={(event) => setTheme(event.target.value)}
-                placeholder="e.g. Ancient Civilizations, Ocean Creatures, Space Exploration"
-                className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
-              />
-            ) : (
-              <>
-                <Textarea
-                  value={themeBatchText}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    const nextThemes = parseThemeBatchLines(nextValue);
-                    setThemeBatchText(nextValue);
-                    setTheme(nextThemes[0] ?? "");
-                  }}
-                  placeholder={"One theme per line.\nAncient Civilizations\nOcean Creatures\nSpace Exploration"}
-                  className="min-h-56 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 py-4 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:text-xl"
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+          <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/76 p-5">
+            {sourceType === "theme" ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-lg font-semibold text-[#9394a5] md:text-xl">
+                    {quantity === 1 ? "Theme" : "Themes"}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={(!hasApiKey && !platformBillingAvailable) || surpriseLoading}
+                    className="min-h-12 rounded-2xl border-[#6c8aff]/35 bg-[#6c8aff]/12 px-4 text-base text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-lg"
+                    onClick={() => void surpriseMeTheme()}
+                  >
+                    <Sparkles className="mr-2 size-4" />
+                    {surpriseLoading
+                      ? "Thinking..."
+                      : quantity === 1
+                        ? "Surprise Me"
+                        : `Surprise Me x${quantity}`}
+                  </Button>
+                </div>
+                {quantity === 1 ? (
+                  <Input
+                    value={theme}
+                    onChange={(event) => setTheme(event.target.value)}
+                    placeholder="e.g. Ancient Civilizations, Ocean Creatures, Space Exploration"
+                    className="h-12 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-base text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-14 md:text-lg"
+                  />
+                ) : (
+                  <>
+                    <Textarea
+                      value={themeBatchText}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        const nextThemes = parseThemeBatchLines(nextValue);
+                        setThemeBatchText(nextValue);
+                        setTheme(nextThemes[0] ?? "");
+                      }}
+                      placeholder={"One theme per line.\nAncient Civilizations\nOcean Creatures\nSpace Exploration"}
+                      className="min-h-[210px] rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 py-4 text-base text-[#e4e4e9] placeholder:text-[#6b6d7e] md:min-h-[240px] md:text-lg"
+                    />
+                    <p className="text-sm text-[#9394a5]">
+                      {themeBatchHasDuplicates
+                        ? `Remove duplicate themes in the first ${quantity} lines.`
+                        : selectedThemeBatchLines.length < quantity
+                          ? `${selectedThemeBatchLines.length}/${quantity} themes ready.`
+                          : parsedThemeBatchLines.length > quantity
+                            ? `Using the first ${quantity} themes.`
+                            : `${quantity}/${quantity} themes ready.`}
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {sourceType === "url" ? (
+              <div className="space-y-3">
+                <p className="text-lg font-semibold text-[#9394a5] md:text-xl">Article URL</p>
+                <Input
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder="https://example.com/article"
+                  className="h-12 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-base text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-14 md:text-lg"
                 />
-                <p className="text-sm text-[#9394a5] md:text-base">
-                  {themeBatchHasDuplicates
-                    ? `Remove duplicate themes in the first ${quantity} lines.`
-                    : selectedThemeBatchLines.length < quantity
-                      ? `${selectedThemeBatchLines.length}/${quantity} themes ready.`
-                      : parsedThemeBatchLines.length > quantity
-                        ? `Using the first ${quantity} themes.`
-                        : `${quantity}/${quantity} themes ready.`}
+              </div>
+            ) : null}
+
+            {sourceType === "pdf" ? (
+              <div className="space-y-3">
+                <p className="text-lg font-semibold text-[#9394a5] md:text-xl">
+                  PDF file (max {formatBytes(pdfMaxFileSizeBytes)})
                 </p>
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {sourceType === "url" ? (
-          <div className="space-y-2">
-            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Article URL</p>
-            <Input
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://example.com/article"
-              className="h-14 rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 text-lg text-[#e4e4e9] placeholder:text-[#6b6d7e] md:h-16 md:text-2xl"
-            />
-          </div>
-        ) : null}
-
-        {sourceType === "pdf" ? (
-          <div className="space-y-3">
-            <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
-              PDF file (max {formatBytes(pdfMaxFileSizeBytes)})
-            </p>
-            <div
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragActive(true);
-              }}
-              onDragLeave={() => setIsDragActive(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setIsDragActive(false);
-                const file = event.dataTransfer.files?.[0] ?? null;
-                setPdfFileFromInput(file);
-              }}
-              className={cn(
-                "rounded-3xl border border-dashed p-7 text-center transition md:p-8",
-                isDragActive
-                  ? "border-[#818cf8]/55 bg-[#6c8aff]/12"
-                  : "border-[#252940] bg-[#0f1117]/82",
-              )}
-            >
-              <p className="text-lg text-[#e4e4e9] md:text-2xl">
-                Drag & drop a PDF here, or{" "}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="font-semibold text-[#818cf8] underline"
+                <div
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsDragActive(true);
+                  }}
+                  onDragLeave={() => setIsDragActive(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setIsDragActive(false);
+                    const file = event.dataTransfer.files?.[0] ?? null;
+                    setPdfFileFromInput(file);
+                  }}
+                  className={cn(
+                    "rounded-3xl border border-dashed p-6 text-center transition",
+                    isDragActive
+                      ? "border-[#818cf8]/55 bg-[#6c8aff]/12"
+                      : "border-[#252940] bg-[#0f1117]/82",
+                  )}
                 >
-                  choose file
-                </button>
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf,.pdf"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setPdfFileFromInput(file);
-                }}
-              />
-              {pdfFile ? (
-                <p className="mt-3 text-base text-[#e4e4e9] md:text-lg">
-                  {formatPdfFileName(pdfFile.name)} ({formatBytes(pdfFile.size)})
+                  <p className="text-base text-[#e4e4e9] md:text-lg">
+                    Drag & drop a PDF here, or{" "}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="font-semibold text-[#818cf8] underline"
+                    >
+                      choose file
+                    </button>
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setPdfFileFromInput(file);
+                    }}
+                  />
+                  {pdfFile ? (
+                    <p className="mt-3 text-sm text-[#e4e4e9] md:text-base">
+                      {formatPdfFileName(pdfFile.name)} ({formatBytes(pdfFile.size)})
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/76 p-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+                  Game mode
                 </p>
-              ) : null}
+                <div className="flex flex-wrap gap-2.5">
+                  {modeOptions.map((option) => (
+                    <FilterPill
+                      key={option.value}
+                      isActive={gameMode === option.value}
+                      onClick={() => applyGameMode(option.value)}
+                    >
+                      {option.label}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)] xl:grid-cols-1">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+                    Difficulty
+                  </p>
+                  <div className="flex flex-wrap gap-2.5">
+                    {isWwtbam ? (
+                      <FilterPill isActive onClick={() => undefined}>
+                        Escalating
+                      </FilterPill>
+                    ) : (
+                      difficultyOptions.map((option) => (
+                        <FilterPill
+                          key={option.value}
+                          isActive={difficulty === option.value}
+                          onClick={() => setDifficulty(option.value)}
+                        >
+                          {option.label}
+                        </FilterPill>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-[#9394a5] md:text-base">
+                    Language
+                  </p>
+                  <PlayerSelect
+                    value={language}
+                    onValueChange={setLanguage}
+                    placeholder="Select language"
+                    options={languageOptions}
+                    widthClassName="w-full"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        ) : null}
-
-        <div className="space-y-3">
-          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Game Mode</p>
-          <div className="flex flex-wrap gap-3">
-            {modeOptions.map((option) => (
-              <FilterPill
-                key={option.value}
-                isActive={gameMode === option.value}
-                onClick={() => applyGameMode(option.value)}
-              >
-                {option.label}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Difficulty</p>
-          <div className="flex flex-wrap gap-3">
-            {isWwtbam ? (
-              <FilterPill isActive onClick={() => undefined}>
-                Escalating
-              </FilterPill>
-            ) : (
-              difficultyOptions.map((option) => (
-                <FilterPill
-                  key={option.value}
-                  isActive={difficulty === option.value}
-                  onClick={() => setDifficulty(option.value)}
-                >
-                  {option.label}
-                </FilterPill>
-              ))
-            )}
-          </div>
-          {isWwtbam ? (
-            <p className="text-sm text-[#9394a5] md:text-base">
-              WWTBAM always uses escalating difficulty.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Language</p>
-          <PlayerSelect
-            value={language}
-            onValueChange={setLanguage}
-            placeholder="Select language"
-            options={languageOptions}
-            widthClassName="w-full sm:w-72"
-          />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
-            <p className="text-sm uppercase tracking-wide text-[#9394a5]">Requested</p>
-            <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">{quantity}</p>
-          </div>
-          {effectiveBillingMode === "platform_credits" ? (
-            <>
-              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
-                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Unit Cost</p>
-                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
-                  {formatUsd(generationCostCents)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
-                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Estimated Total</p>
-                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
-                  {formatUsd(estimatedTotalCostCents)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
-                <p className="text-sm uppercase tracking-wide text-[#9394a5]">Can Start Now</p>
-                <p className="mt-2 text-2xl font-black text-[#e4e4e9] md:text-3xl">
-                  {affordableGenerationCount}
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4 md:col-span-1 xl:col-span-3">
-              <p className="text-sm uppercase tracking-wide text-[#9394a5]">Billing</p>
-              <p className="mt-2 text-lg text-[#e4e4e9] md:text-xl">
-                Using your API key for {quantity} {quantityLabel}.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            disabled={!canGenerate}
-            onClick={() => void startGeneration()}
-            className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-7 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
-          >
-            {submitting
-              ? quantity === 1
-                ? "Starting..."
-                : `Starting ${quantity} quizzes...`
-              : effectiveBillingMode === "platform_credits"
-                ? quantity === 1
-                  ? `Generate (${formatUsd(generationCostCents)})`
-                  : `Generate ${quantity} quizzes (${formatUsd(estimatedTotalCostCents)})`
-                : quantity === 1
-                  ? "Generate"
-                  : `Generate ${quantity} quizzes`}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-7 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
-            onClick={() => router.push("/dashboard")}
-          >
-            Back to Dashboard
-          </Button>
         </div>
 
         {statusMessage ? (
-          <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-base text-rose-200 md:text-lg">
+          <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200 md:text-base">
             {statusMessage}
           </p>
         ) : null}
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              type="button"
+              disabled={!canGenerate}
+              onClick={() => void startGeneration()}
+              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-8 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:min-w-[280px] md:text-xl"
+            >
+              {submitting
+                ? quantity === 1
+                  ? "Starting..."
+                  : `Starting ${quantity} quizzes...`
+                : quantity === 1
+                  ? "Generate"
+                  : `Generate ${quantity} quizzes`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-7 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
+              onClick={() => router.push("/dashboard")}
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
       </section>
 
       <Dialog open={partialBalanceModalOpen} onOpenChange={setPartialBalanceModalOpen}>
