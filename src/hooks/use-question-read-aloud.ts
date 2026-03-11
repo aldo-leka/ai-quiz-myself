@@ -49,6 +49,7 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
   const objectUrlRef = useRef<string | null>(null);
   const autoPlayedKeyRef = useRef<string | null>(null);
   const playRunIdRef = useRef(0);
+  const prefetchedAudioUrlsRef = useRef<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
@@ -96,8 +97,11 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
         }
 
         setActiveSegmentId(segment.id);
-        setIsLoading(true);
         setIsPlaying(false);
+
+        const hasPrefetchedAudio =
+          Boolean(segment.audioUrl) && prefetchedAudioUrlsRef.current.has(segment.audioUrl);
+        setIsLoading(!hasPrefetchedAudio);
 
         let audio: HTMLAudioElement;
 
@@ -196,6 +200,41 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
     setError(null);
     autoPlayedKeyRef.current = null;
   }, [playbackKey, stop]);
+
+  useEffect(() => {
+    if (!playbackKey) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    for (const segment of segments) {
+      if (!segment.audioUrl || prefetchedAudioUrlsRef.current.has(segment.audioUrl)) {
+        continue;
+      }
+
+      void fetch(segment.audioUrl, {
+        method: "GET",
+        cache: "force-cache",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+
+          await response.blob();
+          prefetchedAudioUrlsRef.current.add(segment.audioUrl!);
+        })
+        .catch(() => {
+          // Ignore failed prefetches and fall back to loading during playback.
+        });
+    }
+
+    return () => {
+      controller.abort();
+    };
+  }, [playbackKey, segments]);
 
   useEffect(() => {
     if (!autoPlayEnabled || !playbackKey || segments.length === 0) {
