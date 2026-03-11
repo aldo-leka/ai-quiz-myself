@@ -355,11 +355,26 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     const endpoint = `/api/quiz/${quiz.id}/questions/${currentQuestion.id}/tts`;
     const options = currentQuestion.options.map((option) => option.text);
+    const buildAudioUrl = (segment: "question" | "options") => {
+      const searchParams = new URLSearchParams({
+        segment,
+        position: String(currentQuestionIndex + 1),
+      });
+
+      if (segment === "options") {
+        for (const option of options) {
+          searchParams.append("option", option);
+        }
+      }
+
+      return `${endpoint}?${searchParams.toString()}`;
+    };
 
     return [
       {
         id: "question",
         url: endpoint,
+        audioUrl: buildAudioUrl("question"),
         body: {
           segment: "question",
           position: currentQuestionIndex + 1,
@@ -370,6 +385,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       {
         id: "options",
         url: endpoint,
+        audioUrl: buildAudioUrl("options"),
         body: {
           segment: "options",
           position: currentQuestionIndex + 1,

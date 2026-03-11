@@ -30,6 +30,12 @@ const requestSchema = z.object({
   options: z.array(z.string().trim().min(1).max(500)).max(4).optional(),
 });
 
+const searchSchema = z.object({
+  segment: z.enum(["question", "options"]),
+  position: z.coerce.number().int().min(1).max(500),
+  option: z.union([z.string().trim().min(1).max(500), z.array(z.string().trim().min(1).max(500))]).optional(),
+});
+
 function toAudioResponse(buffer: Buffer, contentType: string) {
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
@@ -53,52 +59,36 @@ function buildSpeechText(payload: z.infer<typeof requestSchema>): string {
   });
 }
 
-export async function POST(request: Request, { params }: RouteContext) {
-  const { quizId, questionId } = await params;
-
-  if (!process.env.OPENAI_API_KEY?.trim()) {
-    return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
-  }
-
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid text-to-speech payload", issues: parsed.error.issues },
-      { status: 400 },
-    );
-  }
-
-  if (parsed.data.segment === "options" && (!parsed.data.options || parsed.data.options.length === 0)) {
-    return NextResponse.json({ error: "Options narration requires at least one option." }, { status: 400 });
-  }
-
+async function loadQuestionContext(quizId: string, questionId: string) {
   const [row] = await db
     .select({
       gameMode: quizzes.gameMode,
+      questionText: questions.questionText,
     })
     .from(questions)
     .innerJoin(quizzes, eq(questions.quizId, quizzes.id))
     .where(and(eq(quizzes.id, quizId), eq(questions.id, questionId)))
     .limit(1);
 
-  if (!row) {
-    return NextResponse.json({ error: "Question not found" }, { status: 404 });
-  }
+  return row;
+}
 
-  const gameMode = row.gameMode as SupportedQuizGameMode;
-  const segment = parsed.data.segment as QuizTtsSegment;
-  const speechText = buildSpeechText(parsed.data);
+async function respondWithNarration(params: {
+  gameMode: SupportedQuizGameMode;
+  segment: QuizTtsSegment;
+  speechText: string;
+}) {
   const model = getQuizTtsModel();
-  const voice = getQuizTtsVoice(gameMode);
+  const voice = getQuizTtsVoice(params.gameMode);
   const format = getQuizTtsFormat();
   const contentType = getQuizTtsContentType(format);
   const objectKey = buildQuizTtsObjectKey({
-    segment,
-    gameMode,
+    segment: params.segment,
+    gameMode: params.gameMode,
     model,
     voice,
     format,
-    speechText,
+    speechText: params.speechText,
   });
 
   if (isR2Configured()) {
@@ -112,8 +102,8 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   try {
     const audio = await synthesizeQuizSpeech({
-      gameMode,
-      speechText,
+      gameMode: params.gameMode,
+      speechText: params.speechText,
     });
 
     if (isR2Configured()) {
@@ -138,4 +128,86 @@ export async function POST(request: Request, { params }: RouteContext) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: Request, { params }: RouteContext) {
+  const { quizId, questionId } = await params;
+
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
+  }
+
+  const url = new URL(request.url);
+  const parsed = searchSchema.safeParse({
+    segment: url.searchParams.get("segment"),
+    position: url.searchParams.get("position"),
+    option: url.searchParams.getAll("option"),
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid text-to-speech query", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+
+  const row = await loadQuestionContext(quizId, questionId);
+  if (!row) {
+    return NextResponse.json({ error: "Question not found" }, { status: 404 });
+  }
+
+  const options = Array.isArray(parsed.data.option)
+    ? parsed.data.option
+    : parsed.data.option
+      ? [parsed.data.option]
+      : [];
+
+  if (parsed.data.segment === "options" && options.length === 0) {
+    return NextResponse.json({ error: "Options narration requires at least one option." }, { status: 400 });
+  }
+
+  const payload = {
+    segment: parsed.data.segment,
+    position: parsed.data.position,
+    questionText: row.questionText,
+    options,
+  } satisfies z.infer<typeof requestSchema>;
+
+  return respondWithNarration({
+    gameMode: row.gameMode as SupportedQuizGameMode,
+    segment: payload.segment as QuizTtsSegment,
+    speechText: buildSpeechText(payload),
+  });
+}
+
+export async function POST(request: Request, { params }: RouteContext) {
+  const { quizId, questionId } = await params;
+
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
+  }
+
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid text-to-speech payload", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+
+  if (parsed.data.segment === "options" && (!parsed.data.options || parsed.data.options.length === 0)) {
+    return NextResponse.json({ error: "Options narration requires at least one option." }, { status: 400 });
+  }
+
+  const row = await loadQuestionContext(quizId, questionId);
+
+  if (!row) {
+    return NextResponse.json({ error: "Question not found" }, { status: 404 });
+  }
+
+  return respondWithNarration({
+    gameMode: row.gameMode as SupportedQuizGameMode,
+    segment: parsed.data.segment as QuizTtsSegment,
+    speechText: buildSpeechText(parsed.data),
+  });
 }

@@ -13,6 +13,7 @@ export type ReadAloudSegment = {
   id: string;
   url: string;
   body: Record<string, unknown>;
+  audioUrl?: string;
 };
 
 type UseQuestionReadAloudParams = {
@@ -21,6 +22,26 @@ type UseQuestionReadAloudParams = {
   autoPlayEnabled: boolean;
   onSegmentEnd?: (segmentId: string) => void;
 };
+
+function mediaErrorMessage(audio: HTMLAudioElement): string {
+  const mediaError = audio.error;
+  if (!mediaError) {
+    return "Could not play narration audio.";
+  }
+
+  switch (mediaError.code) {
+    case MediaError.MEDIA_ERR_ABORTED:
+      return "Narration playback was interrupted.";
+    case MediaError.MEDIA_ERR_NETWORK:
+      return "Narration audio could not be loaded from the network.";
+    case MediaError.MEDIA_ERR_DECODE:
+      return "This device could not decode the narration audio.";
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      return "This device does not support the narration audio source.";
+    default:
+      return "Could not play narration audio.";
+  }
+}
 
 export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
   const { segments, playbackKey, autoPlayEnabled, onSegmentEnd } = params;
@@ -78,49 +99,57 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
         setIsLoading(true);
         setIsPlaying(false);
 
-        const response = await fetch(segment.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(segment.body),
-        });
+        let audio: HTMLAudioElement;
 
-        if (!response.ok) {
-          const raw = await response.text();
-          let message = `Failed to load narration audio (HTTP ${response.status})`;
+        if (segment.audioUrl) {
+          teardownAudio();
+          audio = new Audio(segment.audioUrl);
+        } else {
+          const response = await fetch(segment.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(segment.body),
+          });
 
-          try {
-            const payload = raw ? (JSON.parse(raw) as { error?: string }) : {};
-            if (payload.error) {
-              message = payload.error;
-            } else if (raw && !raw.startsWith("<!DOCTYPE")) {
-              message = raw.slice(0, 180);
+          if (!response.ok) {
+            const raw = await response.text();
+            let message = `Failed to load narration audio (HTTP ${response.status})`;
+
+            try {
+              const payload = raw ? (JSON.parse(raw) as { error?: string }) : {};
+              if (payload.error) {
+                message = payload.error;
+              } else if (raw && !raw.startsWith("<!DOCTYPE")) {
+                message = raw.slice(0, 180);
+              }
+            } catch {
+              if (raw && !raw.startsWith("<!DOCTYPE")) {
+                message = raw.slice(0, 180);
+              }
             }
-          } catch {
-            if (raw && !raw.startsWith("<!DOCTYPE")) {
-              message = raw.slice(0, 180);
-            }
+
+            throw new Error(message);
           }
 
-          throw new Error(message);
+          const blob = await response.blob();
+          if (runId !== playRunIdRef.current) {
+            return;
+          }
+
+          teardownAudio();
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrlRef.current = objectUrl;
+          audio = new Audio(objectUrl);
         }
 
-        const blob = await response.blob();
-        if (runId !== playRunIdRef.current) {
-          return;
-        }
-
-        teardownAudio();
-        const objectUrl = URL.createObjectURL(blob);
-        objectUrlRef.current = objectUrl;
-
-        const audio = new Audio(objectUrl);
         audioRef.current = audio;
+        audio.preload = "auto";
 
         await new Promise<void>((resolve, reject) => {
           audio.onended = () => resolve();
-          audio.onerror = () => reject(new Error("Could not play narration audio."));
+          audio.onerror = () => reject(new Error(mediaErrorMessage(audio)));
           audio
             .play()
             .then(() => {
