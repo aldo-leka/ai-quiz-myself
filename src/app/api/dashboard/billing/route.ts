@@ -12,8 +12,10 @@ import {
   AUTO_RECHARGE_THRESHOLD_MAX_CENTS,
   AUTO_RECHARGE_THRESHOLD_MIN_CENTS,
   BASE_GENERATION_COST_CENTS,
-  computeGenerationCostCents,
-  parsePositiveInt,
+  LEGACY_AI_GENERATION_COST_SETTING_KEY,
+  LEGACY_PDF_GENERATION_COST_SETTING_KEY,
+  QUIZ_GENERATION_COST_SETTING_KEY,
+  resolveGenerationCostCentsFromSettings,
 } from "@/lib/billing";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
@@ -72,7 +74,11 @@ export async function GET() {
       })
       .from(platformSettings)
       .where(
-        inArray(platformSettings.key, ["credit_cost_ai_generation", "credit_cost_pdf_generation"]),
+        inArray(platformSettings.key, [
+          QUIZ_GENERATION_COST_SETTING_KEY,
+          LEGACY_AI_GENERATION_COST_SETTING_KEY,
+          LEGACY_PDF_GENERATION_COST_SETTING_KEY,
+        ]),
       ),
     db
       .select({ id: apiKeys.id })
@@ -99,12 +105,7 @@ export async function GET() {
       .limit(1),
   ]);
 
-  const aiSetting = settingRows.find((row) => row.key === "credit_cost_ai_generation")?.value;
-  const pdfSetting = settingRows.find((row) => row.key === "credit_cost_pdf_generation")?.value;
-  const aiMultiplier = parsePositiveInt(aiSetting, 1);
-  const pdfMultiplier = parsePositiveInt(pdfSetting, 1);
-  const standardGenerationCostCents = computeGenerationCostCents(aiMultiplier);
-  const pdfGenerationCostCents = computeGenerationCostCents(pdfMultiplier);
+  const generationCostCents = resolveGenerationCostCentsFromSettings(settingRows);
 
   return NextResponse.json({
     balanceCents: Number(creditRow[0]?.balanceCents ?? 0),
@@ -113,8 +114,8 @@ export async function GET() {
       userRow[0]?.stripeCustomerId?.startsWith("cus_") &&
       userRow[0]?.stripePaymentMethodId?.startsWith("pm_"),
     ),
-    standardGenerationCostCents,
-    pdfGenerationCostCents,
+    standardGenerationCostCents: generationCostCents,
+    pdfGenerationCostCents: generationCostCents,
     baseGenerationCostCents: BASE_GENERATION_COST_CENTS,
     autoRecharge: {
       enabled: autoRechargeRow[0]?.enabled ?? false,

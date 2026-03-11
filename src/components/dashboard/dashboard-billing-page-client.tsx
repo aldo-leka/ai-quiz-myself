@@ -305,8 +305,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                 </p>
                 <p className="text-5xl font-black text-[#e4e4e9] md:text-6xl">{centsToUsd(data.balanceCents)}</p>
                 <p className="text-base text-[#9394a5] md:text-lg">
-                  Standard quiz cost: {centsToUsd(data.standardGenerationCostCents)} | PDF:{" "}
-                  {centsToUsd(data.pdfGenerationCostCents)}
+                  Quiz generation cost: {centsToUsd(data.standardGenerationCostCents)}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">

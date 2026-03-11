@@ -1,6 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import {
+  BASE_GENERATION_COST_CENTS,
+  QUIZ_GENERATION_COST_SETTING_KEY,
+  centsFromDollars,
+  dollarsFromCents,
+  formatUsdCents,
+} from "@/lib/billing";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,24 +17,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-type SettingRow = {
-  key: string;
-  value: string;
-  description: string | null;
-  updatedAt: string;
-};
 
 type AdminPricingPageClientProps = {
-  initialSettings: SettingRow[];
+  initialGenerationCostCents: number;
+  initialUpdatedAt: string | null;
 };
 
 type SettingsPatchResponse = {
@@ -40,17 +33,38 @@ type SettingsPatchResponse = {
   error?: string;
 };
 
-export function AdminPricingPageClient({ initialSettings }: AdminPricingPageClientProps) {
-  const [settings, setSettings] = useState<SettingRow[]>(initialSettings);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+function formatTimestamp(value: string | null): string {
+  if (!value) return "Not saved yet";
+  return new Date(value).toLocaleString();
+}
+
+export function AdminPricingPageClient({
+  initialGenerationCostCents,
+  initialUpdatedAt,
+}: AdminPricingPageClientProps) {
+  const [generationCostInput, setGenerationCostInput] = useState(
+    dollarsFromCents(initialGenerationCostCents).toFixed(2),
+  );
+  const [generationCostCents, setGenerationCostCents] = useState(initialGenerationCostCents);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(initialUpdatedAt);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  async function saveSetting(key: string) {
-    const row = settings.find((setting) => setting.key === key);
-    if (!row) return;
+  async function savePricing() {
+    const normalized = generationCostInput.trim().replace(",", ".");
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setStatus("Enter a valid dollar amount greater than 0.");
+      return;
+    }
 
-    const snapshot = settings;
-    setSavingKey(key);
+    const nextCostCents = centsFromDollars(parsed);
+    if (nextCostCents <= 0) {
+      setStatus("Enter a valid dollar amount greater than 0.");
+      return;
+    }
+
+    setSaving(true);
     setStatus(null);
 
     try {
@@ -62,9 +76,9 @@ export function AdminPricingPageClient({ initialSettings }: AdminPricingPageClie
         body: JSON.stringify({
           updates: [
             {
-              key: row.key,
-              value: row.value,
-              description: row.description,
+              key: QUIZ_GENERATION_COST_SETTING_KEY,
+              value: String(nextCostCents),
+              description: "Universal platform credit cost in cents for one quiz generation.",
             },
           ],
         }),
@@ -75,18 +89,19 @@ export function AdminPricingPageClient({ initialSettings }: AdminPricingPageClie
         throw new Error(payload.error ?? "Failed to save setting");
       }
 
-      const updated = payload.settings.find((setting) => setting.key === key);
+      const updated = payload.settings.find(
+        (setting) => setting.key === QUIZ_GENERATION_COST_SETTING_KEY,
+      );
       if (updated) {
-        setSettings((previous) =>
-          previous.map((setting) => (setting.key === key ? updated : setting)),
-        );
+        setGenerationCostCents(Number.parseInt(updated.value, 10) || nextCostCents);
+        setGenerationCostInput((Number.parseInt(updated.value, 10) / 100).toFixed(2));
+        setUpdatedAt(updated.updatedAt);
       }
-      setStatus("Setting updated.");
+      setStatus("Pricing updated.");
     } catch (error) {
-      setSettings(snapshot);
       setStatus(error instanceof Error ? error.message : "Failed to save setting");
     } finally {
-      setSavingKey(null);
+      setSaving(false);
     }
   }
 
@@ -94,89 +109,56 @@ export function AdminPricingPageClient({ initialSettings }: AdminPricingPageClie
     <main className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Credit Economy</CardTitle>
+          <CardTitle>Quiz Generation Pricing</CardTitle>
           <CardDescription>
-            Manage credit cost settings used by QuizPlus actions.
+            Set one universal platform credit price for quiz generation.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600">
-            Purchase prices (real money to wallet balance) are managed in Stripe.
+            This price applies across theme, URL, and PDF quiz generation immediately.
           </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Platform Settings</CardTitle>
-          <CardDescription>Update credit costs inline per action.</CardDescription>
+          <CardTitle>Live Price</CardTitle>
+          <CardDescription>
+            Default fallback is {formatUsdCents(BASE_GENERATION_COST_CENTS)} if no admin price has
+            been saved yet.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Key</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {settings.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5}>No settings found.</TableCell>
-                </TableRow>
-              ) : (
-                settings.map((setting) => (
-                  <TableRow key={setting.key}>
-                    <TableCell className="font-mono text-xs">{setting.key}</TableCell>
-                    <TableCell className="w-[120px]">
-                      <Input
-                        value={setting.value}
-                        onChange={(event) =>
-                          setSettings((previous) =>
-                            previous.map((row) =>
-                              row.key === setting.key
-                                ? { ...row, value: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={setting.description ?? ""}
-                        onChange={(event) =>
-                          setSettings((previous) =>
-                            previous.map((row) =>
-                              row.key === setting.key
-                                ? { ...row, description: event.target.value || null }
-                                : row,
-                            ),
-                          )
-                        }
-                        placeholder="Optional description"
-                      />
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-500">
-                      {new Date(setting.updatedAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        disabled={savingKey === setting.key}
-                        onClick={() => void saveSetting(setting.key)}
-                      >
-                        {savingKey === setting.key ? "Saving..." : "Save"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">Price in USD</p>
+                <Input
+                  value={generationCostInput}
+                  onChange={(event) => setGenerationCostInput(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.30"
+                />
+              </div>
+              <Button disabled={saving} onClick={() => void savePricing()}>
+                {saving ? "Saving..." : "Save pricing"}
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-700">Current live price</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-950">
+                {formatUsdCents(generationCostCents)}
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Stored as {generationCostCents} cents in `{QUIZ_GENERATION_COST_SETTING_KEY}`.
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Last updated: {formatTimestamp(updatedAt)}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

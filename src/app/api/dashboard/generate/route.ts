@@ -1,12 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { creditTransactions, credits, platformSettings, quizGenerationJobs } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import {
-  computeGenerationCostCents,
-  parsePositiveInt,
+  LEGACY_AI_GENERATION_COST_SETTING_KEY,
+  LEGACY_PDF_GENERATION_COST_SETTING_KEY,
+  QUIZ_GENERATION_COST_SETTING_KEY,
+  resolveGenerationCostCentsFromSettings,
   type GenerationBillingMode,
 } from "@/lib/billing";
 import { isR2Configured } from "@/lib/r2";
@@ -352,14 +354,13 @@ export async function POST(request: Request) {
       })
       .from(platformSettings)
       .where(
-        eq(
-          platformSettings.key,
-          payload.sourceType === "pdf"
-            ? "credit_cost_pdf_generation"
-            : "credit_cost_ai_generation",
-        ),
+        inArray(platformSettings.key, [
+          QUIZ_GENERATION_COST_SETTING_KEY,
+          LEGACY_AI_GENERATION_COST_SETTING_KEY,
+          LEGACY_PDF_GENERATION_COST_SETTING_KEY,
+        ]),
       )
-      .limit(1),
+      .limit(3),
     db
       .select({
         balanceCents: credits.balanceCents,
@@ -370,8 +371,7 @@ export async function POST(request: Request) {
   ]);
 
   const userRow = userRows[0];
-  const generationMultiplier = parsePositiveInt(settingRows[0]?.value, 1);
-  const generationCostCents = computeGenerationCostCents(generationMultiplier);
+  const generationCostCents = resolveGenerationCostCentsFromSettings(settingRows);
   const walletBalanceCents = Number(walletRows[0]?.balanceCents ?? 0);
 
   const billingMode = resolveBillingMode({
