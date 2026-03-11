@@ -63,6 +63,15 @@ type HostNarrationStage =
   | "manual"
   | "idle";
 
+const REVEAL_FEEDBACK_MIN_MS = 1500;
+const FINAL_LOCK_SUSPENSE_MIN_MS = 1000;
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function buildHostAudioUrl(text: string) {
   const params = new URLSearchParams({
     text,
@@ -707,6 +716,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
 
     revealAnswer();
+    await wait(REVEAL_FEEDBACK_MIN_MS);
+    await handleNextQuestion();
   }
 
   async function handleFiftyFifty() {
@@ -782,6 +793,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     setFinalAnswerLocked(true);
     setOptionsDisabled(true);
     stopTimer();
+    const minimumSuspenseDelay = wait(FINAL_LOCK_SUSPENSE_MIN_MS);
 
     const narrationResult = await playOptionalHostNarration([
       buildHostAudioUrl(buildFinalLockScript(`${quiz.id}:${currentQuestion.id}:lock:${selectedAnswerIndex}`)),
@@ -791,7 +803,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
+    await minimumSuspenseDelay;
     revealAnswer();
+    const minimumRevealDelay = wait(REVEAL_FEEDBACK_MIN_MS);
 
     const isCorrect = selectedAnswerIndex === currentQuestion.correctOptionIndex;
     const resultText = isCorrect
@@ -810,6 +824,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
+    await minimumRevealDelay;
     await handleNextQuestion();
   }
 
@@ -1129,12 +1144,12 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         />
         <div
           className={cn(
-            "grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]",
-            compactLayout && "lg:grid-cols-1",
+            "grid gap-6 lg:grid-cols-[minmax(0,85%)_minmax(11rem,15%)] lg:items-stretch lg:gap-0",
+            compactLayout && "lg:gap-0",
           )}
         >
-          <section className="space-y-5 md:space-y-6">
-            <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
+          <section className="space-y-5 md:space-y-6 lg:space-y-0">
+            <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e] lg:h-full lg:rounded-r-none lg:border-r-0">
               <SlantedBar
                 value={Math.max(0, timerPercentage)}
                 className="h-3 border-x-0 border-t-0 md:h-4"
@@ -1242,8 +1257,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                         state={
                           isCorrect
                             ? "correct"
-                            : isWrongSelected || (selected && finalAnswerLocked && !revealedAnswer)
-                              ? "orange"
+                            : isWrongSelected
+                              ? "wrong"
+                              : selected && finalAnswerLocked && !revealedAnswer
+                                ? "orange"
                               : selected
                                 ? "selected"
                                 : "default"
@@ -1257,25 +1274,30 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 </div>
                 <div ref={questionViewportAnchorRef} className="h-px" />
 
-                {selectedAnswerIndex !== null && !revealedAnswer ? (
-                  <div className="flex items-center justify-between gap-4">
-                    <p className={cn("text-sm font-semibold text-[#9394a5] md:text-2xl", compactLayout && "md:text-base")}>
-                      Lock in your final answer?
-                    </p>
-                    <CircularButton
-                      ref={registerFocusControlRef("final")}
-                      focused={focusedControl === "final"}
-                      selected={finalAnswerLocked}
-                      disabled={finalAnswerLocked}
-                      onClick={() => void confirmFinalAnswer()}
-                    >
-                      Final
-                    </CircularButton>
-                  </div>
-                ) : null}
+                <div className="flex min-h-16 items-center justify-end">
+                  {selectedAnswerIndex !== null && !revealedAnswer ? (
+                    <div className="flex items-center justify-end gap-3">
+                      <p
+                        className={cn(
+                          "text-sm font-semibold text-[#9394a5] md:text-2xl",
+                          compactLayout && "md:text-base",
+                        )}
+                      >
+                        Lock in your final answer?
+                      </p>
+                      <CircularButton
+                        ref={registerFocusControlRef("final")}
+                        focused={focusedControl === "final"}
+                        selected={finalAnswerLocked}
+                        disabled={finalAnswerLocked}
+                        onClick={() => void confirmFinalAnswer()}
+                      >
+                        Final
+                      </CircularButton>
+                    </div>
+                  ) : null}
 
-                {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
-                  <div className="flex items-center justify-end">
+                  {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
                     <CircularButton
                       ref={registerFocusControlRef("cashout")}
                       focused={focusedControl === "cashout"}
@@ -1283,8 +1305,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                     >
                       Cash Out
                     </CircularButton>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
@@ -1350,9 +1372,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             </article>
           </section>
 
-          <aside className="rounded-3xl border border-[#252940] bg-[#1a1d2e] p-4 lg:sticky lg:top-6 lg:h-fit">
-            <h2 className="mb-3 text-lg font-bold text-amber-300 md:text-xl">Money Ladder</h2>
-            <div className="grid gap-2">
+          <aside className="rounded-3xl border border-[#252940] bg-[#1a1d2e] p-2 lg:h-full lg:rounded-l-none lg:border-l">
+            <div className="grid h-full gap-1.5 content-stretch">
               {moneyLadderDisplay.map(([index, amount]) => {
                 const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
                 const isCurrent = index === currentQuestionIndex;
@@ -1362,7 +1383,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   <div
                     key={amount}
                     className={cn(
-                      "flex min-h-0 items-center justify-between rounded-xl border px-3 py-2 text-sm font-semibold md:text-base",
+                      "flex min-h-0 items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs font-semibold md:text-sm lg:flex-1 lg:text-xs",
                       isCurrent
                         ? "border-amber-300 bg-amber-400/20 text-amber-200"
                         : isPassed
@@ -1371,7 +1392,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                       isCheckpoint && "shadow-[0_0_0_2px_rgba(250,204,21,0.35)]",
                     )}
                   >
-                    <span className="text-xs uppercase tracking-[0.18em] text-[#9394a5]">
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-[#9394a5]">
                       {index + 1}
                     </span>
                     <span>{formatMoney(amount)}</span>
