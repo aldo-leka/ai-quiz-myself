@@ -114,15 +114,17 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
         setActiveSegmentId(segment.id);
         setIsPlaying(false);
 
-        const hasPrefetchedAudio =
-          Boolean(segment.audioUrl) && prefetchedAudioUrlsRef.current.has(segment.audioUrl);
+        const audioUrl = segment.audioUrl;
+        const hasPrefetchedAudio = audioUrl
+          ? prefetchedAudioUrlsRef.current.has(audioUrl)
+          : false;
         setIsLoading(!hasPrefetchedAudio);
 
         let audio: HTMLAudioElement;
 
-        if (segment.audioUrl) {
+        if (audioUrl) {
           teardownAudio();
-          audio = new Audio(segment.audioUrl);
+          audio = new Audio(audioUrl);
         } else {
           const response = await fetch(segment.url, {
             method: "POST",
@@ -224,11 +226,12 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
     const controller = new AbortController();
 
     for (const segment of segments) {
-      if (!segment.audioUrl || prefetchedAudioUrlsRef.current.has(segment.audioUrl)) {
+      const audioUrl = segment.audioUrl;
+      if (!audioUrl || prefetchedAudioUrlsRef.current.has(audioUrl)) {
         continue;
       }
 
-      void fetch(segment.audioUrl, {
+      void fetch(audioUrl, {
         method: "GET",
         cache: "force-cache",
         signal: controller.signal,
@@ -239,7 +242,7 @@ export function useQuestionReadAloud(params: UseQuestionReadAloudParams) {
           }
 
           await response.blob();
-          prefetchedAudioUrlsRef.current.add(segment.audioUrl!);
+          prefetchedAudioUrlsRef.current.add(audioUrl);
         })
         .catch(() => {
           // Ignore failed prefetches and fall back to loading during playback.
