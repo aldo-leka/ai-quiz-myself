@@ -3,7 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function toErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "NotAllowedError") {
+    return "This browser blocked audio autoplay. Tap Read aloud to start the voice manually.";
+  }
+
   if (error instanceof Error && error.message) {
+    const message = error.message.trim();
+    const lowerMessage = message.toLowerCase();
+
+    if (
+      lowerMessage.includes("notallowederror") ||
+      lowerMessage.includes("not allowed by the user agent") ||
+      lowerMessage.includes("user denied permission")
+    ) {
+      return "This browser blocked audio autoplay. Tap Read aloud to start the voice manually.";
+    }
+
     return error.message;
   }
   return "Read aloud is unavailable right now.";
