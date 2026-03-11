@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { GameButton } from "@/components/quiz/GameButton";
 import { FilterPill } from "@/components/quiz/FilterPill";
-import { QuizCard } from "@/components/quiz/QuizCard";
+import { QuizCard, type QuizCardGenerationProvider } from "@/components/quiz/QuizCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +20,7 @@ type HubQuiz = {
   theme: string;
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
   gameMode: "single" | "wwtbam" | "couch_coop";
+  generationProvider: QuizCardGenerationProvider | null;
   questionCount: number;
   playCount: number;
   likes: number;
@@ -761,6 +762,7 @@ function HomePageContent() {
                       theme={quiz.theme}
                       difficulty={quiz.difficulty}
                       gameMode={quiz.gameMode}
+                      generationProvider={quiz.generationProvider}
                       questionCount={quiz.questionCount}
                       playCount={quiz.playCount}
                       likeRatio={quiz.likeRatio}

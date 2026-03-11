@@ -15,6 +15,18 @@ export type UserApiKeyRecord = {
   apiKey: string;
 };
 
+export function getLanguageModelName(provider: ProviderName): string {
+  if (provider === "openai") {
+    return process.env.OPENAI_MODEL ?? "gpt-5-nano";
+  }
+
+  if (provider === "anthropic") {
+    return process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+  }
+
+  return process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview";
+}
+
 export async function resolveUserApiKey(
   userId: string,
   apiKeyId?: string,
@@ -70,14 +82,14 @@ export async function resolveUserApiKey(
 export function getLanguageModel(provider: ProviderName, apiKey: string): LanguageModel {
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
-    return openai(process.env.OPENAI_MODEL ?? "gpt-5-nano");
+    return openai(getLanguageModelName(provider));
   }
 
   if (provider === "anthropic") {
     const anthropic = createAnthropic({ apiKey });
-    return anthropic(process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6");
+    return anthropic(getLanguageModelName(provider));
   }
 
   const google = createGoogleGenerativeAI({ apiKey });
-  return google(process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview");
+  return google(getLanguageModelName(provider));
 }

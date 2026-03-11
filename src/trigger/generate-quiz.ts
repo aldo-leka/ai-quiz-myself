@@ -20,7 +20,7 @@ import {
 import { extractPdfSourceText } from "@/lib/pdf-extraction";
 import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
-import { getLanguageModel, resolveUserApiKey } from "@/lib/user-api-keys";
+import { getLanguageModel, getLanguageModelName, resolveUserApiKey } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
 import { reviewHubCandidateTask } from "@/trigger/review-hub-candidates";
 
@@ -30,6 +30,7 @@ const taskPayloadSchema = z.object({
 
 const jobInputSchema = z.object({
   theme: z.string().min(2).optional(),
+  displayTheme: z.string().min(2).optional(),
   url: z.string().url().optional(),
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
@@ -44,10 +45,40 @@ const jobInputSchema = z.object({
   fileSizeBytes: z.number().int().positive().optional(),
   pdfBase64: z.string().min(1).optional(),
   pdfObjectKey: z.string().min(1).optional(),
+  batchIndex: z.number().int().positive().optional(),
+  batchSize: z.number().int().positive().optional(),
 });
 
-type GenerationSourceType = "theme" | "url" | "pdf";
-type JobInput = z.infer<typeof jobInputSchema>;
+export type GenerationSourceType = "theme" | "url" | "pdf";
+export type JobInput = z.infer<typeof jobInputSchema>;
+export type LoadedGenerationJob = {
+  id: string;
+  userId: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  quizId: string | null;
+  sourceType: GenerationSourceType;
+  inputData: unknown;
+};
+type ResolvedGenerationCredentials = {
+  provider: "openai" | "anthropic" | "google";
+  apiKey: string;
+  modelName: string;
+  model: ReturnType<typeof getLanguageModel>;
+};
+type RunGenerateQuizJobResult =
+  | {
+    ok: true;
+    jobId: string;
+    quizId: string;
+    duplicate: boolean;
+    hubCandidateId: string | null;
+    questionTexts: string[];
+  }
+  | {
+    ok: false;
+    jobId: string;
+    error: string;
+  };
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -87,11 +118,13 @@ async function setJobStatus(
     .where(eq(quizGenerationJobs.id, jobId));
 }
 
-async function loadJob(jobId: string) {
+export async function loadGenerationJob(jobId: string): Promise<LoadedGenerationJob | null> {
   const [job] = await db
     .select({
       id: quizGenerationJobs.id,
       userId: quizGenerationJobs.userId,
+      status: quizGenerationJobs.status,
+      quizId: quizGenerationJobs.quizId,
       sourceType: quizGenerationJobs.sourceType,
       inputData: quizGenerationJobs.inputData,
     })
@@ -102,7 +135,7 @@ async function loadJob(jobId: string) {
   return job ?? null;
 }
 
-function parseInputData(inputData: unknown): JobInput {
+export function parseInputData(inputData: unknown): JobInput {
   const parsed = jobInputSchema.safeParse(inputData);
   if (!parsed.success) {
     throw new Error("Invalid quiz generation payload");
@@ -123,10 +156,21 @@ async function clearPdfPayloadFromJob(jobId: string, input: JobInput) {
     .where(eq(quizGenerationJobs.id, jobId));
 }
 
+export async function updateGenerationJobInputData(jobId: string, input: JobInput) {
+  await db
+    .update(quizGenerationJobs)
+    .set({
+      inputData: input,
+    })
+    .where(eq(quizGenerationJobs.id, jobId));
+}
+
 async function persistGeneratedQuiz(params: {
   userId: string;
   sourceType: GenerationSourceType;
   sourceUrl?: string | null;
+  provider: "openai" | "anthropic" | "google";
+  modelName: string;
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
 }) {
@@ -139,6 +183,8 @@ async function persistGeneratedQuiz(params: {
       language: params.input.language,
       difficulty: params.input.difficulty,
       gameMode: params.input.gameMode,
+      generationProvider: params.provider,
+      generationModel: params.modelName,
       questionCount: params.generated.questions.length,
       sourceType: mapGenerationSourceToQuizSource(params.sourceType),
       sourceUrl: params.sourceUrl ?? null,
@@ -160,6 +206,19 @@ async function persistGeneratedQuiz(params: {
   );
 
   return createdQuiz.id;
+}
+
+async function getQuestionTextsForQuiz(quizId: string): Promise<string[]> {
+  const rows = await db
+    .select({
+      questionText: questions.questionText,
+    })
+    .from(questions)
+    .where(eq(questions.quizId, quizId));
+
+  return rows
+    .map((row) => row.questionText.trim())
+    .filter((question) => question.length > 0);
 }
 
 async function applyHubUniqueness(
@@ -197,6 +256,55 @@ async function applyHubUniqueness(
   return {
     uniqueness,
     reason: null,
+  };
+}
+
+function mergeExistingQuestions(...groups: Array<string[] | undefined>): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const group of groups) {
+    for (const value of group ?? []) {
+      const question = value.trim();
+      if (!question) continue;
+      const key = question.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(question);
+    }
+  }
+
+  return merged;
+}
+
+export async function resolveGenerationCredentials(
+  userId: string,
+  input: JobInput,
+): Promise<ResolvedGenerationCredentials> {
+  const credentials =
+    input.billingMode === "platform_credits"
+      ? (() => {
+        if (!process.env.OPENAI_API_KEY) {
+          throw new Error("Platform OpenAI key is not configured");
+        }
+        return {
+          provider: "openai" as const,
+          apiKey: process.env.OPENAI_API_KEY,
+        };
+      })()
+      : await resolveUserApiKey(userId, input.apiKeyId);
+
+  if (!credentials) {
+    throw new Error("Selected API key not found");
+  }
+
+  const modelName = getLanguageModelName(credentials.provider);
+
+  return {
+    provider: credentials.provider,
+    apiKey: credentials.apiKey,
+    modelName,
+    model: getLanguageModel(credentials.provider, credentials.apiKey),
   };
 }
 
@@ -337,246 +445,304 @@ async function refundReservedGenerationChargeOnFailure(params: {
   return { refunded: true };
 }
 
+export async function failGenerationJob(params: {
+  jobId: string;
+  userId: string;
+  sourceType: GenerationSourceType;
+  input: JobInput;
+  errorMessage: string;
+}) {
+  await setJobStatus(params.jobId, {
+    status: "failed",
+    errorMessage: params.errorMessage,
+  });
+
+  const refunded = await refundReservedGenerationChargeOnFailure({
+    userId: params.userId,
+    jobId: params.jobId,
+    sourceType: params.sourceType,
+    billingMode: params.input.billingMode,
+    amountCents: params.input.billingAmountCents,
+    errorMessage: params.errorMessage,
+  });
+
+  logger.error("Quiz generation failed", {
+    jobId: params.jobId,
+    sourceType: params.sourceType,
+    error: params.errorMessage,
+    refundedCharge: refunded.refunded,
+  });
+
+  return {
+    ok: false as const,
+    jobId: params.jobId,
+    error: params.errorMessage,
+  };
+}
+
+export async function runGenerateQuizJob(params: {
+  jobId: string;
+  preparedSourceText?: string;
+  preparedSourceTitle?: string;
+  additionalExistingQuestions?: string[];
+}): Promise<RunGenerateQuizJobResult> {
+  const job = await loadGenerationJob(params.jobId);
+
+  if (!job) {
+    logger.error("Quiz generation job not found", { jobId: params.jobId });
+    return { ok: false, jobId: params.jobId, error: "job_not_found" };
+  }
+
+  let input: JobInput;
+  try {
+    input = parseInputData(job.inputData);
+  } catch (error) {
+    const message = toErrorMessage(error);
+    await setJobStatus(job.id, { status: "failed", errorMessage: message });
+    logger.error("Invalid quiz generation input", { jobId: job.id, error: message });
+    return { ok: false, jobId: job.id, error: message };
+  }
+
+  if (job.status === "completed" && job.quizId) {
+    logger.log("Skipping already completed quiz generation job", {
+      jobId: job.id,
+      quizId: job.quizId,
+    });
+
+    return {
+      ok: true,
+      jobId: job.id,
+      quizId: job.quizId,
+      duplicate: false,
+      hubCandidateId: null,
+      questionTexts: await getQuestionTextsForQuiz(job.quizId),
+    };
+  }
+
+  const sourceType = job.sourceType as GenerationSourceType;
+  const effectiveInput: JobInput = {
+    ...input,
+    difficulty: input.gameMode === "wwtbam" ? "escalating" : input.difficulty,
+    language: input.language.trim().toLowerCase(),
+  };
+
+  await setJobStatus(job.id, { status: "processing", errorMessage: null });
+
+  try {
+    if (sourceType === "pdf") {
+      await clearPdfPayloadFromJob(job.id, effectiveInput);
+    }
+
+    const credentials = await resolveGenerationCredentials(job.userId, effectiveInput);
+
+    let effectiveTheme = effectiveInput.theme?.trim() || "General Knowledge";
+    let sourceText: string | undefined;
+    let sourceUrl: string | null = null;
+
+    if (sourceType === "pdf") {
+      if (!effectiveInput.pdfBase64 && !effectiveInput.pdfObjectKey) {
+        throw new Error("PDF source payload is missing");
+      }
+
+      const pdfBuffer = effectiveInput.pdfObjectKey
+        ? await downloadR2ObjectBuffer(effectiveInput.pdfObjectKey)
+        : Buffer.from(effectiveInput.pdfBase64 ?? "", "base64");
+      if (!pdfBuffer.length) {
+        throw new Error("Uploaded PDF is empty");
+      }
+
+      const extractedPdf = await extractPdfSourceText({
+        pdfBuffer,
+        fileName: effectiveInput.fileName ?? "uploaded.pdf",
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      effectiveTheme =
+        effectiveInput.theme?.trim() || extractedPdf.title || params.preparedSourceTitle || effectiveTheme;
+      sourceText = extractedPdf.text;
+    } else if (sourceType === "url") {
+      if (!effectiveInput.url) {
+        throw new Error("URL source is missing");
+      }
+
+      if (params.preparedSourceText) {
+        effectiveTheme =
+          effectiveInput.theme?.trim() ||
+          params.preparedSourceTitle?.trim() ||
+          effectiveTheme;
+        sourceText = params.preparedSourceText;
+      } else {
+        const extracted = await extractArticleText(effectiveInput.url);
+        effectiveTheme = effectiveInput.theme?.trim() || extracted.title || effectiveTheme;
+        sourceText = extracted.text;
+      }
+
+      sourceUrl = effectiveInput.url;
+    }
+
+    const existingQuestions = mergeExistingQuestions(
+      await getExistingQuestionsForTheme(effectiveTheme),
+      params.additionalExistingQuestions,
+    );
+
+    const generated = await generateQuizFromPrompt({
+      theme: effectiveTheme,
+      gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
+      difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
+      model: credentials.model,
+      existingQuestions,
+      sourceText,
+    });
+
+    const quizId = await persistGeneratedQuiz({
+      userId: job.userId,
+      sourceType,
+      sourceUrl,
+      provider: credentials.provider,
+      modelName: credentials.modelName,
+      input: effectiveInput,
+      generated,
+    });
+
+    const questionTexts = generated.questions.map((question) => question.questionText);
+    let duplicate = false;
+    if (
+      effectiveInput.isHub &&
+      sourceType === "theme" &&
+      isEnglishLanguage(effectiveInput.language)
+    ) {
+      const uniquenessResult = await applyHubUniqueness(
+        quizId,
+        generated.theme,
+        questionTexts,
+        effectiveInput.gameMode,
+      );
+      duplicate = uniquenessResult.uniqueness.isDuplicate;
+    }
+
+    await setJobStatus(job.id, {
+      status: "completed",
+      quizId,
+      errorMessage: null,
+    });
+
+    let hubCandidateId: string | null = null;
+    if (
+      !effectiveInput.isHub &&
+      effectiveInput.reviewForHub &&
+      isEnglishLanguage(effectiveInput.language) &&
+      (sourceType === "theme" || sourceType === "url")
+    ) {
+      try {
+        const snapshot = buildHubCandidateSnapshot({
+          generated,
+          language: effectiveInput.language,
+          difficulty: effectiveInput.difficulty,
+          gameMode: effectiveInput.gameMode,
+          generationProvider: credentials.provider,
+          generationModel: credentials.modelName,
+          sourceType: mapGenerationSourceToQuizSource(sourceType),
+          sourceUrl,
+        });
+
+        const candidate = await createHubCandidate({
+          sourceQuizId: quizId,
+          submittedByUserId: job.userId,
+          snapshot,
+        });
+
+        hubCandidateId = candidate.id;
+
+        try {
+          await reviewHubCandidateTask.trigger({
+            candidateId: candidate.id,
+          });
+        } catch (reviewTriggerError) {
+          const message = toErrorMessage(reviewTriggerError);
+          await db
+            .update(hubCandidates)
+            .set({
+              status: "failed",
+              reviewReason: `Failed to enqueue hub review: ${message}`.slice(0, 500),
+              reviewedAt: new Date(),
+            })
+            .where(eq(hubCandidates.id, candidate.id));
+          logger.error("Failed to enqueue hub candidate review", {
+            jobId: job.id,
+            quizId,
+            candidateId: candidate.id,
+            error: message,
+          });
+        }
+      } catch (candidateError) {
+        logger.error("Failed creating hub candidate snapshot", {
+          jobId: job.id,
+          quizId,
+          error: toErrorMessage(candidateError),
+        });
+      }
+    }
+
+    const settled = await settleGenerationChargeOnSuccess({
+      userId: job.userId,
+      jobId: job.id,
+      sourceType,
+      billingMode: effectiveInput.billingMode,
+      amountCents: effectiveInput.billingAmountCents,
+    });
+
+    logger.log("Quiz generation completed", {
+      jobId: job.id,
+      quizId,
+      sourceType,
+      gameMode: effectiveInput.gameMode,
+      difficulty: effectiveInput.difficulty,
+      provider: credentials.provider,
+      duplicate,
+      hubCandidateId,
+      billingMode: effectiveInput.billingMode,
+      billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
+    });
+
+    return {
+      ok: true,
+      jobId: job.id,
+      quizId,
+      duplicate,
+      hubCandidateId,
+      questionTexts,
+    };
+  } catch (error) {
+    const message = toErrorMessage(error);
+    return failGenerationJob({
+      jobId: job.id,
+      userId: job.userId,
+      sourceType,
+      input: effectiveInput,
+      errorMessage: message,
+    });
+  }
+}
+
 export const generateQuizTask = task({
   id: "generate-quiz",
   maxDuration: 900,
   run: async (payload: z.infer<typeof taskPayloadSchema>) => {
     const parsedPayload = taskPayloadSchema.parse(payload);
-    const job = await loadJob(parsedPayload.jobId);
+    const result = await runGenerateQuizJob({
+      jobId: parsedPayload.jobId,
+    });
 
-    if (!job) {
-      logger.error("Quiz generation job not found", { jobId: parsedPayload.jobId });
-      return { ok: false, error: "job_not_found" };
+    if (!result.ok) {
+      return result;
     }
 
-    let input: JobInput;
-    try {
-      input = parseInputData(job.inputData);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      await setJobStatus(job.id, { status: "failed", errorMessage: message });
-      logger.error("Invalid quiz generation input", { jobId: job.id, error: message });
-      return { ok: false, error: message };
-    }
-
-    const sourceType = job.sourceType as GenerationSourceType;
-    const effectiveInput: JobInput = {
-      ...input,
-      difficulty: input.gameMode === "wwtbam" ? "escalating" : input.difficulty,
-      language: input.language.trim().toLowerCase(),
+    return {
+      ok: true,
+      jobId: result.jobId,
+      quizId: result.quizId,
+      duplicate: result.duplicate,
+      hubCandidateId: result.hubCandidateId,
     };
-
-    await setJobStatus(job.id, { status: "processing", errorMessage: null });
-
-    try {
-      if (sourceType === "pdf") {
-        await clearPdfPayloadFromJob(job.id, effectiveInput);
-      }
-
-      const credentials =
-        effectiveInput.billingMode === "platform_credits"
-          ? (() => {
-            if (!process.env.OPENAI_API_KEY) {
-              throw new Error("Platform OpenAI key is not configured");
-            }
-            return {
-              provider: "openai" as const,
-              apiKey: process.env.OPENAI_API_KEY,
-            };
-          })()
-          : await resolveUserApiKey(job.userId, effectiveInput.apiKeyId);
-
-      if (!credentials) {
-        throw new Error("Selected API key not found");
-      }
-
-      let effectiveTheme = effectiveInput.theme?.trim() || "General Knowledge";
-      let sourceText: string | undefined;
-      let sourceUrl: string | null = null;
-
-      if (sourceType === "pdf") {
-        if (!effectiveInput.pdfBase64 && !effectiveInput.pdfObjectKey) {
-          throw new Error("PDF source payload is missing");
-        }
-
-        const pdfBuffer = effectiveInput.pdfObjectKey
-          ? await downloadR2ObjectBuffer(effectiveInput.pdfObjectKey)
-          : Buffer.from(effectiveInput.pdfBase64 ?? "", "base64");
-        if (!pdfBuffer.length) {
-          throw new Error("Uploaded PDF is empty");
-        }
-
-        const extractedPdf = await extractPdfSourceText({
-          pdfBuffer,
-          fileName: effectiveInput.fileName ?? "uploaded.pdf",
-          openAIApiKey: process.env.OPENAI_API_KEY,
-        });
-
-        effectiveTheme = effectiveInput.theme?.trim() || extractedPdf.title || effectiveTheme;
-        sourceText = extractedPdf.text;
-      } else if (sourceType === "url") {
-        if (!effectiveInput.url) {
-          throw new Error("URL source is missing");
-        }
-
-        const extracted = await extractArticleText(effectiveInput.url);
-        effectiveTheme = effectiveInput.theme?.trim() || extracted.title || effectiveTheme;
-        sourceText = extracted.text;
-        sourceUrl = effectiveInput.url;
-      }
-
-      const model = getLanguageModel(credentials.provider, credentials.apiKey);
-      const existingQuestions = await getExistingQuestionsForTheme(effectiveTheme);
-
-      const generated = await generateQuizFromPrompt({
-        theme: effectiveTheme,
-        gameMode: effectiveInput.gameMode as QuizGenerationGameMode,
-        difficulty: effectiveInput.difficulty as QuizGenerationDifficulty,
-        model,
-        existingQuestions,
-        sourceText,
-      });
-
-      const quizId = await persistGeneratedQuiz({
-        userId: job.userId,
-        sourceType,
-        sourceUrl,
-        input: effectiveInput,
-        generated,
-      });
-
-      let duplicate = false;
-      if (
-        effectiveInput.isHub &&
-        sourceType === "theme" &&
-        isEnglishLanguage(effectiveInput.language)
-      ) {
-        const uniquenessResult = await applyHubUniqueness(
-          quizId,
-          generated.theme,
-          generated.questions.map((question) => question.questionText),
-          effectiveInput.gameMode,
-        );
-        duplicate = uniquenessResult.uniqueness.isDuplicate;
-      }
-
-      await setJobStatus(job.id, {
-        status: "completed",
-        quizId,
-        errorMessage: null,
-      });
-
-      let hubCandidateId: string | null = null;
-      if (
-        !effectiveInput.isHub &&
-        effectiveInput.reviewForHub &&
-        isEnglishLanguage(effectiveInput.language) &&
-        (sourceType === "theme" || sourceType === "url")
-      ) {
-        try {
-          const snapshot = buildHubCandidateSnapshot({
-            generated,
-            language: effectiveInput.language,
-            difficulty: effectiveInput.difficulty,
-            gameMode: effectiveInput.gameMode,
-            sourceType: mapGenerationSourceToQuizSource(sourceType),
-            sourceUrl,
-          });
-
-          const candidate = await createHubCandidate({
-            sourceQuizId: quizId,
-            submittedByUserId: job.userId,
-            snapshot,
-          });
-
-          hubCandidateId = candidate.id;
-
-          try {
-            await reviewHubCandidateTask.trigger({
-              candidateId: candidate.id,
-            });
-          } catch (reviewTriggerError) {
-            const message = toErrorMessage(reviewTriggerError);
-            await db
-              .update(hubCandidates)
-              .set({
-                status: "failed",
-                reviewReason: `Failed to enqueue hub review: ${message}`.slice(0, 500),
-                reviewedAt: new Date(),
-              })
-              .where(eq(hubCandidates.id, candidate.id));
-            logger.error("Failed to enqueue hub candidate review", {
-              jobId: job.id,
-              quizId,
-              candidateId: candidate.id,
-              error: message,
-            });
-          }
-        } catch (candidateError) {
-          logger.error("Failed creating hub candidate snapshot", {
-            jobId: job.id,
-            quizId,
-            error: toErrorMessage(candidateError),
-          });
-        }
-      }
-
-      const settled = await settleGenerationChargeOnSuccess({
-        userId: job.userId,
-        jobId: job.id,
-        sourceType,
-        billingMode: effectiveInput.billingMode,
-        amountCents: effectiveInput.billingAmountCents,
-      });
-
-      logger.log("Quiz generation completed", {
-        jobId: job.id,
-        quizId,
-        sourceType,
-        gameMode: effectiveInput.gameMode,
-        difficulty: effectiveInput.difficulty,
-        provider: credentials.provider,
-        duplicate,
-        hubCandidateId,
-        billingMode: effectiveInput.billingMode,
-        billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
-      });
-
-      return {
-        ok: true,
-        jobId: job.id,
-        quizId,
-        duplicate,
-        hubCandidateId,
-      };
-    } catch (error) {
-      const message = toErrorMessage(error);
-      await setJobStatus(job.id, {
-        status: "failed",
-        errorMessage: message,
-      });
-
-      const refunded = await refundReservedGenerationChargeOnFailure({
-        userId: job.userId,
-        jobId: job.id,
-        sourceType,
-        billingMode: effectiveInput.billingMode,
-        amountCents: effectiveInput.billingAmountCents,
-        errorMessage: message,
-      });
-
-      logger.error("Quiz generation failed", {
-        jobId: job.id,
-        sourceType,
-        error: message,
-        refundedCharge: refunded.refunded,
-      });
-
-      return {
-        ok: false,
-        jobId: job.id,
-        error: message,
-      };
-    }
   },
 });

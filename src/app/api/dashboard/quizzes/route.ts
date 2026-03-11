@@ -107,6 +107,7 @@ export async function GET(request: Request) {
             theme: quizzes.theme,
             difficulty: quizzes.difficulty,
             gameMode: quizzes.gameMode,
+            generationProvider: quizzes.generationProvider,
             questionCount: quizzes.questionCount,
             playCount: quizzes.playCount,
             likes: quizzes.likes,

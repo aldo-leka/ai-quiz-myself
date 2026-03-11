@@ -20,6 +20,8 @@ export const hubCandidateSnapshotSchema = z.object({
   language: z.string().min(2),
   difficulty: z.enum(["easy", "medium", "hard", "mixed", "escalating"]),
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
+  generationProvider: z.enum(["openai", "anthropic", "google"]).nullable().optional(),
+  generationModel: z.string().min(1).nullable().optional(),
   sourceType: z.enum(["manual", "ai_generated", "pdf", "url"]),
   sourceUrl: z.string().nullable(),
   questionCount: z.number().int().positive(),

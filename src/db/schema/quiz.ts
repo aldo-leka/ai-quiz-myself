@@ -104,6 +104,8 @@ export const quizzes = pgTable(
     language: text("language").notNull().default("en"),
     difficulty: quizDifficultyEnum("difficulty").notNull(),
     gameMode: quizGameModeEnum("game_mode").notNull(),
+    generationProvider: apiKeyProviderEnum("generation_provider"),
+    generationModel: text("generation_model"),
     questionCount: integer("question_count").notNull(),
     sourceType: quizSourceTypeEnum("source_type").notNull(),
     sourceUrl: text("source_url"),

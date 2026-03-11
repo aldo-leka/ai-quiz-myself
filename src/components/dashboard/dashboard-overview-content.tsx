@@ -88,6 +88,7 @@ export function DashboardOverviewContent({
                   theme={quiz.theme}
                   difficulty={quiz.difficulty}
                   gameMode={quiz.gameMode}
+                  generationProvider={quiz.generationProvider}
                   questionCount={quiz.questionCount}
                   playCount={quiz.playCount}
                   likeRatio={totalVotes > 0 ? quiz.likes / totalVotes : null}

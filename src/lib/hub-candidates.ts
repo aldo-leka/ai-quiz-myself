@@ -12,6 +12,8 @@ type BuildHubCandidateSnapshotParams = {
   language: string;
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
   gameMode: "single" | "wwtbam" | "couch_coop";
+  generationProvider?: "openai" | "anthropic" | "google" | null;
+  generationModel?: string | null;
   sourceType: "ai_generated" | "url" | "pdf" | "manual";
   sourceUrl?: string | null;
 };
@@ -25,6 +27,8 @@ export function buildHubCandidateSnapshot(
     language: params.language,
     difficulty: params.difficulty,
     gameMode: params.gameMode,
+    generationProvider: params.generationProvider ?? null,
+    generationModel: params.generationModel ?? null,
     sourceType: params.sourceType,
     sourceUrl: params.sourceUrl ?? null,
     questionCount: params.generated.questions.length,
@@ -99,6 +103,8 @@ export async function publishHubCandidateSnapshot(
       language: snapshot.language,
       difficulty: snapshot.difficulty,
       gameMode: snapshot.gameMode,
+      generationProvider: snapshot.generationProvider ?? null,
+      generationModel: snapshot.generationModel ?? null,
       questionCount: snapshot.questions.length,
       sourceType: snapshot.sourceType,
       sourceUrl: snapshot.sourceUrl,

@@ -16,12 +16,13 @@ import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
 import { generateQuizTask } from "@/trigger/generate-quiz";
+import { generateUrlBatchTask } from "@/trigger/generate-url-batch";
 
 export const runtime = "nodejs";
 
 const MAX_BATCH_COUNTS = {
   theme: 100,
-  url: 1,
+  url: 5,
   pdf: 1,
 } as const;
 
@@ -280,6 +281,45 @@ function resolveBillingMode(params: {
   return "byok";
 }
 
+async function failJobStart(params: {
+  userId: string;
+  jobId: string;
+  sourceType: "theme" | "url" | "pdf";
+  billingMode: GenerationBillingMode;
+  amountCents: number;
+  batchIndex: number;
+  batchSize: number;
+  errorMessage: string;
+}) {
+  await db
+    .update(quizGenerationJobs)
+    .set({
+      status: "failed",
+      errorMessage: params.errorMessage.slice(0, 500),
+    })
+    .where(eq(quizGenerationJobs.id, params.jobId));
+
+  if (params.billingMode !== "platform_credits" || params.amountCents <= 0) {
+    return;
+  }
+
+  await incrementWalletBalanceCents(params.userId, params.amountCents);
+  await db
+    .update(creditTransactions)
+    .set({
+      status: "failed",
+      description: "Quiz generation charge refunded (task start failed)",
+      metadata: {
+        sourceType: params.sourceType,
+        billingMode: params.billingMode,
+        reason: "task_start_failed_refund",
+        batchIndex: params.batchIndex,
+        batchSize: params.batchSize,
+      },
+    })
+    .where(eq(creditTransactions.generationJobId, params.jobId));
+}
+
 export async function POST(request: Request) {
   const session = await getUserSessionOrNull();
   if (!session?.user?.id) {
@@ -302,15 +342,6 @@ export async function POST(request: Request) {
   const maxBatchCount = maxBatchCountForPayload(payload);
 
   if (payload.quantity > maxBatchCount) {
-    if (payload.sourceType === "url") {
-      return NextResponse.json(
-        {
-          error: "URL batch generation is temporarily limited to 1 until source-aware uniqueness planning ships.",
-        },
-        { status: 400 },
-      );
-    }
-
     if (payload.sourceType === "pdf") {
       return NextResponse.json(
         {
@@ -469,6 +500,8 @@ export async function POST(request: Request) {
   }
 
   const itemsToSchedule = generationItems.slice(0, maxScheduledCount);
+  const shouldUseUrlBatchPlanner =
+    payload.sourceType === "url" && itemsToSchedule.length > 1;
   const scheduledJobIds: string[] = [];
   const triggerRunIds: string[] = [];
   const warnings: string[] = [];
@@ -551,41 +584,64 @@ export async function POST(request: Request) {
     }
 
     try {
-      const run = await generateQuizTask.trigger({ jobId: job.id });
       scheduledJobIds.push(job.id);
-      triggerRunIds.push(run.id);
+
+      if (!shouldUseUrlBatchPlanner) {
+        const run = await generateQuizTask.trigger({ jobId: job.id });
+        triggerRunIds.push(run.id);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to start generation task";
+      scheduledJobIds.pop();
+      await failJobStart({
+        userId: session.user.id,
+        jobId: job.id,
+        sourceType: payload.sourceType,
+        billingMode,
+        amountCents: reservedCharge ? generationCostCents : 0,
+        batchIndex: item.batchIndex,
+        batchSize: item.batchSize,
+        errorMessage: message,
+      });
+      if (reservedCharge) remainingAffordableCount += 1;
 
-      await db
-        .update(quizGenerationJobs)
-        .set({
-          status: "failed",
-          errorMessage: message.slice(0, 500),
-        })
-        .where(eq(quizGenerationJobs.id, job.id));
+      warnings.push(message);
+    }
+  }
 
-      if (reservedCharge) {
-        await incrementWalletBalanceCents(session.user.id, generationCostCents);
-        await db
-          .update(creditTransactions)
-          .set({
-            status: "failed",
-            description: "Quiz generation charge refunded (task start failed)",
-            metadata: {
-              sourceType: payload.sourceType,
-              billingMode,
-              reason: "task_start_failed_refund",
-              batchIndex: item.batchIndex,
-              batchSize: item.batchSize,
-            },
-          })
-          .where(eq(creditTransactions.generationJobId, job.id));
-        remainingAffordableCount += 1;
+  if (shouldUseUrlBatchPlanner && scheduledJobIds.length > 0) {
+    try {
+      const run = await generateUrlBatchTask.trigger({
+        jobIds: scheduledJobIds,
+      });
+      triggerRunIds.push(run.id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start URL batch generation task";
+
+      for (const [index, jobId] of scheduledJobIds.entries()) {
+        const item = itemsToSchedule[index];
+        if (!item) continue;
+
+        await failJobStart({
+          userId: session.user.id,
+          jobId,
+          sourceType: "url",
+          billingMode,
+          amountCents: billingMode === "platform_credits" ? generationCostCents : 0,
+          batchIndex: item.batchIndex,
+          batchSize: item.batchSize,
+          errorMessage: message,
+        });
+      }
+
+      if (billingMode === "platform_credits" && generationCostCents > 0) {
+        remainingAffordableCount += scheduledJobIds.length;
       }
 
       warnings.push(message);
+      scheduledJobIds.length = 0;
     }
   }
 

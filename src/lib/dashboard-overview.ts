@@ -13,6 +13,7 @@ export type DashboardOverviewData = {
     theme: string;
     difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
     gameMode: "single" | "wwtbam" | "couch_coop";
+    generationProvider: "openai" | "anthropic" | "google" | null;
     questionCount: number;
     playCount: number;
     likes: number;
@@ -57,6 +58,7 @@ export async function getDashboardOverviewData(userId: string): Promise<Dashboar
         theme: quizzes.theme,
         difficulty: quizzes.difficulty,
         gameMode: quizzes.gameMode,
+        generationProvider: quizzes.generationProvider,
         questionCount: quizzes.questionCount,
         playCount: quizzes.playCount,
         likes: quizzes.likes,

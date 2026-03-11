@@ -9,12 +9,14 @@ export type QuizCardDifficulty = "easy" | "medium" | "hard" | "mixed" | "escalat
 export type QuizCardMode = "single" | "wwtbam" | "couch_coop";
 export type QuizCardStatusTone = "ready" | "generating" | "failed" | "neutral";
 export type QuizCardSize = "default" | "large";
+export type QuizCardGenerationProvider = "openai" | "anthropic" | "google";
 
 type QuizCardProps = {
   title: string;
   theme: string;
   difficulty: QuizCardDifficulty;
   gameMode: QuizCardMode;
+  generationProvider?: QuizCardGenerationProvider | null;
   questionCount: number;
   playCount: number;
   likeRatio?: number | null;
@@ -65,11 +67,35 @@ function gameModeMeta(mode: QuizCardMode): {
   return { label: "WWTBAM", icon: <Tv className="size-5" /> };
 }
 
+function providerMeta(provider: QuizCardGenerationProvider): {
+  label: string;
+  className: string;
+} {
+  if (provider === "openai") {
+    return {
+      label: "OpenAI",
+      className: "border-emerald-500/35 bg-emerald-500/12 text-emerald-200",
+    };
+  }
+
+  if (provider === "anthropic") {
+    return {
+      label: "Anthropic",
+      className: "border-amber-500/35 bg-amber-500/12 text-amber-200",
+    };
+  }
+
+  return {
+    label: "Google",
+    className: "border-sky-500/35 bg-sky-500/12 text-sky-200",
+  };
+}
+
 function QuizCardBody({
   title,
-  theme,
   difficulty,
   gameMode,
+  generationProvider,
   questionCount,
   playCount,
   likeRatio,
@@ -83,6 +109,7 @@ function QuizCardBody({
 }: Omit<QuizCardProps, "interactive" | "onClick" | "onKeyDown" | "cardRef" | "className">) {
   const modeMeta = gameModeMeta(gameMode);
   const isLarge = size === "large";
+  const provider = generationProvider ? providerMeta(generationProvider) : null;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -104,21 +131,23 @@ function QuizCardBody({
         <Badge
           variant="outline"
           className={cn(
-            "border-[#6c8aff]/35 bg-[#6c8aff]/12 text-[#e4e4e9]",
-            isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
-          )}
-        >
-          {theme}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
             difficultyBadgeClass(difficulty),
             isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
           )}
         >
           {difficulty === "escalating" ? "Escalating" : difficulty}
         </Badge>
+        {provider ? (
+          <Badge
+            variant="outline"
+            className={cn(
+              provider.className,
+              isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
+            )}
+          >
+            {provider.label}
+          </Badge>
+        ) : null}
       </div>
 
       <div className={cn("mt-auto space-y-4 pt-5", isLarge ? "space-y-5 pt-7" : "")}>

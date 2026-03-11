@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Play, RotateCcw, Trash2 } from "lucide-react";
 import { PlayerSelect } from "@/components/dashboard/player-select";
-import { QuizCard } from "@/components/quiz/QuizCard";
+import { QuizCard, type QuizCardGenerationProvider } from "@/components/quiz/QuizCard";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,6 +22,7 @@ type UserQuizRow = {
   theme: string;
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
   gameMode: "single" | "wwtbam" | "couch_coop";
+  generationProvider: QuizCardGenerationProvider | null;
   questionCount: number;
   playCount: number;
   likeRatio: number | null;
@@ -383,6 +384,7 @@ export function DashboardQuizzesPageClient({
                   theme={quiz.theme}
                   difficulty={quiz.difficulty}
                   gameMode={quiz.gameMode}
+                  generationProvider={quiz.generationProvider}
                   questionCount={quiz.questionCount}
                   playCount={quiz.playCount}
                   likeRatio={quiz.likeRatio}
