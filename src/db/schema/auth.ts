@@ -19,6 +19,7 @@ export const user = pgTable("user", {
   stripeCustomerId: text("stripe_customer_id"),
   stripePaymentMethodId: text("stripe_payment_method_id"),
   starterCreditsGranted: boolean("starter_credits_granted").default(false).notNull(),
+  readAloudEnabled: boolean("read_aloud_enabled").default(false).notNull(),
 });
 
 export const session = pgTable(

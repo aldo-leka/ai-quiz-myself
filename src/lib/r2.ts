@@ -95,3 +95,21 @@ export async function downloadR2ObjectBuffer(objectKey: string): Promise<Buffer>
   const bytes = await response.Body.transformToByteArray();
   return Buffer.from(bytes);
 }
+
+export async function uploadR2ObjectBuffer(params: {
+  objectKey: string;
+  body: Buffer;
+  contentType: string;
+  cacheControl?: string;
+}): Promise<void> {
+  const client = getR2Client();
+  const command = new PutObjectCommand({
+    Bucket: getBucketName(),
+    Key: params.objectKey,
+    Body: params.body,
+    ContentType: params.contentType,
+    CacheControl: params.cacheControl,
+  });
+
+  await client.send(command);
+}

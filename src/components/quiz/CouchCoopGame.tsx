@@ -1,13 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, House, LoaderCircle, Medal, Trash2, XCircle } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  House,
+  LoaderCircle,
+  Medal,
+  Square,
+  Trash2,
+  Volume2,
+  XCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
+import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
+import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl, scrollRemoteControlIntoView } from "@/lib/remote-focus";
@@ -83,6 +96,12 @@ function normalizePlayerNames(rawNames: string[]): string[] {
 export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const router = useRouter();
   const { data: sessionData } = authClient.useSession();
+  const sessionUser = sessionData?.user as
+    | {
+        id?: string;
+        readAloudEnabled?: boolean;
+      }
+    | undefined;
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
 
@@ -106,6 +125,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
+  const [answerWindowOpen, setAnswerWindowOpen] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const headerButtonRefs = useRef<Record<HeaderActionTarget, HTMLButtonElement | null>>({
@@ -118,6 +138,9 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const nextTurnButtonRef = useRef<HTMLButtonElement | null>(null);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const questionStartedAtRef = useRef(0);
+  const answerWindowOpenedRef = useRef(false);
+  const readAloudEnabledRef = useRef(false);
+  const stopReadAloudRef = useRef<() => void>(() => {});
   const startedAtRef = useRef<Date | null>(null);
   const finishedAtRef = useRef<Date | null>(null);
   const hasPersistedRef = useRef(false);
@@ -180,6 +203,17 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     rows.push(["complete-rematch", "complete-random", "complete-back"]);
     return rows;
   }, [leaderboard]);
+
+  const {
+    readAloudEnabled,
+    readAloudSaving,
+    readAloudPreferenceError,
+    setReadAloudPreferenceError,
+    toggleReadAloud,
+  } = useReadAloudPreference({
+    userId: sessionUser?.id,
+    serverEnabled: sessionUser?.readAloudEnabled,
+  });
 
   useEffect(() => {
     rememberRecentQuiz("couch_coop", quiz.id);
@@ -266,6 +300,86 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     }
   }, [isLoadingNextQuiz, quiz.id, router]);
 
+  const beginRound = useCallback((nextPlayerNames: string[]) => {
+    const trimmedPlayers = normalizePlayerNames(nextPlayerNames);
+    if (trimmedPlayers.length < MIN_PLAYERS) {
+      setSetupError("Add at least 2 players to start.");
+      return;
+    }
+
+    const shuffledQuestions = shuffleItems(quiz.questions);
+
+    setSetupError(null);
+    setQuestions(shuffledQuestions);
+    setPlayerNames(trimmedPlayers);
+    setScores(Array.from({ length: trimmedPlayers.length }, () => 0));
+    setResults([]);
+    setCurrentQuestionIndex(0);
+    setFocusedAnswerIndex(null);
+    setSelectedAnswerIndex(null);
+    setRemainingSeconds(QUESTION_TIME_SECONDS);
+    setSaveStatus("idle");
+    setPhase("question");
+
+    startedAtRef.current = new Date();
+    finishedAtRef.current = null;
+    hasPersistedRef.current = false;
+    finalizedQuestionKeyRef.current = null;
+    answerWindowOpenedRef.current = false;
+    setAnswerWindowOpen(false);
+  }, [quiz.questions]);
+
+  const startGameFromSetup = useCallback(() => {
+    const normalized = normalizePlayerNames(setupNames);
+    if (normalized.length < MIN_PLAYERS) {
+      setSetupError("Add at least 2 players to start.");
+      return;
+    }
+
+    beginRound(normalized);
+  }, [beginRound, setupNames]);
+
+  const rematch = useCallback(() => {
+    if (playerNames.length < MIN_PLAYERS) {
+      setPhase("setup");
+      return;
+    }
+
+    beginRound(playerNames);
+  }, [beginRound, playerNames]);
+
+  const questionReadAloudSegments = useMemo(() => {
+    if (!currentQuestion) {
+      return [];
+    }
+
+    const endpoint = `/api/quiz/${quiz.id}/questions/${currentQuestion.id}/tts`;
+    const options = currentQuestion.options.map((option) => option.text);
+
+    return [
+      {
+        id: "question",
+        url: endpoint,
+        body: {
+          segment: "question",
+          position: currentQuestionIndex + 1,
+          questionText: currentQuestion.questionText,
+          options,
+        },
+      },
+      {
+        id: "options",
+        url: endpoint,
+        body: {
+          segment: "options",
+          position: currentQuestionIndex + 1,
+          questionText: currentQuestion.questionText,
+          options,
+        },
+      },
+    ] as const;
+  }, [currentQuestion, currentQuestionIndex, quiz.id]);
+
   const moveToNextTurn = useCallback(() => {
     stopCountdown();
 
@@ -282,6 +396,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     setSelectedAnswerIndex(null);
     setFocusedAnswerIndex(null);
     setRemainingSeconds(QUESTION_TIME_SECONDS);
+    setAnswerWindowOpen(false);
+    answerWindowOpenedRef.current = false;
     finalizedQuestionKeyRef.current = null;
     setPhase("question");
   }, [currentQuestionIndex, persistCompletedSession, playerNames, results, scores, totalQuestions]);
@@ -294,6 +410,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       if (finalizedQuestionKeyRef.current === questionKey) return;
       finalizedQuestionKeyRef.current = questionKey;
 
+      stopReadAloudRef.current();
       stopCountdown();
 
       const elapsedMs = Math.max(0, Date.now() - questionStartedAtRef.current);
@@ -326,6 +443,65 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     },
     [currentPlayerIndex, currentPlayerName, currentQuestion, currentQuestionIndex, phase],
   );
+
+  const beginAnswerWindow = useCallback(() => {
+    if (phase !== "question" || answerWindowOpenedRef.current) {
+      return;
+    }
+
+    answerWindowOpenedRef.current = true;
+    setAnswerWindowOpen(true);
+    questionStartedAtRef.current = Date.now();
+
+    if (!timerEnabled) {
+      return;
+    }
+
+    setRemainingSeconds(QUESTION_TIME_SECONDS);
+    stopCountdown();
+    timerRef.current = setInterval(() => {
+      setRemainingSeconds((previous) => {
+        const next = previous - 1;
+        if (next <= 0) {
+          stopCountdown();
+          finalizeAnswer(null);
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+  }, [finalizeAnswer, phase, timerEnabled]);
+
+  const {
+    activeSegmentId,
+    error: readAloudPlaybackError,
+    isLoading: isReadAloudLoading,
+    isPlaying: isReadAloudPlaying,
+    play: playReadAloud,
+    stop: stopReadAloud,
+  } = useQuestionReadAloud({
+    segments: questionReadAloudSegments,
+    playbackKey: currentQuestion ? `${currentQuestionIndex}:${currentQuestion.id}` : null,
+    autoPlayEnabled: phase === "question" && readAloudEnabled && !answerWindowOpen,
+    onSegmentEnd: (segmentId) => {
+      if (segmentId === "options") {
+        beginAnswerWindow();
+      }
+    },
+  });
+
+  stopReadAloudRef.current = stopReadAloud;
+
+  const readAloudError = readAloudPreferenceError ?? readAloudPlaybackError;
+
+  useEffect(() => {
+    readAloudEnabledRef.current = readAloudEnabled;
+  }, [readAloudEnabled]);
+
+  useEffect(() => {
+    if (phase === "question") return;
+    stopReadAloud();
+  }, [phase, stopReadAloud]);
 
   useEffect(() => {
     if (phase !== "setup") return;
@@ -489,28 +665,34 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   useEffect(() => {
     if (phase !== "question" || !currentQuestion) {
       stopCountdown();
+      answerWindowOpenedRef.current = false;
+      setAnswerWindowOpen(false);
       return;
     }
 
+    answerWindowOpenedRef.current = false;
+    setAnswerWindowOpen(false);
+    setRemainingSeconds(QUESTION_TIME_SECONDS);
     questionStartedAtRef.current = Date.now();
-
-    if (!timerEnabled) return;
-
     stopCountdown();
-    timerRef.current = setInterval(() => {
-      setRemainingSeconds((previous) => {
-        const next = previous - 1;
-        if (next <= 0) {
-          stopCountdown();
-          finalizeAnswer(null);
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
+
+    if (!readAloudEnabledRef.current) {
+      beginAnswerWindow();
+    }
 
     return () => stopCountdown();
-  }, [currentQuestion, finalizeAnswer, phase, timerEnabled]);
+  }, [beginAnswerWindow, currentQuestion, phase]);
+
+  useEffect(() => {
+    if (
+      phase === "question" &&
+      readAloudEnabled &&
+      !answerWindowOpen &&
+      readAloudError
+    ) {
+      beginAnswerWindow();
+    }
+  }, [answerWindowOpen, beginAnswerWindow, phase, readAloudEnabled, readAloudError]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -900,52 +1082,6 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [focusedRevealTarget, phase]);
 
-  function beginRound(nextPlayerNames: string[]) {
-    const trimmedPlayers = normalizePlayerNames(nextPlayerNames);
-    if (trimmedPlayers.length < MIN_PLAYERS) {
-      setSetupError("Add at least 2 players to start.");
-      return;
-    }
-
-    const shuffledQuestions = shuffleItems(quiz.questions);
-
-    setSetupError(null);
-    setQuestions(shuffledQuestions);
-    setPlayerNames(trimmedPlayers);
-    setScores(Array.from({ length: trimmedPlayers.length }, () => 0));
-    setResults([]);
-    setCurrentQuestionIndex(0);
-    setFocusedAnswerIndex(null);
-    setSelectedAnswerIndex(null);
-    setRemainingSeconds(QUESTION_TIME_SECONDS);
-    setSaveStatus("idle");
-    setPhase("question");
-
-    startedAtRef.current = new Date();
-    finishedAtRef.current = null;
-    hasPersistedRef.current = false;
-    finalizedQuestionKeyRef.current = null;
-  }
-
-  function startGameFromSetup() {
-    const normalized = normalizePlayerNames(setupNames);
-    if (normalized.length < MIN_PLAYERS) {
-      setSetupError("Add at least 2 players to start.");
-      return;
-    }
-
-    beginRound(normalized);
-  }
-
-  function rematch() {
-    if (playerNames.length < MIN_PLAYERS) {
-      setPhase("setup");
-      return;
-    }
-
-    beginRound(playerNames);
-  }
-
   if (phase === "setup") {
     return (
       <div className="min-h-screen bg-[#0f1117] px-4 py-6 text-[#e4e4e9] sm:px-6 md:px-10">
@@ -1328,6 +1464,71 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 </span>
               </div>
             </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isReadAloudPlaying) {
+                    stopReadAloud();
+                    if (!answerWindowOpen) {
+                      beginAnswerWindow();
+                    }
+                    return;
+                  }
+                  void playReadAloud();
+                }}
+                disabled={questionReadAloudSegments.length === 0 || isReadAloudLoading}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition md:text-base",
+                  isReadAloudPlaying || isReadAloudLoading
+                    ? "border-[#818cf8]/70 bg-[#818cf8]/18 text-[#eef1ff]"
+                    : "border-[#252940] bg-[#0f1117]/72 text-[#c7cada] hover:border-[#6c8aff]/45 hover:text-[#eef1ff]",
+                  (questionReadAloudSegments.length === 0 || isReadAloudLoading) &&
+                    "cursor-not-allowed opacity-70 hover:border-[#252940] hover:text-[#c7cada]",
+                )}
+              >
+                {isReadAloudLoading ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : isReadAloudPlaying ? (
+                  <Square className="size-4" />
+                ) : (
+                  <Volume2 className="size-4" />
+                )}
+                <span>
+                  {isReadAloudLoading
+                    ? "Loading voice"
+                    : isReadAloudPlaying
+                      ? activeSegmentId === "question"
+                        ? "Reading question"
+                        : "Reading options"
+                      : "Read aloud"}
+                </span>
+              </button>
+
+              <label className="inline-flex min-h-11 items-center gap-3 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-sm font-semibold text-[#c7cada] md:text-base">
+                <Switch
+                  checked={readAloudEnabled}
+                  disabled={readAloudSaving}
+                  onCheckedChange={(checked) => {
+                    if (!checked) {
+                      stopReadAloud();
+                      if (!answerWindowOpen) {
+                        beginAnswerWindow();
+                      }
+                    }
+                    setReadAloudPreferenceError(null);
+                    void toggleReadAloud(checked);
+                  }}
+                  aria-label="Toggle automatic read aloud"
+                />
+                <span>{readAloudSaving ? "Saving..." : "Auto-read"}</span>
+              </label>
+            </div>
+
+            {readAloudError ? (
+              <p className="text-sm font-medium text-rose-300 md:text-base">{readAloudError}</p>
+            ) : null}
 
             <h2
               className={cn(

@@ -9,10 +9,11 @@ import { getUserSessionOrNull } from "@/lib/user-auth";
 export const runtime = "nodejs";
 
 const settingsSchema = z.object({
-  locale: z.string().trim().min(2).max(16),
+  locale: z.string().trim().min(2).max(16).optional(),
   preferredProvider: z
     .union([z.enum(apiKeyProviderEnum.enumValues), z.literal("none")])
-    .default("none"),
+    .optional(),
+  readAloudEnabled: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -27,9 +28,17 @@ export async function PATCH(request: Request) {
   }
 
   const payload = parsed.data;
+  if (
+    payload.locale === undefined &&
+    payload.preferredProvider === undefined &&
+    payload.readAloudEnabled === undefined
+  ) {
+    return NextResponse.json({ error: "No settings provided" }, { status: 400 });
+  }
+
   let preferredProvider: (typeof apiKeyProviderEnum.enumValues)[number] | null = null;
 
-  if (payload.preferredProvider !== "none") {
+  if (payload.preferredProvider && payload.preferredProvider !== "none") {
     const [providerKey] = await db
       .select({ id: apiKeys.id })
       .from(apiKeys)
@@ -47,17 +56,26 @@ export async function PATCH(request: Request) {
     preferredProvider = payload.preferredProvider;
   }
 
+  const updates: Partial<typeof user.$inferInsert> = {};
+  if (payload.locale !== undefined) {
+    updates.locale = payload.locale;
+  }
+  if (payload.preferredProvider !== undefined) {
+    updates.preferredProvider = payload.preferredProvider === "none" ? null : preferredProvider;
+  }
+  if (payload.readAloudEnabled !== undefined) {
+    updates.readAloudEnabled = payload.readAloudEnabled;
+  }
+
   await db
     .update(user)
-    .set({
-      locale: payload.locale,
-      preferredProvider,
-    })
+    .set(updates)
     .where(eq(user.id, session.user.id));
 
   return NextResponse.json({
     success: true,
-    locale: payload.locale,
-    preferredProvider,
+    locale: updates.locale,
+    preferredProvider: updates.preferredProvider,
+    readAloudEnabled: updates.readAloudEnabled,
   });
 }

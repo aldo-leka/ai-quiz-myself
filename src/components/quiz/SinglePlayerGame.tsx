@@ -1,13 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, House, LoaderCircle, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  House,
+  LoaderCircle,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
+  Volume2,
+  XCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
+import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
+import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
@@ -65,6 +78,12 @@ function computeLikeRatioLabel(likes: number, dislikes: number) {
 export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const router = useRouter();
   const { data: sessionData } = authClient.useSession();
+  const sessionUser = sessionData?.user as
+    | {
+        id?: string;
+        readAloudEnabled?: boolean;
+      }
+    | undefined;
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
 
@@ -87,6 +106,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const [voteError, setVoteError] = useState<string | null>(null);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
   const [revealOutlineProgress, setRevealOutlineProgress] = useState(0);
+  const [answerWindowOpen, setAnswerWindowOpen] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoAdvanceRef = useRef<NodeJS.Timeout | null>(null);
@@ -100,6 +120,9 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const completeFocusRefs = useRef<Record<string, HTMLElement | null>>({});
   const questionStartedAtRef = useRef(0);
+  const answerWindowOpenedRef = useRef(false);
+  const readAloudEnabledRef = useRef(false);
+  const stopReadAloudRef = useRef<() => void>(() => {});
   const quizStartedAtRef = useRef<Date | null>(new Date());
   const quizFinishedAtRef = useRef<Date | null>(null);
   const scoreRef = useRef(0);
@@ -109,6 +132,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
   const totalQuestions = quiz.questions.length;
   const currentQuestion = quiz.questions[currentQuestionIndex];
+  const questionPlaybackKey = currentQuestion ? `${currentQuestionIndex}:${currentQuestion.id}` : null;
   const currentCorrectOptionIndex = currentQuestion?.correctOptionIndex ?? null;
   const accuracyPercentage =
     totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
@@ -145,6 +169,17 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     return rows;
   }, [results.length, saveStatus]);
 
+  const {
+    readAloudEnabled,
+    readAloudSaving,
+    readAloudPreferenceError,
+    setReadAloudPreferenceError,
+    toggleReadAloud,
+  } = useReadAloudPreference({
+    userId: sessionUser?.id,
+    serverEnabled: sessionUser?.readAloudEnabled,
+  });
+
   useEffect(() => {
     setLikes(quiz.likes);
     setDislikes(quiz.dislikes);
@@ -169,6 +204,61 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       autoAdvanceRef.current = null;
     }
   }, []);
+
+  const playNext = useCallback(async () => {
+    if (isLoadingNextQuiz) return;
+
+    setIsLoadingNextQuiz(true);
+    try {
+      const nextQuizId = await getNextRandomQuizId({
+        mode: "single",
+        currentQuizId: quiz.id,
+      });
+
+      if (!nextQuizId) {
+        router.push("/");
+        return;
+      }
+
+      router.push(`/play/${nextQuizId}`);
+    } catch {
+      router.push("/");
+    } finally {
+      setIsLoadingNextQuiz(false);
+    }
+  }, [isLoadingNextQuiz, quiz.id, router]);
+
+  const questionReadAloudSegments = useMemo(() => {
+    if (!currentQuestion) {
+      return [];
+    }
+
+    const endpoint = `/api/quiz/${quiz.id}/questions/${currentQuestion.id}/tts`;
+    const options = currentQuestion.options.map((option) => option.text);
+
+    return [
+      {
+        id: "question",
+        url: endpoint,
+        body: {
+          segment: "question",
+          position: currentQuestionIndex + 1,
+          questionText: currentQuestion.questionText,
+          options,
+        },
+      },
+      {
+        id: "options",
+        url: endpoint,
+        body: {
+          segment: "options",
+          position: currentQuestionIndex + 1,
+          questionText: currentQuestion.questionText,
+          options,
+        },
+      },
+    ] as const;
+  }, [currentQuestion, currentQuestionIndex, quiz.id]);
 
   const moveToNextQuestion = useCallback(() => {
     clearAutoAdvance();
@@ -199,6 +289,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       if (finalizedQuestionKeyRef.current === questionKey) return;
       finalizedQuestionKeyRef.current = questionKey;
 
+      stopReadAloudRef.current();
       stopCountdown();
 
       const elapsedMs = Math.min(
@@ -236,12 +327,13 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     [clearAutoAdvance, currentQuestion, currentQuestionIndex, moveToNextQuestion, phase, stopCountdown],
   );
 
-  useEffect(() => {
-    if (phase !== "question") {
-      stopCountdown();
+  const beginAnswerWindow = useCallback(() => {
+    if (phase !== "question" || answerWindowOpenedRef.current) {
       return;
     }
 
+    answerWindowOpenedRef.current = true;
+    setAnswerWindowOpen(true);
     questionStartedAtRef.current = Date.now();
     setRemainingSeconds(QUESTION_TIME_SECONDS);
 
@@ -257,9 +349,70 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         return next;
       });
     }, 1000);
+  }, [finalizeAnswer, phase, stopCountdown]);
+
+  const {
+    activeSegmentId,
+    error: readAloudPlaybackError,
+    isLoading: isReadAloudLoading,
+    isPlaying: isReadAloudPlaying,
+    play: playReadAloud,
+    stop: stopReadAloud,
+  } = useQuestionReadAloud({
+    segments: questionReadAloudSegments,
+    playbackKey: questionPlaybackKey,
+    autoPlayEnabled: phase === "question" && readAloudEnabled && !answerWindowOpen,
+    onSegmentEnd: (segmentId) => {
+      if (segmentId === "options") {
+        beginAnswerWindow();
+      }
+    },
+  });
+
+  stopReadAloudRef.current = stopReadAloud;
+
+  const readAloudError = readAloudPreferenceError ?? readAloudPlaybackError;
+
+  useEffect(() => {
+    readAloudEnabledRef.current = readAloudEnabled;
+  }, [readAloudEnabled]);
+
+  useEffect(() => {
+    if (phase === "question") return;
+    stopReadAloud();
+  }, [phase, stopReadAloud]);
+
+  useEffect(() => {
+    if (phase !== "question") {
+      stopCountdown();
+      answerWindowOpenedRef.current = false;
+      setAnswerWindowOpen(false);
+      return;
+    }
+
+    answerWindowOpenedRef.current = false;
+    setAnswerWindowOpen(false);
+    setRemainingSeconds(QUESTION_TIME_SECONDS);
+    questionStartedAtRef.current = Date.now();
+    stopCountdown();
+
+    if (!readAloudEnabledRef.current) {
+      beginAnswerWindow();
+    }
 
     return () => stopCountdown();
-  }, [currentQuestionIndex, finalizeAnswer, phase, stopCountdown]);
+  }, [beginAnswerWindow, currentQuestionIndex, phase, stopCountdown]);
+
+  useEffect(() => {
+    if (
+      phase === "question" &&
+      readAloudEnabled &&
+      !answerWindowOpen &&
+      readAloudError
+    ) {
+      beginAnswerWindow();
+    }
+  }, [answerWindowOpen, beginAnswerWindow, phase, readAloudEnabled, readAloudError]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -548,8 +701,10 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     resultsRef.current = [];
     hasPersistedRef.current = false;
     finalizedQuestionKeyRef.current = null;
+    answerWindowOpenedRef.current = false;
 
     setCurrentQuestionIndex(0);
+    setAnswerWindowOpen(false);
     setFocusedAnswerIndex(null);
     setFocusedCompleteTarget(null);
     setSelectedAnswerIndex(null);
@@ -560,29 +715,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     setSaveStatus("idle");
     setPhase("question");
   }, [clearAutoAdvance, stopCountdown]);
-
-  async function playNext() {
-    if (isLoadingNextQuiz) return;
-
-    setIsLoadingNextQuiz(true);
-    try {
-      const nextQuizId = await getNextRandomQuizId({
-        mode: "single",
-        currentQuizId: quiz.id,
-      });
-
-      if (!nextQuizId) {
-        router.push("/");
-        return;
-      }
-
-      router.push(`/play/${nextQuizId}`);
-    } catch {
-      router.push("/");
-    } finally {
-      setIsLoadingNextQuiz(false);
-    }
-  }
 
   const submitVote = useCallback(async (nextVote: VoteType) => {
     if (isVoting) return;
@@ -905,6 +1037,71 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
                     </p>
                   </div>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isReadAloudPlaying) {
+                        stopReadAloud();
+                        if (!answerWindowOpen) {
+                          beginAnswerWindow();
+                        }
+                        return;
+                      }
+                      void playReadAloud();
+                    }}
+                    disabled={questionReadAloudSegments.length === 0 || isReadAloudLoading}
+                    className={cn(
+                      "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition md:text-base",
+                      isReadAloudPlaying || isReadAloudLoading
+                        ? "border-[#818cf8]/70 bg-[#818cf8]/18 text-[#eef1ff]"
+                        : "border-[#252940] bg-[#0f1117]/72 text-[#c7cada] hover:border-[#6c8aff]/45 hover:text-[#eef1ff]",
+                      (questionReadAloudSegments.length === 0 || isReadAloudLoading) &&
+                        "cursor-not-allowed opacity-70 hover:border-[#252940] hover:text-[#c7cada]",
+                    )}
+                  >
+                    {isReadAloudLoading ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : isReadAloudPlaying ? (
+                      <Square className="size-4" />
+                    ) : (
+                      <Volume2 className="size-4" />
+                    )}
+                    <span>
+                      {isReadAloudLoading
+                        ? "Loading voice"
+                        : isReadAloudPlaying
+                          ? activeSegmentId === "question"
+                            ? "Reading question"
+                            : "Reading options"
+                          : "Read aloud"}
+                    </span>
+                  </button>
+
+                  <label className="inline-flex min-h-11 items-center gap-3 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-sm font-semibold text-[#c7cada] md:text-base">
+                    <Switch
+                      checked={readAloudEnabled}
+                      disabled={readAloudSaving}
+                      onCheckedChange={(checked) => {
+                        if (!checked) {
+                          stopReadAloud();
+                          if (!answerWindowOpen) {
+                            beginAnswerWindow();
+                          }
+                        }
+                        setReadAloudPreferenceError(null);
+                        void toggleReadAloud(checked);
+                      }}
+                      aria-label="Toggle automatic read aloud"
+                    />
+                    <span>{readAloudSaving ? "Saving..." : "Auto-read"}</span>
+                  </label>
+                </div>
+
+                {readAloudError ? (
+                  <p className="text-sm font-medium text-rose-300 md:text-base">{readAloudError}</p>
+                ) : null}
 
                 <h2
                   className={cn(

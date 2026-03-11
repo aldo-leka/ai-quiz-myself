@@ -73,6 +73,7 @@ export async function getDashboardViewerContextOrNull(): Promise<DashboardViewer
       isAdmin: user.isAdmin,
       locale: user.locale,
       preferredProvider: user.preferredProvider,
+      readAloudEnabled: user.readAloudEnabled,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     })
@@ -102,6 +103,7 @@ export async function getDashboardViewerContextOrNull(): Promise<DashboardViewer
       isAdmin: impersonatedUser.isAdmin,
       locale: impersonatedUser.locale,
       preferredProvider: impersonatedUser.preferredProvider,
+      readAloudEnabled: impersonatedUser.readAloudEnabled,
       createdAt: impersonatedUser.createdAt,
       updatedAt: impersonatedUser.updatedAt,
     },

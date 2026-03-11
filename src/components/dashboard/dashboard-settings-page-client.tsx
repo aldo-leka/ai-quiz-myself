@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardApiKeysPageClient } from "@/components/dashboard/dashboard-api-keys-page-client";
 import { Button } from "@/components/ui/button";
 import { PlayerSelect } from "@/components/dashboard/player-select";
+import { Switch } from "@/components/ui/switch";
+import { writeStoredReadAloudPreference } from "@/lib/read-aloud-preference";
 
 type ProviderOption = "openai" | "anthropic" | "google";
 
 type DashboardSettingsPageClientProps = {
   initialLocale: string;
   initialPreferredProvider: ProviderOption | null;
+  initialReadAloudEnabled: boolean;
   availableProviders: ProviderOption[];
 };
 
@@ -49,12 +52,14 @@ function normalizeLocale(value: string): string {
 export function DashboardSettingsPageClient({
   initialLocale,
   initialPreferredProvider,
+  initialReadAloudEnabled,
   availableProviders,
 }: DashboardSettingsPageClientProps) {
   const [locale, setLocale] = useState(normalizeLocale(initialLocale));
   const [preferredProvider, setPreferredProvider] = useState<ProviderOption | "none">(
     initialPreferredProvider ?? "none",
   );
+  const [readAloudEnabled, setReadAloudEnabled] = useState(initialReadAloudEnabled);
   const [availableProvidersState, setAvailableProvidersState] = useState<ProviderOption[]>(
     () => Array.from(new Set(availableProviders)),
   );
@@ -89,12 +94,14 @@ export function DashboardSettingsPageClient({
         body: JSON.stringify({
           locale,
           preferredProvider,
+          readAloudEnabled,
         }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to save settings");
       }
+      writeStoredReadAloudPreference(readAloudEnabled);
       setStatus("Settings saved.");
     } catch (saveError) {
       setStatus(saveError instanceof Error ? saveError.message : "Failed to save settings");
@@ -136,6 +143,23 @@ export function DashboardSettingsPageClient({
               Add an API key in the API Keys section below before selecting a preferred provider.
             </p>
           ) : null}
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">Read Aloud</p>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-[#252940] bg-[#0f1117]/72 px-5 py-4">
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-[#e4e4e9] md:text-lg">Auto-read quiz questions</p>
+              <p className="text-sm text-[#9394a5] md:text-base">
+                When enabled, supported game screens will read each question aloud automatically.
+              </p>
+            </div>
+            <Switch
+              checked={readAloudEnabled}
+              onCheckedChange={setReadAloudEnabled}
+              aria-label="Toggle read aloud"
+            />
+          </div>
         </div>
 
         <Button
