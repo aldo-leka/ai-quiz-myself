@@ -3,8 +3,9 @@ import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
 import { quizGenerationJobs } from "@/db/schema";
+import { extractPdfSourceText } from "@/lib/pdf-extraction";
+import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { generateUniqueSourceSubtopics } from "@/lib/url-batch-planning";
-import { extractArticleText } from "@/lib/url-extraction";
 import {
   failGenerationJob,
   loadGenerationJob,
@@ -16,30 +17,27 @@ import {
   type LoadedGenerationJob,
 } from "@/trigger/generate-quiz";
 
-const MAX_URL_BATCH_SIZE = 5;
+const MAX_PDF_BATCH_SIZE = 3;
 
 const taskPayloadSchema = z.object({
-  jobIds: z.array(z.string().uuid()).min(2).max(MAX_URL_BATCH_SIZE),
+  jobIds: z.array(z.string().uuid()).min(2).max(MAX_PDF_BATCH_SIZE),
 });
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message.slice(0, 500);
   }
-  return "Unknown URL batch error";
-}
-
-function fallbackTitle(rawUrl: string): string {
-  try {
-    return new URL(rawUrl).hostname.replace(/^www\./, "") || "Article";
-  } catch {
-    return "Article";
-  }
+  return "Unknown PDF batch error";
 }
 
 function normalizeOptionalTheme(value: string | undefined): string | null {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function fallbackTitle(fileName: string | undefined): string {
+  const normalized = fileName?.replace(/\.pdf$/i, "").trim();
+  return normalized && normalized.length > 0 ? normalized : "PDF Quiz";
 }
 
 async function loadOrderedJobs(jobIds: string[]): Promise<LoadedGenerationJob[] | null> {
@@ -74,22 +72,22 @@ async function markBatchFailed(
     await failGenerationJob({
       jobId: job.id,
       userId: job.userId,
-      sourceType: "url",
+      sourceType: "pdf",
       input,
       errorMessage,
     });
   }
 }
 
-export const generateUrlBatchTask = task({
-  id: "generate-url-batch",
+export const generatePdfBatchTask = task({
+  id: "generate-pdf-batch",
   maxDuration: 3600,
   run: async (payload: z.infer<typeof taskPayloadSchema>) => {
     const parsedPayload = taskPayloadSchema.parse(payload);
     const jobs = await loadOrderedJobs(parsedPayload.jobIds);
 
     if (!jobs) {
-      logger.error("URL batch generation jobs not found", {
+      logger.error("PDF batch generation jobs not found", {
         jobIds: parsedPayload.jobIds,
       });
       return { ok: false, error: "jobs_not_found" };
@@ -111,7 +109,7 @@ export const generateUrlBatchTask = task({
             errorMessage: message,
           })
           .where(inArray(quizGenerationJobs.id, [job.id]));
-        logger.error("Invalid URL batch job input", { jobId: job.id, error: message });
+        logger.error("Invalid PDF batch job input", { jobId: job.id, error: message });
         return { ok: false, error: message };
       }
     }
@@ -121,27 +119,30 @@ export const generateUrlBatchTask = task({
       return { ok: false, error: "empty_batch" };
     }
 
-    const sharedUrl = first.input.url?.trim();
-    if (!sharedUrl) {
-      const message = "URL batch jobs are missing the source URL";
+    const sharedObjectKey = first.input.pdfObjectKey?.trim();
+    const sharedFileName = first.input.fileName?.trim();
+
+    if (!sharedObjectKey) {
+      const message = "PDF batch jobs are missing the uploaded PDF object key";
       await markBatchFailed(parsedJobs, message);
       return { ok: false, error: message };
     }
 
     const hasMismatchedBatch = parsedJobs.some(
       ({ job, input }) =>
-        job.sourceType !== "url" ||
+        job.sourceType !== "pdf" ||
         job.userId !== first.job.userId ||
-        input.url?.trim() !== sharedUrl,
+        input.pdfObjectKey?.trim() !== sharedObjectKey ||
+        input.fileName?.trim() !== sharedFileName,
     );
 
     if (hasMismatchedBatch) {
-      const message = "URL batch jobs must belong to the same user and source URL";
+      const message = "PDF batch jobs must belong to the same user and uploaded PDF";
       await markBatchFailed(parsedJobs, message);
       return { ok: false, error: message };
     }
 
-    let sourceTitle = fallbackTitle(sharedUrl);
+    let sourceTitle = fallbackTitle(sharedFileName);
     let sourceText = "";
     const lockedThemes = parsedJobs.map(({ input }) => normalizeOptionalTheme(input.theme));
     const existingPlannedThemes = lockedThemes.filter((value): value is string => value !== null);
@@ -149,8 +150,18 @@ export const generateUrlBatchTask = task({
 
     try {
       const credentials = await resolveGenerationCredentials(first.job.userId, first.input);
-      const extracted = await extractArticleText(sharedUrl);
-      sourceTitle = extracted.title?.trim() || sourceTitle;
+      const pdfBuffer = await downloadR2ObjectBuffer(sharedObjectKey);
+      if (!pdfBuffer.length) {
+        throw new Error("Uploaded PDF is empty");
+      }
+
+      const extracted = await extractPdfSourceText({
+        pdfBuffer,
+        fileName: sharedFileName ?? "uploaded.pdf",
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      sourceTitle = extracted.title || sourceTitle;
       sourceText = extracted.text;
 
       const missingThemeCount = lockedThemes.filter((value) => value === null).length;
@@ -192,7 +203,7 @@ export const generateUrlBatchTask = task({
         await failGenerationJob({
           jobId: entry.job.id,
           userId: entry.job.userId,
-          sourceType: "url",
+          sourceType: "pdf",
           input: updatedInput,
           errorMessage: message,
         });
@@ -216,11 +227,11 @@ export const generateUrlBatchTask = task({
       failedJobs.push({ jobId: result.jobId, error: result.error });
     }
 
-    logger.log("URL batch generation finished", {
+    logger.log("PDF batch generation finished", {
       requestedJobs: parsedJobs.length,
       completedJobs: completedJobIds.length,
       failedJobs: failedJobs.length,
-      url: sharedUrl,
+      fileName: sharedFileName,
     });
 
     return {

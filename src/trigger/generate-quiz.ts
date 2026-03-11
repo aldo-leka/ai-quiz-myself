@@ -540,26 +540,38 @@ export async function runGenerateQuizJob(params: {
     let sourceUrl: string | null = null;
 
     if (sourceType === "pdf") {
-      if (!effectiveInput.pdfBase64 && !effectiveInput.pdfObjectKey) {
-        throw new Error("PDF source payload is missing");
+      if (params.preparedSourceText) {
+        effectiveTheme =
+          effectiveInput.theme?.trim() ||
+          params.preparedSourceTitle?.trim() ||
+          effectiveInput.fileName?.trim() ||
+          effectiveTheme;
+        sourceText = params.preparedSourceText;
+      } else {
+        if (!effectiveInput.pdfBase64 && !effectiveInput.pdfObjectKey) {
+          throw new Error("PDF source payload is missing");
+        }
+
+        const pdfBuffer = effectiveInput.pdfObjectKey
+          ? await downloadR2ObjectBuffer(effectiveInput.pdfObjectKey)
+          : Buffer.from(effectiveInput.pdfBase64 ?? "", "base64");
+        if (!pdfBuffer.length) {
+          throw new Error("Uploaded PDF is empty");
+        }
+
+        const extractedPdf = await extractPdfSourceText({
+          pdfBuffer,
+          fileName: effectiveInput.fileName ?? "uploaded.pdf",
+          openAIApiKey: process.env.OPENAI_API_KEY,
+        });
+
+        effectiveTheme =
+          effectiveInput.theme?.trim() ||
+          extractedPdf.title ||
+          params.preparedSourceTitle ||
+          effectiveTheme;
+        sourceText = extractedPdf.text;
       }
-
-      const pdfBuffer = effectiveInput.pdfObjectKey
-        ? await downloadR2ObjectBuffer(effectiveInput.pdfObjectKey)
-        : Buffer.from(effectiveInput.pdfBase64 ?? "", "base64");
-      if (!pdfBuffer.length) {
-        throw new Error("Uploaded PDF is empty");
-      }
-
-      const extractedPdf = await extractPdfSourceText({
-        pdfBuffer,
-        fileName: effectiveInput.fileName ?? "uploaded.pdf",
-        openAIApiKey: process.env.OPENAI_API_KEY,
-      });
-
-      effectiveTheme =
-        effectiveInput.theme?.trim() || extractedPdf.title || params.preparedSourceTitle || effectiveTheme;
-      sourceText = extractedPdf.text;
     } else if (sourceType === "url") {
       if (!effectiveInput.url) {
         throw new Error("URL source is missing");

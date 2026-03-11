@@ -15,6 +15,7 @@ import { isR2Configured } from "@/lib/r2";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
+import { generatePdfBatchTask } from "@/trigger/generate-pdf-batch";
 import { generateQuizTask } from "@/trigger/generate-quiz";
 import { generateUrlBatchTask } from "@/trigger/generate-url-batch";
 
@@ -23,7 +24,7 @@ export const runtime = "nodejs";
 const MAX_BATCH_COUNTS = {
   theme: 100,
   url: 5,
-  pdf: 1,
+  pdf: 3,
 } as const;
 
 const requestSchema = z.object({
@@ -345,7 +346,7 @@ export async function POST(request: Request) {
     if (payload.sourceType === "pdf") {
       return NextResponse.json(
         {
-          error: "PDF batch generation is temporarily limited to 1 until source-aware uniqueness planning ships.",
+          error: `PDF batch generation currently supports up to ${maxBatchCount} quizzes per batch.`,
         },
         { status: 400 },
       );
@@ -500,8 +501,8 @@ export async function POST(request: Request) {
   }
 
   const itemsToSchedule = generationItems.slice(0, maxScheduledCount);
-  const shouldUseUrlBatchPlanner =
-    payload.sourceType === "url" && itemsToSchedule.length > 1;
+  const shouldUseUrlBatchPlanner = payload.sourceType === "url" && itemsToSchedule.length > 1;
+  const shouldUsePdfBatchPlanner = payload.sourceType === "pdf" && itemsToSchedule.length > 1;
   const scheduledJobIds: string[] = [];
   const triggerRunIds: string[] = [];
   const warnings: string[] = [];
@@ -586,7 +587,7 @@ export async function POST(request: Request) {
     try {
       scheduledJobIds.push(job.id);
 
-      if (!shouldUseUrlBatchPlanner) {
+      if (!shouldUseUrlBatchPlanner && !shouldUsePdfBatchPlanner) {
         const run = await generateQuizTask.trigger({ jobId: job.id });
         triggerRunIds.push(run.id);
       }
@@ -628,6 +629,41 @@ export async function POST(request: Request) {
           userId: session.user.id,
           jobId,
           sourceType: "url",
+          billingMode,
+          amountCents: billingMode === "platform_credits" ? generationCostCents : 0,
+          batchIndex: item.batchIndex,
+          batchSize: item.batchSize,
+          errorMessage: message,
+        });
+      }
+
+      if (billingMode === "platform_credits" && generationCostCents > 0) {
+        remainingAffordableCount += scheduledJobIds.length;
+      }
+
+      warnings.push(message);
+      scheduledJobIds.length = 0;
+    }
+  }
+
+  if (shouldUsePdfBatchPlanner && scheduledJobIds.length > 0) {
+    try {
+      const run = await generatePdfBatchTask.trigger({
+        jobIds: scheduledJobIds,
+      });
+      triggerRunIds.push(run.id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start PDF batch generation task";
+
+      for (const [index, jobId] of scheduledJobIds.entries()) {
+        const item = itemsToSchedule[index];
+        if (!item) continue;
+
+        await failJobStart({
+          userId: session.user.id,
+          jobId,
+          sourceType: "pdf",
           billingMode,
           amountCents: billingMode === "platform_credits" ? generationCostCents : 0,
           batchIndex: item.batchIndex,

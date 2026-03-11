@@ -89,7 +89,7 @@ const batchCountPresets = [1, 5, 10, 15, 25, 50, 100];
 const maxBatchCounts: Record<SourceType, number> = {
   theme: 100,
   url: 5,
-  pdf: 1,
+  pdf: 3,
 };
 
 function normalizeLocale(value: string): string {
@@ -765,7 +765,9 @@ export function DashboardCreatePageClient({
                 ? quantity === 1
                   ? "Generate one quiz from this article now."
                   : "Batch mode plans distinct angles from the article first, then generates quizzes sequentially to reduce overlap."
-                : "PDF batch generation is paused until source-aware uniqueness planning ships."}
+                : quantity === 1
+                  ? "Generate one quiz from this PDF now."
+                  : "Batch mode extracts the PDF once, plans distinct angles, then generates quizzes sequentially to reduce overlap."}
           </p>
         </div>
 

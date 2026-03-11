@@ -52,7 +52,7 @@ function subtopicsTooSimilar(left: string, right: string): boolean {
   return jaccardSimilarity(tokenize(left), tokenize(right)) >= 0.72;
 }
 
-export async function generateUniqueUrlSubtopics(params: {
+export async function generateUniqueSourceSubtopics(params: {
   title: string;
   sourceText: string;
   count: number;
@@ -69,7 +69,7 @@ export async function generateUniqueUrlSubtopics(params: {
   const avoidList = [...existing];
 
   if (!sourceText) {
-    throw new Error("Cannot plan URL batch without readable article text");
+    throw new Error("Cannot plan source batch without readable source text");
   }
 
   for (let round = 0; round < MAX_SUBTOPIC_ROUNDS; round += 1) {
@@ -86,12 +86,12 @@ export async function generateUniqueUrlSubtopics(params: {
         subtopics: z.array(z.string().min(2).max(80)).min(minimumCount).max(candidateCount),
       }),
       prompt: [
-        "You are planning multiple distinct quiz angles from one article.",
-        `Article title: ${title}`,
+        "You are planning multiple distinct quiz angles from one source document.",
+        `Source title: ${title}`,
         `Need ${remaining} additional quiz subtopics.`,
         "Rules:",
-        "- Every subtopic must focus on a meaningfully different angle of the article.",
-        "- Spread coverage across the article instead of repeating the same core facts.",
+        "- Every subtopic must focus on a meaningfully different angle of the source.",
+        "- Spread coverage across the source instead of repeating the same core facts.",
         "- Keep each subtopic short, specific, and quiz-friendly.",
         "- Avoid rephrasing any subtopic from the avoid list.",
         "- Return family-friendly, broadly understandable subtopics only.",
@@ -99,7 +99,7 @@ export async function generateUniqueUrlSubtopics(params: {
         "Avoid list:",
         avoidList.length > 0 ? avoidList.join("\n") : "none",
         "",
-        "Article content:",
+        "Source content:",
         sourceText,
       ].join("\n"),
     });
@@ -128,8 +128,10 @@ export async function generateUniqueUrlSubtopics(params: {
   }
 
   if (accepted.length < requestedCount) {
-    throw new Error("Could not plan enough distinct quiz angles from this article");
+    throw new Error("Could not plan enough distinct quiz angles from this source");
   }
 
   return accepted.slice(0, requestedCount);
 }
+
+export const generateUniqueUrlSubtopics = generateUniqueSourceSubtopics;
