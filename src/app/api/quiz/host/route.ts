@@ -105,11 +105,9 @@ function buildSystemPrompt(
 ) {
   const baseRules = `You are the charismatic host of a prime-time quiz show called QuizPlus: Millionaire.
 Be dramatic, warm, and educational.
-Hard limit: 4 sentences maximum.
+Hard limit: 3 sentences maximum.
 Do not use markdown.
-You MUST use these cue tokens naturally in your response: |||slow|||, |||medium|||, |||fast|||.
-Use |||option:A||| |||option:B||| |||option:C||| |||option:D||| while presenting options.
-Use |||reveal||| only when the answer should be revealed.`;
+Do not use stage directions, cue tokens, or screenplay formatting.`;
 
   if (actionType === "WELCOME") {
     const contestantName =
@@ -176,7 +174,8 @@ Instruction: Keep it concise and suspenseful.`;
 Action: The player asks the host for help.
 Question: ${currentSetting.question ?? ""}
 Available options: ${options}
-Instruction: Give your best guess and reasoning, but do not claim certainty.`;
+Instruction: Give your best guess and brief reasoning, but do not claim certainty.
+Start the first sentence with "I'd lean" and include the option letter if possible.`;
 }
 
 function getModel(provider: ProviderName, apiKey: string) {

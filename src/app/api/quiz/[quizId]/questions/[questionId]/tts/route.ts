@@ -6,6 +6,7 @@ import { questions, quizzes } from "@/db/schema";
 import {
   buildOptionsSpeechText,
   buildQuestionSpeechText,
+  buildQuestionStemSpeechText,
   buildQuizTtsObjectKey,
   getQuizTtsContentType,
   getQuizTtsFormat,
@@ -26,6 +27,7 @@ type RouteContext = {
 const requestSchema = z.object({
   segment: z.enum(["question", "options"]),
   position: z.number().int().min(1).max(500),
+  includeQuestionNumber: z.boolean().optional().default(true),
   questionText: z.string().trim().min(1).max(4000),
   options: z.array(z.string().trim().min(1).max(500)).max(4).optional(),
 });
@@ -33,6 +35,10 @@ const requestSchema = z.object({
 const searchSchema = z.object({
   segment: z.enum(["question", "options"]),
   position: z.coerce.number().int().min(1).max(500),
+  includeQuestionNumber: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((value) => (value === undefined ? true : value === "true" || value === "1")),
   option: z.union([z.string().trim().min(1).max(500), z.array(z.string().trim().min(1).max(500))]).optional(),
 });
 
@@ -48,10 +54,12 @@ function toAudioResponse(buffer: Buffer, contentType: string) {
 
 function buildSpeechText(payload: z.infer<typeof requestSchema>): string {
   if (payload.segment === "question") {
-    return buildQuestionSpeechText({
-      position: payload.position,
-      questionText: payload.questionText,
-    });
+    return payload.includeQuestionNumber
+      ? buildQuestionSpeechText({
+          position: payload.position,
+          questionText: payload.questionText,
+        })
+      : buildQuestionStemSpeechText(payload.questionText);
   }
 
   return buildOptionsSpeechText({
@@ -141,6 +149,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const parsed = searchSchema.safeParse({
     segment: url.searchParams.get("segment"),
     position: url.searchParams.get("position"),
+    includeQuestionNumber: url.searchParams.get("includeQuestionNumber") ?? undefined,
     option: url.searchParams.getAll("option"),
   });
 
@@ -169,6 +178,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const payload = {
     segment: parsed.data.segment,
     position: parsed.data.position,
+    includeQuestionNumber: parsed.data.includeQuestionNumber,
     questionText: row.questionText,
     options,
   } satisfies z.infer<typeof requestSchema>;

@@ -1,28 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, House, LoaderCircle, User } from "lucide-react";
+import { ArrowRight, House, LoaderCircle, Square, User, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { AnimatedText } from "@/components/quiz/AnimatedText";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
+import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { useHostCommunication } from "@/hooks/useHostCommunication";
+import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import {
-  ASK_HOST_FALLBACK_MESSAGES,
   CHECKPOINTS,
   formatMoney,
-  LIFELINE_5050_MESSAGES,
   MONEY_LADDER,
-  NEXT_QUESTION_MESSAGES,
   QUESTION_LENGTH_SECONDS,
-  WELCOME_MESSAGES,
 } from "@/lib/quiz-constants";
 import type {
   HostMessage,
@@ -31,13 +28,22 @@ import type {
   SaveQuizSessionPayload,
 } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
+import {
+  buildAskHostFallbackScript,
+  buildCorrectRevealScript,
+  buildFinalLockScript,
+  buildFiftyFiftyScript,
+  buildQuestionIntroScript,
+  buildTimeoutScript,
+  buildWelcomeScript,
+  buildWrongRevealScript,
+} from "@/lib/wwtbam-host";
 
 type FocusControlId =
   | "header-quit"
   | "header-next"
   | `answer-${number}`
   | "final"
-  | "continue"
   | "cashout"
   | "lifeline-5050"
   | "lifeline-ask-host";
@@ -45,6 +51,94 @@ type FocusControlId =
 type WwtbamGameProps = {
   quiz: QuizWithQuestions;
 };
+
+type NarrationResult = "completed" | "skipped" | "interrupted";
+type HostNarrationStage =
+  | "welcome"
+  | "question-intro"
+  | "question-options"
+  | "final-lock"
+  | "result"
+  | "timeout"
+  | "manual"
+  | "idle";
+
+function buildHostAudioUrl(text: string) {
+  const params = new URLSearchParams({
+    text,
+  });
+
+  return `/api/quiz/host/audio?${params.toString()}`;
+}
+
+function buildQuestionAudioUrl(params: {
+  quizId: string;
+  questionId: string;
+  position: number;
+  includeQuestionNumber?: boolean;
+}) {
+  const search = new URLSearchParams({
+    segment: "question",
+    position: params.position.toString(),
+  });
+
+  if (params.includeQuestionNumber === false) {
+    search.set("includeQuestionNumber", "false");
+  }
+
+  return `/api/quiz/${params.quizId}/questions/${params.questionId}/tts?${search.toString()}`;
+}
+
+function buildOptionsAudioUrl(params: {
+  quizId: string;
+  questionId: string;
+  position: number;
+  options: string[];
+}) {
+  const search = new URLSearchParams({
+    segment: "options",
+    position: params.position.toString(),
+  });
+
+  for (const option of params.options) {
+    search.append("option", option);
+  }
+
+  return `/api/quiz/${params.quizId}/questions/${params.questionId}/tts?${search.toString()}`;
+}
+
+function summarizeAskHostAdvice(advice: string): string {
+  const normalized = advice.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "The host had a thought, but kept it close to the chest.";
+  }
+
+  const firstSentence = normalized.match(/[^.!?]+[.!?]?/)?.[0]?.trim() ?? normalized;
+  return firstSentence;
+}
+
+function toHostNarrationErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "NotAllowedError") {
+    return "This browser blocked audio autoplay. Tap Read aloud to start narration manually.";
+  }
+
+  if (error instanceof Error && error.message) {
+    const message = error.message.trim();
+    const lowerMessage = message.toLowerCase();
+
+    if (
+      lowerMessage.includes("notallowederror") ||
+      lowerMessage.includes("not allowed by the user agent") ||
+      lowerMessage.includes("user denied permission")
+    ) {
+      return "This browser blocked audio autoplay. Tap Read aloud to start narration manually.";
+    }
+
+    return message;
+  }
+
+  return "Read aloud is unavailable right now.";
+}
 
 export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const router = useRouter();
@@ -57,13 +151,15 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [finalAnswerLocked, setFinalAnswerLocked] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<HostMessage[]>([]);
-  const [hostMessage, setHostMessage] = useState("");
-  const [hostMessageOnComplete, setHostMessageOnComplete] = useState<(() => void) | undefined>();
   const [visibleOptions, setVisibleOptions] = useState(0);
   const [optionsDisabled, setOptionsDisabled] = useState(true);
   const [eliminatedOptions, setEliminatedOptions] = useState<number[]>([]);
   const [revealedAnswer, setRevealedAnswer] = useState(false);
   const [correctAnswerIndex, setCorrectAnswerIndex] = useState<number | null>(null);
+  const [askHostAdvice, setAskHostAdvice] = useState<string | null>(null);
+  const [isHostNarrating, setIsHostNarrating] = useState(false);
+  const [hostNarrationStage, setHostNarrationStage] = useState<HostNarrationStage>("idle");
+  const [hostNarrationError, setHostNarrationError] = useState<string | null>(null);
 
   const [usedLifelines, setUsedLifelines] = useState({
     fiftyFifty: false,
@@ -90,17 +186,191 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const isAdvancingRef = useRef(false);
   const revealedAnswerRef = useRef(false);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
+  const hostAudioRef = useRef<HTMLAudioElement | null>(null);
+  const hostAudioPlaybackResolverRef = useRef<((played: boolean) => void) | null>(null);
+  const hostNarrationRunIdRef = useRef(0);
+  const hostNarrationSkipRequestedRef = useRef(false);
+  const prefetchedHostAudioUrlsRef = useRef(new Set<string>());
+  const askHostRequestIdRef = useRef(0);
+  const readAloudEnabledRef = useRef(false);
 
   const { data: sessionData } = authClient.useSession();
+  const sessionUser = sessionData?.user as
+    | {
+        id?: string;
+        readAloudEnabled?: boolean;
+      }
+    | undefined;
 
-  const { sendAction } = useHostCommunication({
+  const { sendAction, isLoading: isAskHostThinking } = useHostCommunication({
     conversationHistory,
     setConversationHistory,
+  });
+
+  const {
+    readAloudEnabled,
+    readAloudSaving,
+    readAloudPreferenceError,
+    setReadAloudPreferenceError,
+    toggleReadAloud,
+  } = useReadAloudPreference({
+    userId: sessionUser?.id,
+    serverEnabled: sessionUser?.readAloudEnabled,
   });
 
   const questions = quiz.questions;
   const currentQuestion = questions[currentQuestionIndex];
   const shouldAttemptAiHost = Boolean(sessionData?.user);
+
+  const stopHostNarration = useCallback(() => {
+    hostNarrationRunIdRef.current += 1;
+
+    const audio = hostAudioRef.current;
+    if (!audio) {
+      setIsHostNarrating(false);
+      setHostNarrationStage("idle");
+      return;
+    }
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.onended = null;
+    audio.onerror = null;
+    const resolvePlayback = hostAudioPlaybackResolverRef.current;
+    hostAudioPlaybackResolverRef.current = null;
+    hostAudioRef.current = null;
+    setIsHostNarrating(false);
+    setHostNarrationStage("idle");
+    resolvePlayback?.(false);
+  }, []);
+
+  const skipHostNarration = useCallback(() => {
+    hostNarrationSkipRequestedRef.current = true;
+    stopHostNarration();
+  }, [stopHostNarration]);
+
+  const prefetchHostAudioUrls = useCallback((urls: string[]) => {
+    if (typeof window === "undefined") return;
+
+    const uniqueUrls = [...new Set(urls)];
+
+    for (const url of uniqueUrls) {
+      if (prefetchedHostAudioUrlsRef.current.has(url)) continue;
+
+      void fetch(url, {
+        method: "GET",
+        cache: "force-cache",
+      })
+        .then(async (response) => {
+          if (!response.ok) return;
+          await response.blob();
+          prefetchedHostAudioUrlsRef.current.add(url);
+        })
+        .catch(() => {
+          // Ignore prefetch misses and fall back to live playback.
+        });
+    }
+  }, []);
+
+  const playHostNarration = useCallback(
+    async (urls: string[], stage: HostNarrationStage = "manual"): Promise<NarrationResult> => {
+      if (typeof window === "undefined" || urls.length === 0) {
+        return "skipped";
+      }
+
+      setHostNarrationError(null);
+      hostNarrationSkipRequestedRef.current = false;
+      stopHostNarration();
+      const runId = hostNarrationRunIdRef.current;
+      prefetchHostAudioUrls(urls);
+      setHostNarrationStage(stage);
+
+      for (const url of urls) {
+        if (runId !== hostNarrationRunIdRef.current) {
+          const wasSkipped = hostNarrationSkipRequestedRef.current;
+          hostNarrationSkipRequestedRef.current = false;
+          setIsHostNarrating(false);
+          setHostNarrationStage("idle");
+          return wasSkipped ? "skipped" : "interrupted";
+        }
+
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        hostAudioRef.current = audio;
+        setIsHostNarrating(true);
+
+        const played = await new Promise<boolean>((resolve, reject) => {
+          hostAudioPlaybackResolverRef.current = resolve;
+          audio.onended = () => {
+            hostAudioPlaybackResolverRef.current = null;
+            resolve(true);
+          };
+          audio.onerror = () => {
+            hostAudioPlaybackResolverRef.current = null;
+            reject(new Error("Could not play narration audio."));
+          };
+          audio
+            .play()
+            .then(() => {
+              if (runId !== hostNarrationRunIdRef.current) {
+                audio.pause();
+                audio.currentTime = 0;
+                hostAudioPlaybackResolverRef.current = null;
+                resolve(false);
+              }
+            })
+            .catch((error) => {
+              hostAudioPlaybackResolverRef.current = null;
+              reject(error);
+            });
+        });
+
+        audio.onended = null;
+        audio.onerror = null;
+
+        if (hostAudioRef.current === audio) {
+          hostAudioRef.current = null;
+        }
+
+        if (runId !== hostNarrationRunIdRef.current) {
+          const wasSkipped = hostNarrationSkipRequestedRef.current;
+          hostNarrationSkipRequestedRef.current = false;
+          setIsHostNarrating(false);
+          setHostNarrationStage("idle");
+          return wasSkipped ? "skipped" : "interrupted";
+        }
+
+        if (!played) {
+          setIsHostNarrating(false);
+          setHostNarrationStage("idle");
+          return "skipped";
+        }
+      }
+
+      setIsHostNarrating(false);
+      setHostNarrationStage("idle");
+      return "completed";
+    },
+    [prefetchHostAudioUrls, stopHostNarration],
+  );
+
+  const playOptionalHostNarration = useCallback(
+    async (urls: string[], stage: HostNarrationStage): Promise<NarrationResult> => {
+      if (!readAloudEnabledRef.current) {
+        return "skipped";
+      }
+
+      try {
+        return await playHostNarration(urls, stage);
+      } catch (error) {
+        setHostNarrationError(toHostNarrationErrorMessage(error));
+        setIsHostNarrating(false);
+        setHostNarrationStage("idle");
+        return "skipped";
+      }
+    },
+    [playHostNarration],
+  );
 
   const availableAnswerIndexes = useMemo(() => {
     if (optionsDisabled) return [];
@@ -119,10 +389,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     if (selectedAnswerIndex !== null && !revealedAnswer) {
       controls.push("final");
-    }
-
-    if (revealedAnswer) {
-      controls.push("continue");
     }
 
     if (!revealedAnswer && selectedAnswerIndex === null && currentQuestionIndex > 0) {
@@ -150,6 +416,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }, [quiz.id]);
 
   useEffect(() => {
+    readAloudEnabledRef.current = readAloudEnabled;
+  }, [readAloudEnabled]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function initializeGame() {
@@ -157,14 +427,16 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setCurrentQuestionIndex(0);
       setSelectedAnswerIndex(null);
       setFinalAnswerLocked(false);
-      setHostMessage("");
       setConversationHistory([]);
-      setVisibleOptions(0);
+      setVisibleOptions(4);
       setOptionsDisabled(true);
       setEliminatedOptions([]);
       setRevealedAnswer(false);
       revealedAnswerRef.current = false;
       setCorrectAnswerIndex(null);
+      setAskHostAdvice(null);
+      setHostNarrationError(null);
+      stopHostNarration();
       setUsedLifelines({ fiftyFifty: false, askHost: false });
       setGameOver(false);
       setWonAmount(0);
@@ -173,10 +445,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       hasPersistedSessionRef.current = false;
       isAdvancingRef.current = false;
       startedAtRef.current = new Date();
+      askHostRequestIdRef.current += 1;
 
-      await welcomePlayer(quiz);
       if (!cancelled) {
         setIsLoading(false);
+        void welcomePlayer(quiz);
       }
     }
 
@@ -185,10 +458,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     return () => {
       cancelled = true;
       if (timerRef.current) clearInterval(timerRef.current);
+      stopHostNarration();
     };
     // Game setup should rerun only when the quiz changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quiz.id]);
+  }, [quiz.id, stopHostNarration]);
 
   useEffect(() => {
     if (!focusOrder.length) {
@@ -315,35 +589,22 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }, 1000);
   }
 
-  function setHostCompletionOnce(onComplete: () => void | Promise<void>) {
-    let completed = false;
-    setHostMessageOnComplete(() => () => {
-      if (completed) return;
-      completed = true;
-      setHostMessageOnComplete(undefined);
-      void onComplete();
-    });
-  }
-
   async function welcomePlayer(loadedQuiz: QuizWithQuestions) {
     const playerName = sessionData?.user?.name ?? "Contestant";
-
-    const aiWelcome = await sendAction({
-      actionType: "WELCOME",
-      action: "The contestant entered the stage. Welcome them.",
-      currentSetting: { moneyValue: MONEY_LADDER[0] },
-      additionalData: { contestantName: playerName },
-      useAiHost: shouldAttemptAiHost,
-      onStreamChunk: (text) => setHostMessage(text),
+    const welcomeText = buildWelcomeScript({
+      contestantName: playerName,
+      seed: `${loadedQuiz.id}:welcome:${playerName}`,
     });
+    const narrationResult = await playOptionalHostNarration(
+      [buildHostAudioUrl(welcomeText)],
+      "welcome",
+    );
 
-    if (!aiWelcome) {
-      const fallback = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)]
-        .replace("{{name}}", playerName);
-      setHostMessage(fallback);
+    if (narrationResult === "interrupted") {
+      return;
     }
 
-    setHostCompletionOnce(() => beginQuestion(loadedQuiz.questions, 0));
+    await beginQuestion(loadedQuiz.questions, 0);
   }
 
   async function beginQuestion(questionSet: PlayableQuestion[], index: number) {
@@ -351,46 +612,53 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     if (!question) return;
 
     countdownStartedRef.current = false;
+    stopTimer();
+    stopHostNarration();
     setSelectedAnswerIndex(null);
     setFinalAnswerLocked(false);
     setOptionsDisabled(true);
-    setVisibleOptions(0);
+    setVisibleOptions(4);
     setEliminatedOptions([]);
     setRevealedAnswer(false);
     revealedAnswerRef.current = false;
     setCorrectAnswerIndex(null);
+    setAskHostAdvice(null);
+    askHostRequestIdRef.current += 1;
 
-    const aiIntro = await sendAction({
-      actionType: "BEGIN_QUESTION",
-      action: `Present question ${index + 1}.`,
-      currentSetting: {
-        moneyValue: MONEY_LADDER[index],
-        difficulty: question.difficulty,
-        question: question.questionText,
-        options: question.options.map((option) => option.text),
-      },
-      useAiHost: shouldAttemptAiHost,
-      onStreamChunk: (text) => setHostMessage(text),
+    const introText = buildQuestionIntroScript({
+      questionNumber: index + 1,
+      moneyValue: MONEY_LADDER[index] ?? 0,
+      seed: `${quiz.id}:${question.id}:intro`,
     });
+    const introNarrationResult = await playOptionalHostNarration([
+      buildHostAudioUrl(introText),
+      buildQuestionAudioUrl({
+        quizId: quiz.id,
+        questionId: question.id,
+        position: index + 1,
+        includeQuestionNumber: false,
+      }),
+    ], "question-intro");
 
-    if (!aiIntro) {
-      const fallback = NEXT_QUESTION_MESSAGES[Math.floor(Math.random() * NEXT_QUESTION_MESSAGES.length)]
-        .replace("{{moneyValue}}", MONEY_LADDER[index].toLocaleString())
-        .replace("{{question}}", question.questionText)
-        .replace("{{optionA}}", question.options[0]?.text ?? "")
-        .replace("{{optionB}}", question.options[1]?.text ?? "")
-        .replace("{{optionC}}", question.options[2]?.text ?? "")
-        .replace("{{optionD}}", question.options[3]?.text ?? "");
-
-      setHostMessage(fallback);
+    if (introNarrationResult === "interrupted") {
+      return;
     }
 
-    setHostCompletionOnce(() => revealAllOptions());
-  }
-
-  function revealAllOptions() {
-    setVisibleOptions(4);
     setOptionsDisabled(false);
+
+    const optionsNarrationResult = await playOptionalHostNarration([
+      buildOptionsAudioUrl({
+        quizId: quiz.id,
+        questionId: question.id,
+        position: index + 1,
+        options: question.options.map((option) => option.text),
+      }),
+    ], "question-options");
+
+    if (optionsNarrationResult === "interrupted") {
+      return;
+    }
+
     startCountdown(QUESTION_LENGTH_SECONDS);
   }
 
@@ -420,25 +688,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     setRevealedAnswer(true);
     setCorrectAnswerIndex(currentQuestion.correctOptionIndex);
     trackCurrentAnswer(selectedAnswerIndex);
-    setHostCompletionOnce(() => handleNextQuestion());
-  }
-
-  function onHostCue(type: "reveal" | "option", value?: "A" | "B" | "C" | "D") {
-    if (type === "option" && value) {
-      const optionIndex = value.charCodeAt(0) - "A".charCodeAt(0) + 1;
-      setVisibleOptions((previous) => Math.max(previous, optionIndex));
-
-      if (optionIndex >= 4) {
-        setOptionsDisabled(false);
-        startCountdown(QUESTION_LENGTH_SECONDS);
-      }
-      return;
-    }
-
-    // Ignore accidental/early reveal cues unless we're in an answer-locked path
-    // (final answer confirmation or timeout flow).
-    if (!finalAnswerLocked) return;
-    revealAnswer();
   }
 
   async function handleTimeOut() {
@@ -447,8 +696,17 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     setOptionsDisabled(true);
     setFinalAnswerLocked(true);
     setSelectedAnswerIndex(null);
-    setHostMessage("|||slow|||Time is up.|||medium|||Let's reveal the correct answer.|||reveal|||");
-    setHostMessageOnComplete(undefined);
+    stopTimer();
+
+    const narrationResult = await playOptionalHostNarration([
+      buildHostAudioUrl(buildTimeoutScript(`${quiz.id}:${currentQuestion.id}:timeout`)),
+    ], "timeout");
+
+    if (narrationResult === "interrupted") {
+      return;
+    }
+
+    revealAnswer();
   }
 
   async function handleFiftyFifty() {
@@ -466,37 +724,17 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     const remaining = [0, 1, 2, 3]
       .filter((idx) => !toEliminate.includes(idx))
       .map((idx) => `${String.fromCharCode(65 + idx)}: ${currentQuestion.options[idx]?.text ?? ""}`);
-
-    const aiResponse = await sendAction({
-      actionType: "LIFELINE_5050",
-      action: "The player used 50:50.",
-      currentSetting: {
-        moneyValue: MONEY_LADDER[currentQuestionIndex],
-        remainingTime,
-        difficulty: currentQuestion.difficulty,
-        question: currentQuestion.questionText,
-        options: currentQuestion.options.map((option) => option.text),
-      },
-      additionalData: { remainingOptions: remaining },
-      useAiHost: shouldAttemptAiHost,
-      onStreamChunk: (text) => setHostMessage(text),
-    });
-
-    if (!aiResponse) {
-      const fallback = LIFELINE_5050_MESSAGES[Math.floor(Math.random() * LIFELINE_5050_MESSAGES.length)]
-        .replace("{{option1}}", remaining[0] ?? "")
-        .replace("{{option2}}", remaining[1] ?? "");
-
-      setHostMessage(fallback);
-    }
-
-    setHostMessageOnComplete(undefined);
+    void playOptionalHostNarration([
+      buildHostAudioUrl(buildFiftyFiftyScript(`${quiz.id}:${currentQuestion.id}:5050:${remaining.join("|")}`)),
+    ], "manual");
   }
 
   async function handleAskHost() {
     if (!currentQuestion || usedLifelines.askHost) return;
 
     setUsedLifelines((previous) => ({ ...previous, askHost: true }));
+    const requestId = askHostRequestIdRef.current + 1;
+    askHostRequestIdRef.current = requestId;
 
     const remainingIndexes = [0, 1, 2, 3].filter((idx) => !eliminatedOptions.includes(idx));
     const remainingOptions = remainingIndexes.map(
@@ -517,19 +755,25 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         remainingOptions,
       },
       useAiHost: shouldAttemptAiHost,
-      onStreamChunk: (text) => setHostMessage(text),
     });
 
-    if (!aiResponse) {
-      const guessIndex = remainingIndexes[Math.floor(Math.random() * remainingIndexes.length)] ?? 0;
-      const guess = `${String.fromCharCode(65 + guessIndex)}: ${currentQuestion.options[guessIndex]?.text ?? ""}`;
-      const fallback = ASK_HOST_FALLBACK_MESSAGES[
-        Math.floor(Math.random() * ASK_HOST_FALLBACK_MESSAGES.length)
-      ].replace("{{guess}}", guess);
-      setHostMessage(fallback);
+    if (requestId !== askHostRequestIdRef.current) {
+      return;
     }
 
-    setHostMessageOnComplete(undefined);
+    let hostAdviceText = aiResponse?.trim();
+
+    if (!hostAdviceText) {
+      const guessIndex = remainingIndexes[Math.floor(Math.random() * remainingIndexes.length)] ?? 0;
+      const guess = String.fromCharCode(65 + guessIndex);
+      hostAdviceText = buildAskHostFallbackScript({
+        guess,
+        seed: `${quiz.id}:${currentQuestion.id}:ask-host:${guess}`,
+      });
+    }
+
+    setAskHostAdvice(summarizeAskHostAdvice(hostAdviceText));
+    void playOptionalHostNarration([buildHostAudioUrl(hostAdviceText)], "manual");
   }
 
   async function confirmFinalAnswer() {
@@ -539,50 +783,34 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     setOptionsDisabled(true);
     stopTimer();
 
-    const selectedOption = currentQuestion.options[selectedAnswerIndex];
-    const correctOption = currentQuestion.options[currentQuestion.correctOptionIndex];
-    const isCorrect = selectedAnswerIndex === currentQuestion.correctOptionIndex;
+    const narrationResult = await playOptionalHostNarration([
+      buildHostAudioUrl(buildFinalLockScript(`${quiz.id}:${currentQuestion.id}:lock:${selectedAnswerIndex}`)),
+    ], "final-lock");
 
-    const fallbackFinalMessage = isCorrect
-      ? `You lock in ${selectedOption?.text ?? "that answer"}.|||slow|||That is correct!|||reveal||||||medium|||${correctOption?.explanation ?? "Excellent call."}`
-      : `You lock in ${selectedOption?.text ?? "that answer"}.|||slow|||I'm sorry, that's not correct.|||reveal||||||medium|||${selectedOption?.explanation ?? "It sounded plausible, but missed a key detail."}|||medium|||The correct answer was ${correctOption?.text ?? "the correct option"}. ${correctOption?.explanation ?? ""}`;
-
-    const aiResponse = await sendAction({
-      actionType: "FINAL_ANSWER_CONFIRM",
-      action: `The player locks ${selectedOption?.text ?? ""} as the final answer.`,
-      currentSetting: {
-        moneyValue: MONEY_LADDER[currentQuestionIndex],
-        remainingTime,
-        difficulty: currentQuestion.difficulty,
-        question: currentQuestion.questionText,
-        options: currentQuestion.options.map((option) => option.text),
-        correctAnswer: correctOption?.text,
-      },
-      additionalData: {
-        selectedAnswer: selectedOption?.text,
-        selectedAnswerExplanation:
-          selectedAnswerIndex === currentQuestion.correctOptionIndex
-            ? undefined
-            : selectedOption?.explanation,
-        correctAnswerExplanation: correctOption?.explanation,
-      },
-      useAiHost: shouldAttemptAiHost,
-      onStreamChunk: (text) => setHostMessage(text),
-    });
-
-    if (!aiResponse) {
-      setHostMessage(fallbackFinalMessage);
-      setHostMessageOnComplete(undefined);
+    if (narrationResult === "interrupted") {
       return;
     }
 
-    // Ensure the reveal always happens even if the model forgot the cue token.
-    const normalizedResponse = aiResponse.includes("|||reveal|||")
-      ? aiResponse
-      : `${aiResponse}|||medium||||||reveal|||`;
+    revealAnswer();
 
-    setHostMessage(normalizedResponse);
-    setHostMessageOnComplete(undefined);
+    const isCorrect = selectedAnswerIndex === currentQuestion.correctOptionIndex;
+    const resultText = isCorrect
+      ? buildCorrectRevealScript({
+          moneyValue: MONEY_LADDER[currentQuestionIndex] ?? 0,
+          seed: `${quiz.id}:${currentQuestion.id}:correct`,
+        })
+      : buildWrongRevealScript(`${quiz.id}:${currentQuestion.id}:wrong`);
+
+    const resultNarrationResult = await playOptionalHostNarration(
+      [buildHostAudioUrl(resultText)],
+      "result",
+    );
+
+    if (resultNarrationResult === "interrupted") {
+      return;
+    }
+
+    await handleNextQuestion();
   }
 
   async function persistSession(score: number) {
@@ -614,6 +842,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   async function endGame(finalAmount: number) {
     stopTimer();
+    stopHostNarration();
     setWonAmount(finalAmount);
     setGameOver(true);
     await persistSession(finalAmount);
@@ -645,15 +874,40 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
   }
 
-  function continueAfterReveal() {
-    setHostMessageOnComplete(undefined);
-    void handleNextQuestion();
-  }
-
   function cashOut() {
     if (currentQuestionIndex <= 0) return;
     const amount = MONEY_LADDER[currentQuestionIndex - 1] ?? 0;
     void endGame(amount);
+  }
+
+  async function playCurrentPromptAloud() {
+    if (!currentQuestion || revealedAnswer) {
+      return;
+    }
+
+    setHostNarrationError(null);
+
+    try {
+      await playHostNarration(
+        [
+          buildQuestionAudioUrl({
+            quizId: quiz.id,
+            questionId: currentQuestion.id,
+            position: currentQuestionIndex + 1,
+            includeQuestionNumber: false,
+          }),
+          buildOptionsAudioUrl({
+            quizId: quiz.id,
+            questionId: currentQuestion.id,
+            position: currentQuestionIndex + 1,
+            options: currentQuestion.options.map((option) => option.text),
+          }),
+        ],
+        "manual",
+      );
+    } catch (error) {
+      setHostNarrationError(toHostNarrationErrorMessage(error));
+    }
   }
 
   async function playRandomAgain() {
@@ -700,11 +954,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     if (controlId === "final") {
       void confirmFinalAnswer();
-      return;
-    }
-
-    if (controlId === "continue") {
-      continueAfterReveal();
       return;
     }
 
@@ -831,6 +1080,20 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     remainingTime !== null && totalTime !== null && totalTime > 0
       ? (remainingTime / totalTime) * 100
       : 100;
+  const moneyLadderDisplay = [...MONEY_LADDER.entries()].reverse();
+  const readAloudError = readAloudPreferenceError ?? hostNarrationError;
+  const showAskHostStatus = isAskHostThinking || Boolean(askHostAdvice);
+  const skipNarrationLabel =
+    hostNarrationStage === "final-lock" || hostNarrationStage === "timeout"
+        ? "Reveal now"
+        : hostNarrationStage === "result"
+          ? "Continue"
+          : "Skip intro";
+  const showSkipNarrationControl =
+    isHostNarrating &&
+    hostNarrationStage !== "manual" &&
+    hostNarrationStage !== "idle" &&
+    hostNarrationStage !== "question-options";
 
   return (
     <div
@@ -864,7 +1127,12 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             </span>
           }
         />
-        <div className={cn("grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]", compactLayout && "lg:grid-cols-1")}>
+        <div
+          className={cn(
+            "grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]",
+            compactLayout && "lg:grid-cols-1",
+          )}
+        >
           <section className="space-y-5 md:space-y-6">
             <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e]">
               <SlantedBar
@@ -885,6 +1153,59 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                       Question {currentQuestionIndex + 1} of {questions.length}
                     </p>
                   </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isHostNarrating) {
+                          skipHostNarration();
+                          return;
+                        }
+                        void playCurrentPromptAloud();
+                      }}
+                      disabled={!currentQuestion || isAskHostThinking}
+                      className={cn(
+                        "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition md:text-base",
+                        isHostNarrating
+                          ? "border-[#818cf8]/70 bg-[#818cf8]/18 text-[#eef1ff]"
+                          : "border-[#252940] bg-[#0f1117]/72 text-[#c7cada] hover:border-[#6c8aff]/45 hover:text-[#eef1ff]",
+                        (!currentQuestion || isAskHostThinking) &&
+                          "cursor-not-allowed opacity-70 hover:border-[#252940] hover:text-[#c7cada]",
+                      )}
+                    >
+                      {isHostNarrating ? <Square className="size-4" /> : <Volume2 className="size-4" />}
+                      <span>{isHostNarrating ? "Stop audio" : "Read aloud"}</span>
+                    </button>
+
+                    <label className="inline-flex min-h-11 items-center gap-3 rounded-full border border-[#252940] bg-[#0f1117]/72 px-4 py-2 text-sm font-semibold text-[#c7cada] md:text-base">
+                      <Switch
+                        checked={readAloudEnabled}
+                        disabled={readAloudSaving}
+                        onCheckedChange={(checked) => {
+                          if (!checked && isHostNarrating) {
+                            skipHostNarration();
+                          }
+                          setReadAloudPreferenceError(null);
+                          void toggleReadAloud(checked);
+                        }}
+                        aria-label="Toggle automatic read aloud"
+                      />
+                      <span>{readAloudSaving ? "Saving..." : "Auto-read"}</span>
+                    </label>
+
+                    {showSkipNarrationControl ? (
+                      <button
+                        type="button"
+                        onClick={skipHostNarration}
+                        className="inline-flex min-h-11 items-center rounded-full border border-[#fbbf24]/35 bg-[#fbbf24]/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:border-[#fbbf24]/60 hover:bg-[#fbbf24]/16 md:text-base"
+                      >
+                        {skipNarrationLabel}
+                      </button>
+                    ) : null}
+                  </div>
+                  {readAloudError ? (
+                    <p className="text-sm font-medium text-rose-300 md:text-base">{readAloudError}</p>
+                  ) : null}
                   <h1
                     className={cn(
                       "text-[clamp(1.35rem,6.1vw,3.25rem)] leading-[1.03] font-bold",
@@ -965,18 +1286,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   </div>
                 ) : null}
 
-                {revealedAnswer ? (
-                  <div className="flex items-center justify-center">
-                    <CircularButton
-                      ref={registerFocusControlRef("continue")}
-                      focused={focusedControl === "continue"}
-                      onClick={continueAfterReveal}
-                    >
-                      Continue
-                    </CircularButton>
-                  </div>
-                ) : null}
-
                 <div className="grid gap-3 md:grid-cols-2">
                   <GameButton
                     ref={registerFocusControlRef("lifeline-5050")}
@@ -994,18 +1303,36 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   <GameButton
                     ref={registerFocusControlRef("lifeline-ask-host")}
                     centered
-                    icon={<User size={20} />}
+                    icon={
+                      isAskHostThinking ? <LoaderCircle className="size-5 animate-spin" /> : <User size={20} />
+                    }
                     className={cn(
                       "min-h-12 text-sm md:min-h-16 md:text-xl",
                       compactLayout && "md:min-h-14 md:text-base",
                     )}
                     focused={focusedControl === "lifeline-ask-host"}
-                    disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer}
+                    disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer || isAskHostThinking}
                     onClick={() => void handleAskHost()}
                   >
                     Ask the Host
                   </GameButton>
                 </div>
+
+                {showAskHostStatus ? (
+                  <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/72 px-4 py-3 text-sm text-[#cfd1df] md:text-base">
+                    {isAskHostThinking ? (
+                      <span className="inline-flex items-center gap-2 font-medium text-amber-200">
+                        <LoaderCircle className="size-4 animate-spin" />
+                        The host is thinking...
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-semibold text-amber-200">Host hint:</span>{" "}
+                        {askHostAdvice}
+                      </span>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div
@@ -1021,38 +1348,37 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 />
               </div>
             </article>
-
-            {hostMessage ? (
-              <AnimatedText text={hostMessage} onCue={onHostCue} onComplete={hostMessageOnComplete} />
-            ) : null}
           </section>
 
-          <aside className="space-y-3 rounded-3xl border border-[#252940] bg-[#1a1d2e] p-4 md:p-5">
-          <h2 className="mb-3 text-xl font-bold text-amber-300 md:text-2xl">Money Ladder</h2>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            {MONEY_LADDER.map((amount, index) => {
-              const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
-              const isCurrent = index === currentQuestionIndex;
-              const isPassed = index < currentQuestionIndex;
+          <aside className="rounded-3xl border border-[#252940] bg-[#1a1d2e] p-4 lg:sticky lg:top-6 lg:h-fit">
+            <h2 className="mb-3 text-lg font-bold text-amber-300 md:text-xl">Money Ladder</h2>
+            <div className="grid gap-2">
+              {moneyLadderDisplay.map(([index, amount]) => {
+                const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
+                const isCurrent = index === currentQuestionIndex;
+                const isPassed = index < currentQuestionIndex;
 
-              return (
-                <div
-                  key={amount}
-                  className={[
-                    "min-h-14 rounded-xl border px-4 py-3 text-base font-semibold md:min-h-20 md:text-lg",
-                    isCurrent
-                      ? "border-amber-300 bg-amber-400/20 text-amber-200"
-                      : isPassed
-                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
-                        : "border-[#252940] bg-[#0f1117] text-[#e4e4e9]",
-                    isCheckpoint ? "shadow-[0_0_0_2px_rgba(250,204,21,0.35)]" : "",
-                  ].join(" ")}
-                >
-                  {formatMoney(amount)}
-                </div>
-              );
-            })}
-          </div>
+                return (
+                  <div
+                    key={amount}
+                    className={cn(
+                      "flex min-h-0 items-center justify-between rounded-xl border px-3 py-2 text-sm font-semibold md:text-base",
+                      isCurrent
+                        ? "border-amber-300 bg-amber-400/20 text-amber-200"
+                        : isPassed
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
+                          : "border-[#252940] bg-[#0f1117] text-[#e4e4e9]",
+                      isCheckpoint && "shadow-[0_0_0_2px_rgba(250,204,21,0.35)]",
+                    )}
+                  >
+                    <span className="text-xs uppercase tracking-[0.18em] text-[#9394a5]">
+                      {index + 1}
+                    </span>
+                    <span>{formatMoney(amount)}</span>
+                  </div>
+                );
+              })}
+            </div>
           </aside>
         </div>
       </main>

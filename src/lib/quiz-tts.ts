@@ -8,10 +8,14 @@ const DEFAULT_WWTBAM_TTS_VOICE = "onyx";
 const QUIZ_TTS_CACHE_VERSION = "v1";
 
 export type SupportedQuizGameMode = "single" | "wwtbam" | "couch_coop";
-export type QuizTtsSegment = "question" | "options";
+export type QuizTtsSegment = "question" | "options" | "host";
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+export function buildHostSpeechText(text: string): string {
+  return normalizeWhitespace(text).slice(0, MAX_TTS_INPUT_CHARS);
 }
 
 export function buildQuestionSpeechText(params: {
@@ -22,6 +26,10 @@ export function buildQuestionSpeechText(params: {
     0,
     MAX_TTS_INPUT_CHARS,
   );
+}
+
+export function buildQuestionStemSpeechText(questionText: string): string {
+  return normalizeWhitespace(questionText).slice(0, MAX_TTS_INPUT_CHARS);
 }
 
 export function buildOptionsSpeechText(params: {
