@@ -239,7 +239,6 @@ export function DashboardCreatePageClient({
   const [submitting, setSubmitting] = useState(false);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [partialBalanceModalOpen, setPartialBalanceModalOpen] = useState(false);
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
   const [topUpLoading, setTopUpLoading] = useState(false);
@@ -267,14 +266,6 @@ export function DashboardCreatePageClient({
     return [...values].sort((left, right) => left - right);
   }, [maxBatchCount]);
   const parsedThemeBatchLines = useMemo(() => parseThemeBatchLines(themeBatchText), [themeBatchText]);
-  const selectedThemeBatchLines = useMemo(
-    () => parsedThemeBatchLines.slice(0, quantity),
-    [parsedThemeBatchLines, quantity],
-  );
-  const themeBatchHasDuplicates = useMemo(
-    () => hasDuplicateValues(selectedThemeBatchLines),
-    [selectedThemeBatchLines],
-  );
   const affordableGenerationCount =
     effectiveBillingMode === "platform_credits"
       ? Math.min(quantity, Math.floor(walletBalanceCents / generationCostCents))
@@ -283,17 +274,35 @@ export function DashboardCreatePageClient({
     effectiveBillingMode === "platform_credits" &&
     affordableGenerationCount > 0 &&
     affordableGenerationCount < quantity;
+  const schedulableGenerationCount =
+    effectiveBillingMode === "platform_credits" ? affordableGenerationCount : quantity;
+  const surpriseSuggestionCount =
+    quantity === 1
+      ? 1
+      : schedulableGenerationCount > 0
+        ? schedulableGenerationCount
+        : quantity;
+  const submissionThemeBatchLines = useMemo(
+    () => parsedThemeBatchLines.slice(0, schedulableGenerationCount),
+    [parsedThemeBatchLines, schedulableGenerationCount],
+  );
+  const submissionThemeBatchHasDuplicates = useMemo(
+    () => hasDuplicateValues(submissionThemeBatchLines),
+    [submissionThemeBatchLines],
+  );
   const quantityLabel = quantity === 1 ? "quiz" : "quizzes";
 
   const canGenerate = useMemo(() => {
     if (submitting) return false;
 
     if (sourceType === "theme") {
-      if (quantity === 1) {
-        if (theme.trim().length < 2) return false;
+      if (schedulableGenerationCount === 1) {
+        const singleThemeValue =
+          quantity === 1 ? theme.trim() : (submissionThemeBatchLines[0] ?? "").trim();
+        if (singleThemeValue.length < 2) return false;
       } else {
-        if (selectedThemeBatchLines.length < quantity) return false;
-        if (themeBatchHasDuplicates) return false;
+        if (submissionThemeBatchLines.length < schedulableGenerationCount) return false;
+        if (hasDuplicateValues(submissionThemeBatchLines)) return false;
       }
     } else if (sourceType === "url") {
       if (!isValidHttpUrl(url)) return false;
@@ -313,11 +322,11 @@ export function DashboardCreatePageClient({
     effectiveBillingMode,
     pdfFile,
     quantity,
-    selectedThemeBatchLines.length,
+    schedulableGenerationCount,
     sourceType,
+    submissionThemeBatchLines,
     submitting,
     theme,
-    themeBatchHasDuplicates,
     url,
   ]);
 
@@ -411,7 +420,7 @@ export function DashboardCreatePageClient({
         body: JSON.stringify({
           gameMode,
           language,
-          count: quantity,
+          count: surpriseSuggestionCount,
           excludeThemes:
             quantity === 1
               ? theme.trim().length >= 2
@@ -438,7 +447,10 @@ export function DashboardCreatePageClient({
         payload = {};
       }
       const suggestedThemes = payload.themes?.filter((value) => value.trim().length > 0) ?? [];
-      if (!response.ok || (quantity === 1 ? !payload.theme : suggestedThemes.length < quantity)) {
+      if (
+        !response.ok ||
+        (quantity === 1 ? !payload.theme : suggestedThemes.length < surpriseSuggestionCount)
+      ) {
         const fallback =
           raw && !raw.startsWith("<!DOCTYPE")
             ? raw.slice(0, 180)
@@ -451,7 +463,7 @@ export function DashboardCreatePageClient({
         return;
       }
 
-      const nextThemes = suggestedThemes.slice(0, quantity);
+      const nextThemes = suggestedThemes.slice(0, surpriseSuggestionCount);
       setTheme(nextThemes[0] ?? "");
       setThemeBatchText(nextThemes.join("\n"));
     } catch (error) {
@@ -506,19 +518,14 @@ export function DashboardCreatePageClient({
     }
   }
 
-  async function startGeneration(options?: { allowPartialBalance?: boolean }) {
+  async function startGeneration() {
     if (!canGenerate) return;
-
-    if (needsPartialBalanceConfirmation && !options?.allowPartialBalance) {
-      setPartialBalanceModalOpen(true);
-      return;
-    }
 
     setSubmitting(true);
     setStatusMessage(null);
-    setPartialBalanceModalOpen(false);
 
     try {
+      const requestQuantity = schedulableGenerationCount;
       const response =
         sourceType === "pdf" && pdfFile
           ? await (async () => {
@@ -559,7 +566,7 @@ export function DashboardCreatePageClient({
               },
               body: JSON.stringify({
                 sourceType: "pdf",
-                quantity,
+                quantity: requestQuantity,
                 gameMode,
                 difficulty: effectiveDifficulty,
                 language,
@@ -577,11 +584,23 @@ export function DashboardCreatePageClient({
             },
             body: JSON.stringify(
               sourceType === "theme"
-                ? {
+                ? requestQuantity === 1
+                  ? {
+                      sourceType,
+                      theme:
+                        quantity === 1
+                          ? theme.trim()
+                          : (submissionThemeBatchLines[0] ?? "").trim(),
+                      quantity: requestQuantity,
+                      gameMode,
+                      difficulty: effectiveDifficulty,
+                      language,
+                      billingMode: effectiveBillingMode,
+                    }
+                  : {
                     sourceType,
-                    theme: quantity === 1 ? theme.trim() : undefined,
-                    themes: quantity > 1 ? selectedThemeBatchLines : undefined,
-                    quantity,
+                    themes: submissionThemeBatchLines,
+                    quantity: requestQuantity,
                     gameMode,
                     difficulty: effectiveDifficulty,
                     language,
@@ -590,7 +609,7 @@ export function DashboardCreatePageClient({
                 : {
                     sourceType,
                     url: url.trim(),
-                    quantity,
+                    quantity: requestQuantity,
                     gameMode,
                     difficulty: effectiveDifficulty,
                     language,
@@ -740,21 +759,12 @@ export function DashboardCreatePageClient({
                 </FilterPill>
               </div>
             </div>
-          ) : sourceType !== "pdf" && !canUseByok ? (
-            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 md:text-base xl:col-span-4">
-              No API key found, so this will run in platform credits mode.{" "}
-              <Link href="/dashboard/settings#api-keys" className="font-semibold underline">
-                Add API key
-              </Link>
-            </div>
           ) : null}
 
           <div
             className={cn(
               "space-y-2",
-              showBillingToggle || (sourceType !== "pdf" && !canUseByok)
-                ? "xl:col-span-6"
-                : "xl:col-span-10",
+              showBillingToggle ? "xl:col-span-6" : "xl:col-span-10",
             )}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -817,7 +827,7 @@ export function DashboardCreatePageClient({
                       ? "Thinking..."
                       : quantity === 1
                         ? "Surprise Me"
-                        : `Surprise Me x${quantity}`}
+                        : `Surprise Me x${surpriseSuggestionCount}`}
                   </Button>
                 </div>
                 {quantity === 1 ? (
@@ -841,13 +851,13 @@ export function DashboardCreatePageClient({
                       className="min-h-[210px] rounded-2xl border-[#252940] bg-[#0f1117]/88 px-5 py-4 text-base text-[#e4e4e9] placeholder:text-[#6b6d7e] md:min-h-[240px] md:text-lg"
                     />
                     <p className="text-sm text-[#9394a5]">
-                      {themeBatchHasDuplicates
-                        ? `Remove duplicate themes in the first ${quantity} lines.`
-                        : selectedThemeBatchLines.length < quantity
-                          ? `${selectedThemeBatchLines.length}/${quantity} themes ready.`
+                      {submissionThemeBatchHasDuplicates
+                        ? `Remove duplicate themes in the first ${schedulableGenerationCount} lines.`
+                        : submissionThemeBatchLines.length < schedulableGenerationCount
+                          ? `${submissionThemeBatchLines.length}/${schedulableGenerationCount} themes ready${needsPartialBalanceConfirmation ? " for current balance" : ""}.`
                           : parsedThemeBatchLines.length > quantity
-                            ? `Using the first ${quantity} themes.`
-                            : `${quantity}/${quantity} themes ready.`}
+                            ? `Using the first ${schedulableGenerationCount} themes${needsPartialBalanceConfirmation ? " for current balance" : ""}.`
+                            : `${schedulableGenerationCount}/${schedulableGenerationCount} themes ready${needsPartialBalanceConfirmation ? " for current balance" : ""}.`}
                     </p>
                   </>
                 )}
@@ -995,12 +1005,12 @@ export function DashboardCreatePageClient({
               className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-8 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:min-w-[280px] md:text-xl"
             >
               {submitting
-                ? quantity === 1
+                ? schedulableGenerationCount === 1
                   ? "Starting..."
-                  : `Starting ${quantity} quizzes...`
-                : quantity === 1
+                  : `Starting ${schedulableGenerationCount} quizzes...`
+                : schedulableGenerationCount === 1
                   ? "Generate"
-                  : `Generate ${quantity} quizzes`}
+                  : `Generate ${schedulableGenerationCount} quizzes`}
             </Button>
             <Button
               type="button"
@@ -1013,55 +1023,6 @@ export function DashboardCreatePageClient({
           </div>
         </div>
       </section>
-
-      <Dialog open={partialBalanceModalOpen} onOpenChange={setPartialBalanceModalOpen}>
-        <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
-          <DialogHeader className="text-left">
-            <DialogTitle className="text-3xl font-black text-[#e4e4e9]">
-              Generate {affordableGenerationCount} now?
-            </DialogTitle>
-            <DialogDescription className="text-lg text-[#9394a5]">
-              Your balance does not cover all {quantity} requested quizzes. You can start the
-              {` ${affordableGenerationCount} `}that fit now and leave the rest unscheduled.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
-            <p className="text-base text-[#9394a5]">Current balance: {formatUsd(walletBalanceCents)}</p>
-            <p className="mt-1 text-base text-[#9394a5]">
-              Starting now: {affordableGenerationCount} of {quantity} {quantityLabel}
-            </p>
-            <p className="mt-1 text-base text-[#9394a5]">
-              Estimated charge now: {formatUsd(affordableGenerationCount * generationCostCents)}
-            </p>
-          </div>
-
-          <DialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-5 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]"
-              disabled={submitting}
-              onClick={() => {
-                setPartialBalanceModalOpen(false);
-                setTopUpModalOpen(true);
-              }}
-            >
-              Top up first
-            </Button>
-            <Button
-              type="button"
-              className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-5 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24"
-              disabled={submitting}
-              onClick={() => void startGeneration({ allowPartialBalance: true })}
-            >
-              {submitting
-                ? `Starting ${affordableGenerationCount}...`
-                : `Generate ${affordableGenerationCount} now`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
         <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">

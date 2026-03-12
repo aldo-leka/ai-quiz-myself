@@ -339,7 +339,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
           <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
             <h3 className="text-3xl font-black text-[#e4e4e9] md:text-4xl">Auto recharge</h3>
             <p className="mt-3 text-lg text-[#9394a5] md:text-2xl">
-              When enabled, we check balance every minute and recharge to your target amount.
+              When enabled, we check your balance periodically and recharge to your target amount.
             </p>
 
             <div className="mt-5 space-y-4">

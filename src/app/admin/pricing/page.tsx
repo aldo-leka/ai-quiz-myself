@@ -3,8 +3,10 @@ import { AdminPricingPageClient } from "@/components/admin/admin-pricing-page-cl
 import { db } from "@/db";
 import { platformSettings } from "@/db/schema";
 import {
+  STARTER_CREDITS_SETTING_KEY,
   QUIZ_GENERATION_COST_SETTING_KEY,
   resolveGenerationCostCentsFromSettings,
+  resolveStarterCreditsCentsFromSettings,
 } from "@/lib/billing";
 
 export default async function AdminPricingPage() {
@@ -19,14 +21,20 @@ export default async function AdminPricingPage() {
     .orderBy(asc(platformSettings.key));
 
   const generationCostCents = resolveGenerationCostCentsFromSettings(settings);
+  const starterCreditsCents = resolveStarterCreditsCentsFromSettings(settings);
   const universalSetting = settings.find(
     (setting) => setting.key === QUIZ_GENERATION_COST_SETTING_KEY,
+  );
+  const starterSetting = settings.find(
+    (setting) => setting.key === STARTER_CREDITS_SETTING_KEY,
   );
 
   return (
     <AdminPricingPageClient
       initialGenerationCostCents={generationCostCents}
-      initialUpdatedAt={universalSetting?.updatedAt?.toISOString() ?? null}
+      initialStarterCreditsCents={starterCreditsCents}
+      initialGenerationCostUpdatedAt={universalSetting?.updatedAt?.toISOString() ?? null}
+      initialStarterCreditsUpdatedAt={starterSetting?.updatedAt?.toISOString() ?? null}
     />
   );
 }

@@ -1,5 +1,6 @@
 export const BASE_GENERATION_COST_CENTS = 30;
 export const QUIZ_GENERATION_COST_SETTING_KEY = "credit_cost_quiz_generation_cents";
+export const STARTER_CREDITS_SETTING_KEY = "starter_credits_signup_bonus_cents";
 export const LEGACY_AI_GENERATION_COST_SETTING_KEY = "credit_cost_ai_generation";
 export const LEGACY_PDF_GENERATION_COST_SETTING_KEY = "credit_cost_pdf_generation";
 export const TOP_UP_MIN_CENTS = 500;
@@ -18,6 +19,13 @@ export function parsePositiveInt(value: string | null | undefined, fallback: num
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+export function parseNonNegativeInt(value: string | null | undefined, fallback: number): number {
+  if (value == null) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
 }
 
@@ -77,4 +85,18 @@ export function resolveGenerationCostCentsFromSettings(
   }
 
   return BASE_GENERATION_COST_CENTS;
+}
+
+export function resolveStarterCreditsCentsFromSettings(
+  settings: Array<{ key: string; value: string | null | undefined }>,
+): number {
+  const starterSetting = settings.find(
+    (setting) => setting.key === STARTER_CREDITS_SETTING_KEY,
+  )?.value;
+
+  if (starterSetting != null) {
+    return parseNonNegativeInt(starterSetting, STARTER_CREDITS_CENTS);
+  }
+
+  return STARTER_CREDITS_CENTS;
 }

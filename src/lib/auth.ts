@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { isAdminEmail } from "@/lib/admin";
-import { STARTER_CREDITS_CENTS } from "@/lib/billing";
+import { resolveStarterCreditsCentsFromSettings } from "@/lib/billing";
 import { detectLocaleFromRequest } from "@/lib/locale";
 import { requireEnv } from "@/lib/env";
 
@@ -93,6 +93,16 @@ export const auth = betterAuth({
         async after(userRecord) {
           if (!userRecord.id) return;
 
+          const starterCreditSettingRows = await db
+            .select({
+              key: schema.platformSettings.key,
+              value: schema.platformSettings.value,
+            })
+            .from(schema.platformSettings);
+          const starterCreditsCents = resolveStarterCreditsCentsFromSettings(
+            starterCreditSettingRows,
+          );
+
           const [updatedUser] = await db
             .update(schema.user)
             .set({
@@ -107,22 +117,26 @@ export const auth = betterAuth({
             return;
           }
 
+          if (starterCreditsCents <= 0) {
+            return;
+          }
+
           await db
             .insert(schema.credits)
             .values({
               userId: userRecord.id,
-              balanceCents: STARTER_CREDITS_CENTS,
+              balanceCents: starterCreditsCents,
             })
             .onConflictDoUpdate({
               target: schema.credits.userId,
               set: {
-                balanceCents: sql`${schema.credits.balanceCents} + ${STARTER_CREDITS_CENTS}`,
+                balanceCents: sql`${schema.credits.balanceCents} + ${starterCreditsCents}`,
               },
             });
 
           await db.insert(schema.creditTransactions).values({
             userId: userRecord.id,
-            amountCents: STARTER_CREDITS_CENTS,
+            amountCents: starterCreditsCents,
             currency: "usd",
             type: "starter_bonus",
             status: "completed",
