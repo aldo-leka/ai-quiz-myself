@@ -1,4 +1,4 @@
-import { MONEY_LADDER, formatMoney } from "@/lib/quiz-constants";
+import { CHECKPOINTS, MONEY_LADDER, formatMoney } from "@/lib/quiz-constants";
 
 const WELCOME_TEMPLATES = [
   "We welcome today {name} to the QuizPlus hot seat.",
@@ -39,6 +39,13 @@ const CORRECT_REVEAL_TEMPLATES = [
   "Yes. You are right and still alive in this game.",
   "Correct. Another step up the ladder.",
   "That is the one. Well played.",
+] as const;
+
+const CHECKPOINT_REACHED_TEMPLATES = [
+  "Checkpoint reached. {moneyValue} is now guaranteed.",
+  "That checkpoint is yours. {moneyValue} is locked in.",
+  "You have secured the {moneyValue} checkpoint.",
+  "{moneyValue} is guaranteed now. A big moment in the game.",
 ] as const;
 
 const WRONG_REVEAL_TEMPLATES = [
@@ -115,8 +122,24 @@ export function buildFinalLockScript(seed: string): string {
 export function buildCorrectRevealScript(params: {
   moneyValue: number;
   seed: string;
+  includeMoney?: boolean;
 }): string {
-  return `${pickTemplate(CORRECT_REVEAL_TEMPLATES, params.seed)} ${formatMoney(params.moneyValue)} is secure for now.`;
+  const baseScript = pickTemplate(CORRECT_REVEAL_TEMPLATES, params.seed);
+
+  if (params.includeMoney === false) {
+    return baseScript;
+  }
+
+  return `${baseScript} ${formatMoney(params.moneyValue)} is secure for now.`;
+}
+
+export function buildCheckpointReachedScript(params: {
+  moneyValue: number;
+  seed: string;
+}): string {
+  return interpolate(pickTemplate(CHECKPOINT_REACHED_TEMPLATES, params.seed), {
+    moneyValue: formatMoney(params.moneyValue),
+  });
 }
 
 export function buildWrongRevealScript(seed: string): string {
@@ -162,6 +185,16 @@ export function getWwtbamHostPrewarmTexts(): string[] {
   for (const template of CORRECT_REVEAL_TEMPLATES) {
     for (const amount of MONEY_LADDER) {
       texts.add(`${template} ${formatMoney(amount)} is secure for now.`);
+    }
+  }
+
+  for (const template of CHECKPOINT_REACHED_TEMPLATES) {
+    for (const checkpoint of CHECKPOINTS) {
+      texts.add(
+        interpolate(template, {
+          moneyValue: formatMoney(MONEY_LADDER[checkpoint] ?? 0),
+        }),
+      );
     }
   }
 
