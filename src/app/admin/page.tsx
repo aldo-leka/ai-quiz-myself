@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import { ActiveUsersChart } from "@/components/admin/active-users-chart";
 import {
   Card,
@@ -63,6 +63,7 @@ export default async function AdminPage() {
     totalQuizzesRow,
     totalGamesPlayedRow,
     totalRevenueRow,
+    totalEstimatedCostsRow,
     flaggedCountRow,
     popularQuizzes,
     sessionRows,
@@ -73,10 +74,27 @@ export default async function AdminPage() {
     db
       .select({ total: sql<number>`coalesce(sum(${creditTransactions.amountCents}), 0)::int` })
       .from(creditTransactions)
+      .innerJoin(user, eq(creditTransactions.userId, user.id))
       .where(
         and(
           inArray(creditTransactions.type, ["purchase", "auto_reload"]),
           eq(creditTransactions.status, "completed"),
+          eq(user.isAdmin, false),
+        ),
+      ),
+    db
+      .select({
+        total:
+          sql<number>`coalesce(sum(coalesce(${quizzes.generationCostUsdMicros}, 0) + coalesce(${quizzes.estimatedTtsCostUsdMicros}, 0)), 0)::bigint`,
+      })
+      .from(quizzes)
+      .where(
+        notInArray(
+          quizzes.id,
+          db
+            .select({ id: hubCandidates.publishedQuizId })
+            .from(hubCandidates)
+            .where(isNotNull(hubCandidates.publishedQuizId)),
         ),
       ),
     db
@@ -186,11 +204,12 @@ export default async function AdminPage() {
   const totalQuizzes = asNumber(totalQuizzesRow[0]?.total);
   const totalGamesPlayed = asNumber(totalGamesPlayedRow[0]?.total);
   const totalRevenueCents = asNumber(totalRevenueRow[0]?.total);
+  const totalEstimatedCostsUsdMicros = asNumber(totalEstimatedCostsRow[0]?.total);
   const flaggedContentCount = asNumber(flaggedCountRow[0]?.total);
 
   return (
     <main className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader>
             <CardDescription>Total users</CardDescription>
@@ -213,6 +232,14 @@ export default async function AdminPage() {
           <CardHeader>
             <CardDescription>Revenue (USD)</CardDescription>
             <CardTitle className="text-3xl">${(totalRevenueCents / 100).toFixed(2)}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Est Costs (USD)</CardDescription>
+            <CardTitle className="text-3xl">
+              ${(totalEstimatedCostsUsdMicros / 1_000_000).toFixed(2)}
+            </CardTitle>
           </CardHeader>
         </Card>
       </section>
