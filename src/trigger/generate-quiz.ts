@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
@@ -26,6 +27,7 @@ import {
   type QuizGenerationDifficulty,
   type QuizGenerationGameMode,
 } from "@/lib/quiz-generation";
+import { buildEstimatedQuizTtsCostBreakdown } from "@/lib/quiz-tts";
 import { extractPdfSourceText } from "@/lib/pdf-extraction";
 import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
@@ -218,6 +220,24 @@ async function persistGeneratedQuiz(params: {
   const normalizedCostBreakdown = normalizeGenerationCostBreakdown(
     params.generationCostBreakdown,
   );
+  const questionRows = params.generated.quiz.questions.map((question, index) => ({
+    id: randomUUID(),
+    position: index + 1,
+    questionText: question.questionText,
+    options: question.options,
+    correctOptionIndex: question.correctOptionIndex,
+    difficulty: question.difficulty,
+    subject: question.subject,
+  }));
+  const estimatedTtsCostBreakdown = buildEstimatedQuizTtsCostBreakdown({
+    gameMode: params.input.gameMode,
+    questions: questionRows.map((question) => ({
+      id: question.id,
+      position: question.position,
+      questionText: question.questionText,
+      options: question.options,
+    })),
+  });
   const [createdQuiz] = await db
     .insert(quizzes)
     .values({
@@ -231,6 +251,8 @@ async function persistGeneratedQuiz(params: {
       generationModel: params.modelName,
       generationCostUsdMicros: normalizedCostBreakdown.totalUsdMicros,
       generationCostBreakdown: normalizedCostBreakdown,
+      estimatedTtsCostUsdMicros: estimatedTtsCostBreakdown.totalUsdMicros,
+      estimatedTtsCostBreakdown,
       questionCount: params.generated.quiz.questions.length,
       sourceType: mapGenerationSourceToQuizSource(params.sourceType),
       sourceUrl: params.sourceUrl ?? null,
@@ -240,9 +262,10 @@ async function persistGeneratedQuiz(params: {
     .returning({ id: quizzes.id });
 
   await db.insert(questions).values(
-    params.generated.quiz.questions.map((question, index) => ({
+    questionRows.map((question) => ({
+      id: question.id,
       quizId: createdQuiz.id,
-      position: index + 1,
+      position: question.position,
       questionText: question.questionText,
       options: question.options,
       correctOptionIndex: question.correctOptionIndex,
@@ -251,7 +274,11 @@ async function persistGeneratedQuiz(params: {
     })),
   );
 
-  return createdQuiz.id;
+  return {
+    quizId: createdQuiz.id,
+    estimatedTtsCostUsdMicros: estimatedTtsCostBreakdown.totalUsdMicros,
+    estimatedTtsCostBreakdown,
+  };
 }
 
 async function getQuestionTextsForQuiz(quizId: string): Promise<string[]> {
@@ -674,7 +701,7 @@ export async function runGenerateQuizJob(params: {
       createGenerationCostBreakdown(incurredCostLineItems),
     );
 
-    const quizId = await persistGeneratedQuiz({
+    const persistedQuiz = await persistGeneratedQuiz({
       userId: job.userId,
       sourceType,
       sourceUrl,
@@ -684,6 +711,7 @@ export async function runGenerateQuizJob(params: {
       generated,
       generationCostBreakdown: mergedCostBreakdown,
     });
+    const quizId = persistedQuiz.quizId;
 
     const questionTexts = generated.quiz.questions.map((question) => question.questionText);
     let duplicate = false;
@@ -723,6 +751,10 @@ export async function runGenerateQuizJob(params: {
           gameMode: effectiveInput.gameMode,
           generationProvider: credentials.provider,
           generationModel: credentials.modelName,
+          generationCostUsdMicros: mergedCostBreakdown.totalUsdMicros,
+          generationCostBreakdown: mergedCostBreakdown,
+          estimatedTtsCostUsdMicros: persistedQuiz.estimatedTtsCostUsdMicros,
+          estimatedTtsCostBreakdown: persistedQuiz.estimatedTtsCostBreakdown,
           sourceType: mapGenerationSourceToQuizSource(sourceType),
           sourceUrl,
         });

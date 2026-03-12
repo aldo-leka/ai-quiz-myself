@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { EstimatedTtsCostBreakdown, GenerationCostBreakdown } from "@/lib/ai-pricing";
 
 export const hubCandidateOptionSchema = z.object({
   text: z.string().min(1),
@@ -22,6 +23,20 @@ export const hubCandidateSnapshotSchema = z.object({
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
   generationProvider: z.enum(["openai", "anthropic", "google"]).nullable().optional(),
   generationModel: z.string().min(1).nullable().optional(),
+  generationCostUsdMicros: z.number().int().nonnegative().nullable().optional(),
+  generationCostBreakdown: z
+    .custom<GenerationCostBreakdown>(
+      (value) => value === undefined || value === null || typeof value === "object",
+    )
+    .nullable()
+    .optional(),
+  estimatedTtsCostUsdMicros: z.number().int().nonnegative().nullable().optional(),
+  estimatedTtsCostBreakdown: z
+    .custom<EstimatedTtsCostBreakdown>(
+      (value) => value === undefined || value === null || typeof value === "object",
+    )
+    .nullable()
+    .optional(),
   sourceType: z.enum(["manual", "ai_generated", "pdf", "url"]),
   sourceUrl: z.string().nullable(),
   questionCount: z.number().int().positive(),

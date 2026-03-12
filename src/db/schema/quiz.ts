@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import type { HubCandidateSnapshot } from "@/lib/hub-candidate-snapshot";
-import type { GenerationCostBreakdown } from "@/lib/ai-pricing";
+import type { EstimatedTtsCostBreakdown, GenerationCostBreakdown } from "@/lib/ai-pricing";
 
 const emptyGenerationCostBreakdown = sql`'{"currency":"USD","totalUsdMicros":0,"hasUnpricedLineItems":false,"lineItems":[]}'::jsonb`;
 
@@ -114,6 +114,8 @@ export const quizzes = pgTable(
       .$type<GenerationCostBreakdown>()
       .notNull()
       .default(emptyGenerationCostBreakdown),
+    estimatedTtsCostUsdMicros: integer("estimated_tts_cost_usd_micros"),
+    estimatedTtsCostBreakdown: jsonb("estimated_tts_cost_breakdown").$type<EstimatedTtsCostBreakdown>(),
     questionCount: integer("question_count").notNull(),
     sourceType: quizSourceTypeEnum("source_type").notNull(),
     sourceUrl: text("source_url"),

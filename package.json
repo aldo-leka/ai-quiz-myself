@@ -14,6 +14,7 @@
     "db:seed:wwtbam": "npx tsx src/db/seed-wwtbam.ts",
     "db:seed:single": "npx tsx src/db/seed-single.ts",
     "db:seed:couch": "npx tsx src/db/seed-couch.ts",
+    "costs:backfill:tts": "npx tsx scripts/backfill-estimated-tts-costs.ts",
     "audio:prewarm:wwtbam-host": "npx tsx scripts/prewarm-wwtbam-host-audio.ts",
     "audio:generate:wwtbam-sfx": "node scripts/generate-wwtbam-sfx.mjs",
     "trigger:dev": "npx trigger.dev@4.4.2 dev",

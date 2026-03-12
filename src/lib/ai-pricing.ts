@@ -5,6 +5,7 @@ export type GenerationCostLineItemKind =
   | "quiz_generation"
   | "pdf_ocr"
   | "source_subtopic_planning";
+export type EstimatedTtsCostLineItemKind = "question" | "options";
 
 export type AiTokenUsageSnapshot = {
   inputTokens: number | null;
@@ -47,6 +48,34 @@ export type GenerationCostBreakdown = {
   lineItems: GenerationCostLineItem[];
 };
 
+export type TtsPricingSnapshot = {
+  source: string;
+  capturedAt: string;
+  estimatedUsdPerMinute: number;
+};
+
+export type EstimatedTtsCostLineItem = {
+  kind: EstimatedTtsCostLineItemKind;
+  questionId: string;
+  position: number;
+  textLength: number;
+  estimatedWordCount: number;
+  estimatedDurationMs: number;
+  costUsdMicros: number | null;
+};
+
+export type EstimatedTtsCostBreakdown = {
+  currency: "USD";
+  estimationMethod: "duration_heuristic_v1";
+  model: string;
+  voice: string;
+  pricingSnapshot: TtsPricingSnapshot | null;
+  totalEstimatedDurationMs: number;
+  totalUsdMicros: number | null;
+  lineItems: EstimatedTtsCostLineItem[];
+  pricingUnavailableReason?: string | null;
+};
+
 type ModelPricingEntry = {
   provider: CostProviderName;
   aliases: string[];
@@ -67,6 +96,13 @@ type OpenAiResponsesUsage = {
   output_tokens_details?: {
     reasoning_tokens?: number;
   };
+};
+
+type TtsPricingEntry = {
+  aliases: string[];
+  source: string;
+  capturedAt: string;
+  estimatedUsdPerMinute: number;
 };
 
 const OPENAI_PRICING_SNAPSHOT = {
@@ -140,6 +176,19 @@ const PRICED_MODELS: ModelPricingEntry[] = [
   },
 ];
 
+const OPENAI_TTS_PRICING_SNAPSHOT = {
+  source: "https://openai.com/api/pricing",
+  capturedAt: "2026-03-12",
+} as const;
+
+const PRICED_TTS_MODELS: TtsPricingEntry[] = [
+  {
+    aliases: ["gpt-4o-mini-tts"],
+    ...OPENAI_TTS_PRICING_SNAPSHOT,
+    estimatedUsdPerMinute: 0.015,
+  },
+];
+
 function normalizeModelName(model: string): string {
   return model.trim().toLowerCase();
 }
@@ -150,6 +199,10 @@ function toOptionalNumber(value: number | null | undefined): number | null {
 
 function costFromTokens(tokens: number, usdPerMillion: number): number {
   return Math.round((tokens / 1_000_000) * usdPerMillion * 1_000_000);
+}
+
+function costFromMinutes(minutes: number, usdPerMinute: number): number {
+  return Math.round(minutes * usdPerMinute * 1_000_000);
 }
 
 function recalculateBreakdown(lineItems: GenerationCostLineItem[]): GenerationCostBreakdown {
@@ -350,4 +403,96 @@ export function allocateSharedCostBreakdown(
       })),
     ),
   );
+}
+
+export function estimateSpeechDurationMs(text: string): {
+  textLength: number;
+  estimatedWordCount: number;
+  estimatedDurationMs: number;
+} {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const textLength = normalized.length;
+  const estimatedWordCount = normalized ? normalized.split(" ").length : 0;
+
+  if (!normalized) {
+    return {
+      textLength: 0,
+      estimatedWordCount: 0,
+      estimatedDurationMs: 0,
+    };
+  }
+
+  const sentenceBreakCount = (normalized.match(/[.!?]/g) ?? []).length;
+  const pauseBreakCount = (normalized.match(/[,:;](?!\d)/g) ?? []).length;
+  const baseDurationMs = (estimatedWordCount / 165) * 60_000;
+  const estimatedDurationMs = Math.max(
+    900,
+    Math.round(baseDurationMs + sentenceBreakCount * 300 + pauseBreakCount * 140),
+  );
+
+  return {
+    textLength,
+    estimatedWordCount,
+    estimatedDurationMs,
+  };
+}
+
+export function createEstimatedTtsCostBreakdown(params: {
+  model: string;
+  voice: string;
+  lineItems: Array<{
+    kind: EstimatedTtsCostLineItemKind;
+    questionId: string;
+    position: number;
+    speechText: string;
+  }>;
+}): EstimatedTtsCostBreakdown {
+  const normalizedModel = normalizeModelName(params.model);
+  const pricing = PRICED_TTS_MODELS.find((entry) =>
+    entry.aliases.some((alias) => normalizeModelName(alias) === normalizedModel),
+  );
+
+  const lineItems = params.lineItems.map((lineItem) => {
+    const estimate = estimateSpeechDurationMs(lineItem.speechText);
+
+    return {
+      kind: lineItem.kind,
+      questionId: lineItem.questionId,
+      position: lineItem.position,
+      textLength: estimate.textLength,
+      estimatedWordCount: estimate.estimatedWordCount,
+      estimatedDurationMs: estimate.estimatedDurationMs,
+      costUsdMicros: pricing
+        ? costFromMinutes(estimate.estimatedDurationMs / 60_000, pricing.estimatedUsdPerMinute)
+        : null,
+    } satisfies EstimatedTtsCostLineItem;
+  });
+
+  const totalEstimatedDurationMs = lineItems.reduce(
+    (sum, lineItem) => sum + lineItem.estimatedDurationMs,
+    0,
+  );
+  const totalUsdMicros = pricing
+    ? lineItems.reduce((sum, lineItem) => sum + (lineItem.costUsdMicros ?? 0), 0)
+    : null;
+
+  return {
+    currency: "USD",
+    estimationMethod: "duration_heuristic_v1",
+    model: params.model,
+    voice: params.voice,
+    pricingSnapshot: pricing
+      ? {
+          source: pricing.source,
+          capturedAt: pricing.capturedAt,
+          estimatedUsdPerMinute: pricing.estimatedUsdPerMinute,
+        }
+      : null,
+    totalEstimatedDurationMs,
+    totalUsdMicros,
+    lineItems,
+    pricingUnavailableReason: pricing
+      ? null
+      : `No TTS pricing snapshot is configured for model ${params.model}`,
+  };
 }

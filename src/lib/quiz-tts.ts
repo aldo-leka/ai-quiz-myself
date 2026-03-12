@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createEstimatedTtsCostBreakdown, type EstimatedTtsCostBreakdown } from "@/lib/ai-pricing";
 import { requireEnv } from "@/lib/env";
 
 const MAX_TTS_INPUT_CHARS = 3800;
@@ -9,6 +10,12 @@ const QUIZ_TTS_CACHE_VERSION = "v1";
 
 export type SupportedQuizGameMode = "single" | "wwtbam" | "couch_coop";
 export type QuizTtsSegment = "question" | "options" | "host";
+export type TtsEstimateQuestion = {
+  id: string;
+  position: number;
+  questionText: string;
+  options: Array<{ text: string }>;
+};
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -66,6 +73,47 @@ export function getQuizTtsContentType(format: "mp3"): string {
   }
 
   return "application/octet-stream";
+}
+
+export function buildEstimatedQuizTtsCostBreakdown(params: {
+  gameMode: SupportedQuizGameMode;
+  questions: TtsEstimateQuestion[];
+}): EstimatedTtsCostBreakdown {
+  const model = getQuizTtsModel();
+  const voice = getQuizTtsVoice(params.gameMode);
+
+  return createEstimatedTtsCostBreakdown({
+    model,
+    voice,
+    lineItems: params.questions.flatMap((question) => {
+      const questionSpeechText =
+        params.gameMode === "wwtbam"
+          ? buildQuestionStemSpeechText(question.questionText)
+          : buildQuestionSpeechText({
+              position: question.position,
+              questionText: question.questionText,
+            });
+
+      const optionsSpeechText = buildOptionsSpeechText({
+        options: question.options.map((option) => option.text),
+      });
+
+      return [
+        {
+          kind: "question" as const,
+          questionId: question.id,
+          position: question.position,
+          speechText: questionSpeechText,
+        },
+        {
+          kind: "options" as const,
+          questionId: question.id,
+          position: question.position,
+          speechText: optionsSpeechText,
+        },
+      ];
+    }),
+  });
 }
 
 export function buildQuizTtsObjectKey(params: {

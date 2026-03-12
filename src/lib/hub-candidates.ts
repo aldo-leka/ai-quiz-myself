@@ -1,6 +1,11 @@
 import { db } from "@/db";
 import { hubCandidates, questions, quizzes } from "@/db/schema";
 import {
+  normalizeGenerationCostBreakdown,
+  type EstimatedTtsCostBreakdown,
+  type GenerationCostBreakdown,
+} from "@/lib/ai-pricing";
+import {
   hubCandidateSnapshotSchema,
   type HubCandidateSnapshot,
   type HubCandidateSnapshotQuestion,
@@ -14,6 +19,10 @@ type BuildHubCandidateSnapshotParams = {
   gameMode: "single" | "wwtbam" | "couch_coop";
   generationProvider?: "openai" | "anthropic" | "google" | null;
   generationModel?: string | null;
+  generationCostUsdMicros?: number | null;
+  generationCostBreakdown?: GenerationCostBreakdown | null;
+  estimatedTtsCostUsdMicros?: number | null;
+  estimatedTtsCostBreakdown?: EstimatedTtsCostBreakdown | null;
   sourceType: "ai_generated" | "url" | "pdf" | "manual";
   sourceUrl?: string | null;
 };
@@ -29,6 +38,12 @@ export function buildHubCandidateSnapshot(
     gameMode: params.gameMode,
     generationProvider: params.generationProvider ?? null,
     generationModel: params.generationModel ?? null,
+    generationCostUsdMicros: params.generationCostUsdMicros ?? null,
+    generationCostBreakdown: params.generationCostBreakdown
+      ? normalizeGenerationCostBreakdown(params.generationCostBreakdown)
+      : null,
+    estimatedTtsCostUsdMicros: params.estimatedTtsCostUsdMicros ?? null,
+    estimatedTtsCostBreakdown: params.estimatedTtsCostBreakdown ?? null,
     sourceType: params.sourceType,
     sourceUrl: params.sourceUrl ?? null,
     questionCount: params.generated.questions.length,
@@ -105,6 +120,12 @@ export async function publishHubCandidateSnapshot(
       gameMode: snapshot.gameMode,
       generationProvider: snapshot.generationProvider ?? null,
       generationModel: snapshot.generationModel ?? null,
+      generationCostUsdMicros: snapshot.generationCostUsdMicros ?? null,
+      generationCostBreakdown: snapshot.generationCostBreakdown
+        ? normalizeGenerationCostBreakdown(snapshot.generationCostBreakdown)
+        : undefined,
+      estimatedTtsCostUsdMicros: snapshot.estimatedTtsCostUsdMicros ?? null,
+      estimatedTtsCostBreakdown: snapshot.estimatedTtsCostBreakdown ?? undefined,
       questionCount: snapshot.questions.length,
       sourceType: snapshot.sourceType,
       sourceUrl: snapshot.sourceUrl,

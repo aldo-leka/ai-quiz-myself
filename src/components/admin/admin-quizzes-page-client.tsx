@@ -49,6 +49,8 @@ type QuizListItem = {
   isPublic: boolean;
   questionCount: number;
   playCount: number;
+  generationCostUsdMicros: number | null;
+  estimatedTtsCostUsdMicros: number | null;
   creatorName: string | null;
   creatorEmail: string | null;
   createdAt: string;
@@ -187,6 +189,17 @@ function normalizeThemeLine(value: string): string {
 function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function formatUsdMicros(value: number | null): string {
+  if (value === null) return "—";
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value / 1_000_000);
 }
 
 function nextDifficultyForMode(
@@ -721,6 +734,8 @@ export function AdminQuizzesPageClient() {
                 <TableHead>Lang</TableHead>
                 <TableHead>Questions</TableHead>
                 <TableHead>Plays</TableHead>
+                <TableHead>Gen Cost</TableHead>
+                <TableHead>Est TTS</TableHead>
                 <TableHead>Creator</TableHead>
                 <TableHead />
               </TableRow>
@@ -728,11 +743,11 @@ export function AdminQuizzesPageClient() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9}>Loading quizzes...</TableCell>
+                  <TableCell colSpan={11}>Loading quizzes...</TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9}>No quizzes found.</TableCell>
+                  <TableCell colSpan={11}>No quizzes found.</TableCell>
                 </TableRow>
               ) : (
                 rows.map((quiz) => (
@@ -744,6 +759,8 @@ export function AdminQuizzesPageClient() {
                     <TableCell>{quiz.language}</TableCell>
                     <TableCell>{quiz.questionCount}</TableCell>
                     <TableCell>{quiz.playCount}</TableCell>
+                    <TableCell>{formatUsdMicros(quiz.generationCostUsdMicros)}</TableCell>
+                    <TableCell>{formatUsdMicros(quiz.estimatedTtsCostUsdMicros)}</TableCell>
                     <TableCell>{quiz.creatorName ?? quiz.creatorEmail ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -14,6 +15,7 @@ import {
 import { user } from "@/db/schema/auth";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
 import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
+import { buildEstimatedQuizTtsCostBreakdown } from "@/lib/quiz-tts";
 
 const createQuestionSchema = z.object({
   questionText: z.string().min(1),
@@ -117,6 +119,8 @@ export async function GET(request: Request) {
         isPublic: quizzes.isPublic,
         questionCount: quizzes.questionCount,
         playCount: quizzes.playCount,
+        generationCostUsdMicros: quizzes.generationCostUsdMicros,
+        estimatedTtsCostUsdMicros: quizzes.estimatedTtsCostUsdMicros,
         creatorId: quizzes.creatorId,
         creatorName: user.name,
         creatorEmail: user.email,
@@ -192,6 +196,24 @@ export async function POST(request: Request) {
   }
 
   const payload = parsed.data;
+  const questionRows = payload.questions.map((question, index) => ({
+    id: randomUUID(),
+    position: index + 1,
+    questionText: question.questionText,
+    options: question.options,
+    correctOptionIndex: question.correctOptionIndex,
+    difficulty: question.difficulty,
+    subject: question.subject ?? null,
+  }));
+  const estimatedTtsCostBreakdown = buildEstimatedQuizTtsCostBreakdown({
+    gameMode: payload.gameMode,
+    questions: questionRows.map((question) => ({
+      id: question.id,
+      position: question.position,
+      questionText: question.questionText,
+      options: question.options,
+    })),
+  });
 
   const [createdQuiz] = await db
     .insert(quizzes)
@@ -203,6 +225,8 @@ export async function POST(request: Request) {
       language: payload.language,
       difficulty: payload.difficulty,
       gameMode: payload.gameMode,
+      estimatedTtsCostUsdMicros: estimatedTtsCostBreakdown.totalUsdMicros,
+      estimatedTtsCostBreakdown,
       questionCount: payload.questions.length,
       sourceType: payload.sourceType,
       isHub: payload.isHub,
@@ -211,14 +235,15 @@ export async function POST(request: Request) {
     .returning({ id: quizzes.id });
 
   await db.insert(questions).values(
-    payload.questions.map((question, index) => ({
+    questionRows.map((question) => ({
+      id: question.id,
       quizId: createdQuiz.id,
-      position: index + 1,
+      position: question.position,
       questionText: question.questionText,
       options: question.options,
       correctOptionIndex: question.correctOptionIndex,
       difficulty: question.difficulty,
-      subject: question.subject ?? null,
+      subject: question.subject,
     })),
   );
 
