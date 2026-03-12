@@ -77,7 +77,7 @@ function computeLikeRatioLabel(likes: number, dislikes: number) {
 
 export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const router = useRouter();
-  const { data: sessionData } = authClient.useSession();
+  const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
     | {
         id?: string;
@@ -171,6 +171,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
   const {
     readAloudEnabled,
+    readAloudPreferenceReady,
     readAloudSaving,
     readAloudPreferenceError,
     setReadAloudPreferenceError,
@@ -178,6 +179,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   } = useReadAloudPreference({
     userId: sessionUser?.id,
     serverEnabled: sessionUser?.readAloudEnabled,
+    serverPending: isSessionPending,
   });
 
   useEffect(() => {
@@ -382,7 +384,8 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   } = useQuestionReadAloud({
     segments: questionReadAloudSegments,
     playbackKey: questionPlaybackKey,
-    autoPlayEnabled: phase === "question" && readAloudEnabled && !answerWindowOpen,
+    autoPlayEnabled:
+      phase === "question" && readAloudPreferenceReady && readAloudEnabled && !answerWindowOpen,
     onSegmentEnd: (segmentId) => {
       if (segmentId === "options") {
         beginAnswerWindow();
@@ -417,23 +420,35 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     questionStartedAtRef.current = Date.now();
     stopCountdown();
 
+    if (!readAloudPreferenceReady) {
+      return () => stopCountdown();
+    }
+
     if (!readAloudEnabledRef.current) {
       beginAnswerWindow();
     }
 
     return () => stopCountdown();
-  }, [beginAnswerWindow, currentQuestionIndex, phase, stopCountdown]);
+  }, [beginAnswerWindow, currentQuestionIndex, phase, readAloudPreferenceReady, stopCountdown]);
 
   useEffect(() => {
     if (
       phase === "question" &&
+      readAloudPreferenceReady &&
       readAloudEnabled &&
       !answerWindowOpen &&
       readAloudError
     ) {
       beginAnswerWindow();
     }
-  }, [answerWindowOpen, beginAnswerWindow, phase, readAloudEnabled, readAloudError]);
+  }, [
+    answerWindowOpen,
+    beginAnswerWindow,
+    phase,
+    readAloudEnabled,
+    readAloudError,
+    readAloudPreferenceReady,
+  ]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -662,6 +677,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
   useEffect(() => {
     return () => {
+      stopReadAloudRef.current();
       stopCountdown();
       clearAutoAdvance();
     };

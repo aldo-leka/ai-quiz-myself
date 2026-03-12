@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   readStoredReadAloudPreference,
   writeStoredReadAloudPreference,
@@ -9,26 +9,35 @@ import {
 type UseReadAloudPreferenceParams = {
   userId?: string;
   serverEnabled?: boolean;
+  serverPending?: boolean;
 };
 
 export function useReadAloudPreference(params: UseReadAloudPreferenceParams) {
-  const { userId, serverEnabled } = params;
+  const { userId, serverEnabled, serverPending = false } = params;
   const [readAloudEnabled, setReadAloudEnabled] = useState(false);
+  const [readAloudPreferenceReady, setReadAloudPreferenceReady] = useState(false);
   const [readAloudSaving, setReadAloudSaving] = useState(false);
   const [readAloudPreferenceError, setReadAloudPreferenceError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const storedPreference = readStoredReadAloudPreference();
     if (storedPreference !== null) {
       setReadAloudEnabled(storedPreference);
+      setReadAloudPreferenceReady(true);
       return;
     }
 
     if (typeof serverEnabled === "boolean") {
       setReadAloudEnabled(serverEnabled);
       writeStoredReadAloudPreference(serverEnabled);
+      setReadAloudPreferenceReady(true);
+      return;
     }
-  }, [serverEnabled, userId]);
+
+    if (!serverPending) {
+      setReadAloudPreferenceReady(true);
+    }
+  }, [serverEnabled, serverPending, userId]);
 
   const toggleReadAloud = useCallback(
     async (nextEnabled: boolean) => {
@@ -77,6 +86,7 @@ export function useReadAloudPreference(params: UseReadAloudPreferenceParams) {
 
   return {
     readAloudEnabled,
+    readAloudPreferenceReady,
     readAloudSaving,
     readAloudPreferenceError,
     setReadAloudPreferenceError,

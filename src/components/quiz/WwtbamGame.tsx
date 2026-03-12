@@ -243,8 +243,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const activeSfxAudioRef = useRef(new Set<HTMLAudioElement>());
   const askHostRequestIdRef = useRef(0);
   const readAloudEnabledRef = useRef(false);
+  const hasStartedIntroRef = useRef(false);
 
-  const { data: sessionData } = authClient.useSession();
+  const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
     | {
         id?: string;
@@ -259,6 +260,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   const {
     readAloudEnabled,
+    readAloudPreferenceReady,
     readAloudSaving,
     readAloudPreferenceError,
     setReadAloudPreferenceError,
@@ -266,6 +268,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   } = useReadAloudPreference({
     userId: sessionUser?.id,
     serverEnabled: sessionUser?.readAloudEnabled,
+    serverPending: isSessionPending,
   });
 
   const questions = quiz.questions;
@@ -567,6 +570,14 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     return playOptionalHostNarration([buildHostAudioUrl(checkpointText, ttsFingerprint)], "result");
   }, [currentQuestion, currentQuestionIndex, playOptionalHostNarration, playSfx, quiz.id, ttsFingerprint]);
 
+  const resumeQuestionBed = useCallback(() => {
+    if (!currentQuestion) return;
+    if (revealedAnswerRef.current || gameOver || finalAnswerLocked) return;
+    if (!countdownStartedRef.current || (remainingTime ?? 0) <= 0) return;
+
+    void playHostBed();
+  }, [currentQuestion, finalAnswerLocked, gameOver, playHostBed, remainingTime]);
+
   const availableAnswerIndexes = useMemo(() => {
     if (optionsDisabled) return [];
 
@@ -644,13 +655,17 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       answeredQuestionIdsRef.current = new Set();
       hasPersistedSessionRef.current = false;
       isAdvancingRef.current = false;
+      hasStartedIntroRef.current = false;
       questionFlowRunIdRef.current = 0;
       startedAtRef.current = new Date();
       askHostRequestIdRef.current += 1;
 
       if (!cancelled) {
         setIsLoading(false);
-        void welcomePlayer(quiz);
+        if (readAloudPreferenceReady) {
+          hasStartedIntroRef.current = true;
+          void welcomePlayer(quiz);
+        }
       }
     }
 
@@ -658,6 +673,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     return () => {
       cancelled = true;
+      questionFlowRunIdRef.current += 1;
+      askHostRequestIdRef.current += 1;
       if (timerRef.current) clearInterval(timerRef.current);
       stopHostNarration();
       stopHostBed();
@@ -669,7 +686,18 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     };
     // Game setup should rerun only when the quiz changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quiz.id, stopHostBed, stopHostNarration]);
+  }, [quiz.id, readAloudPreferenceReady, stopHostBed, stopHostNarration]);
+
+  useEffect(() => {
+    if (isLoading || hasStartedIntroRef.current || !readAloudPreferenceReady) {
+      return;
+    }
+
+    hasStartedIntroRef.current = true;
+    void welcomePlayer(quiz);
+    // Intentionally bound to the active quiz boot lifecycle rather than function identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, quiz.id, readAloudPreferenceReady]);
 
   useEffect(() => {
     if (!focusOrder.length) {
@@ -857,6 +885,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
+    if (questionFlowRunIdRef.current !== flowRunId) {
+      return;
+    }
+
     setOptionsDisabled(false);
 
     const optionsNarrationResult = await playOptionalHostNarration([
@@ -876,7 +908,12 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       return;
     }
 
+    if (questionFlowRunIdRef.current !== flowRunId) {
+      return;
+    }
+
     startCountdown(QUESTION_LENGTH_SECONDS);
+    resumeQuestionBed();
   }
 
   function trackCurrentAnswer(selectedIndex: number | null) {
@@ -896,15 +933,19 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     answeredQuestionIdsRef.current.add(currentQuestion.id);
   }
 
-  function revealAnswer() {
-    if (!currentQuestion || revealedAnswerRef.current) return;
+  function revealAnswer(resolvedAnswerIndex: number | null = selectedAnswerIndex) {
+    if (!currentQuestion || revealedAnswerRef.current) return false;
 
     stopTimer();
+    stopHostBed();
     setOptionsDisabled(true);
+    setSelectedAnswerIndex(resolvedAnswerIndex);
     revealedAnswerRef.current = true;
     setRevealedAnswer(true);
     setCorrectAnswerIndex(currentQuestion.correctOptionIndex);
-    trackCurrentAnswer(selectedAnswerIndex);
+    trackCurrentAnswer(resolvedAnswerIndex);
+
+    return resolvedAnswerIndex === currentQuestion.correctOptionIndex;
   }
 
   async function handleTimeOut() {
@@ -924,10 +965,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
 
     void playSfx("reveal-hit");
-    revealAnswer();
+    revealAnswer(null);
     void playSfx("wrong-answer");
     await wait(REVEAL_FEEDBACK_MIN_MS);
-    await handleNextQuestion();
+    await handleNextQuestion(false);
   }
 
   async function handleFiftyFifty() {
@@ -945,12 +986,17 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     const remaining = [0, 1, 2, 3]
       .filter((idx) => !toEliminate.includes(idx))
       .map((idx) => `${String.fromCharCode(65 + idx)}: ${currentQuestion.options[idx]?.text ?? ""}`);
-    void playOptionalHostNarration([
-      buildHostAudioUrl(
-        buildFiftyFiftyScript(`${quiz.id}:${currentQuestion.id}:5050:${remaining.join("|")}`),
-        ttsFingerprint,
-      ),
-    ], "manual");
+    void playOptionalHostNarration(
+      [
+        buildHostAudioUrl(
+          buildFiftyFiftyScript(`${quiz.id}:${currentQuestion.id}:5050:${remaining.join("|")}`),
+          ttsFingerprint,
+        ),
+      ],
+      "manual",
+    ).finally(() => {
+      resumeQuestionBed();
+    });
   }
 
   async function handleAskHost() {
@@ -998,7 +1044,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     const spokenAdviceText = normalizeHostSpeechText(hostAdviceText);
     setAskHostAdvice(spokenAdviceText);
-    void playOptionalHostNarration([buildHostAudioUrl(spokenAdviceText, ttsFingerprint)], "manual");
+    void playOptionalHostNarration([buildHostAudioUrl(spokenAdviceText, ttsFingerprint)], "manual").finally(() => {
+      resumeQuestionBed();
+    });
   }
 
   async function confirmFinalAnswer() {
@@ -1023,10 +1071,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     await minimumSuspenseDelay;
     void playSfx("reveal-hit");
-    revealAnswer();
+    const isCorrect = revealAnswer(selectedAnswerIndex);
     const minimumRevealDelay = wait(REVEAL_FEEDBACK_MIN_MS);
 
-    const isCorrect = selectedAnswerIndex === currentQuestion.correctOptionIndex;
     void playSfx(isCorrect ? "correct-answer" : "wrong-answer");
     const resultText = isCorrect
       ? buildCorrectRevealScript({
@@ -1056,7 +1103,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
 
     await minimumRevealDelay;
-    await handleNextQuestion();
+    await handleNextQuestion(isCorrect);
   }
 
   async function persistSession(score: number) {
@@ -1094,12 +1141,14 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     await persistSession(finalAmount);
   }
 
-  async function handleNextQuestion() {
+  async function handleNextQuestion(resolvedCorrect?: boolean) {
     if (isAdvancingRef.current || !currentQuestion || !revealedAnswerRef.current) return;
 
     isAdvancingRef.current = true;
     try {
-      if (selectedAnswerIndex !== currentQuestion.correctOptionIndex) {
+      const isCorrect = resolvedCorrect ?? selectedAnswerIndex === currentQuestion.correctOptionIndex;
+
+      if (!isCorrect) {
         const lastCheckpoint = [...CHECKPOINTS].filter((checkpoint) => checkpoint < currentQuestionIndex).pop();
         const safeAmount = lastCheckpoint !== undefined ? MONEY_LADDER[lastCheckpoint] : 0;
         await endGame(safeAmount);
@@ -1153,6 +1202,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         ],
         "manual",
       );
+      resumeQuestionBed();
     } catch (error) {
       setHostNarrationError(toHostNarrationErrorMessage(error));
     }

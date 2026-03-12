@@ -93,6 +93,7 @@ function providerMeta(provider: QuizCardGenerationProvider): {
 
 function QuizCardBody({
   title,
+  theme,
   difficulty,
   gameMode,
   generationProvider,
@@ -128,6 +129,15 @@ function QuizCardBody({
           creatorImage={creatorImage}
           size={isLarge ? "md" : "sm"}
         />
+        <Badge
+          variant="outline"
+          className={cn(
+            "border-sky-500/35 bg-sky-500/12 text-sky-100",
+            isLarge ? "min-h-10 px-4 text-base md:text-lg" : "min-h-8 px-3 text-sm",
+          )}
+        >
+          <span className={cn("max-w-[12rem] truncate", isLarge && "max-w-[18rem]")}>{theme}</span>
+        </Badge>
         <Badge
           variant="outline"
           className={cn(

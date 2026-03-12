@@ -95,7 +95,7 @@ function normalizePlayerNames(rawNames: string[]): string[] {
 
 export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const router = useRouter();
-  const { data: sessionData } = authClient.useSession();
+  const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
     | {
         id?: string;
@@ -206,6 +206,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   const {
     readAloudEnabled,
+    readAloudPreferenceReady,
     readAloudSaving,
     readAloudPreferenceError,
     setReadAloudPreferenceError,
@@ -213,6 +214,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   } = useReadAloudPreference({
     userId: sessionUser?.id,
     serverEnabled: sessionUser?.readAloudEnabled,
+    serverPending: isSessionPending,
   });
 
   useEffect(() => {
@@ -503,7 +505,8 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   } = useQuestionReadAloud({
     segments: questionReadAloudSegments,
     playbackKey: currentQuestion ? `${currentQuestionIndex}:${currentQuestion.id}` : null,
-    autoPlayEnabled: phase === "question" && readAloudEnabled && !answerWindowOpen,
+    autoPlayEnabled:
+      phase === "question" && readAloudPreferenceReady && readAloudEnabled && !answerWindowOpen,
     onSegmentEnd: (segmentId) => {
       if (segmentId === "options") {
         beginAnswerWindow();
@@ -697,23 +700,35 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     questionStartedAtRef.current = Date.now();
     stopCountdown();
 
+    if (!readAloudPreferenceReady) {
+      return () => stopCountdown();
+    }
+
     if (!readAloudEnabledRef.current) {
       beginAnswerWindow();
     }
 
     return () => stopCountdown();
-  }, [beginAnswerWindow, currentQuestion, phase]);
+  }, [beginAnswerWindow, currentQuestion, phase, readAloudPreferenceReady]);
 
   useEffect(() => {
     if (
       phase === "question" &&
+      readAloudPreferenceReady &&
       readAloudEnabled &&
       !answerWindowOpen &&
       readAloudError
     ) {
       beginAnswerWindow();
     }
-  }, [answerWindowOpen, beginAnswerWindow, phase, readAloudEnabled, readAloudError]);
+  }, [
+    answerWindowOpen,
+    beginAnswerWindow,
+    phase,
+    readAloudEnabled,
+    readAloudError,
+    readAloudPreferenceReady,
+  ]);
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -950,6 +965,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   useEffect(() => {
     return () => {
+      stopReadAloudRef.current();
       stopCountdown();
     };
   }, []);

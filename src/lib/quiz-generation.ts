@@ -53,12 +53,45 @@ const modeExtraRequirements: Record<QuizGenerationGameMode, string[]> = {
   ],
   wwtbam: [
     "Questions should feel dramatic and TV-ready.",
+    'Question text must contain only the pure question itself, with no host lead-in, no money ladder values, and no phrasing like "For £200" or "Question 3 for $500".',
   ],
   couch_coop: [
     "Questions should be short enough to read comfortably on a TV.",
     "Avoid joke answers and keep distractors plausible.",
   ],
 };
+
+const WWTBAM_QUESTION_PREFIX_PATTERN =
+  /^(?:for\s+(?:the\s+)?(?:[£$€]\s*)?\d[\d,]*(?:\s*(?:pounds?|dollars?|euros?|quid))?(?:\s+(?:question|round))?|question\s+\d+\s+(?:for|worth)\s+(?:[£$€]\s*)?\d[\d,]*(?:\s*(?:pounds?|dollars?|euros?|quid))?)\s*[,.:;!?-–—…]*/i;
+
+function sanitizeWwtbamQuestionText(questionText: string): string {
+  const trimmed = questionText.trim();
+  if (!WWTBAM_QUESTION_PREFIX_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+
+  const stripped = trimmed.replace(WWTBAM_QUESTION_PREFIX_PATTERN, "").trim();
+  if (
+    /^(which|what|who|where|when|why|how|is|are|does|do|did|can|could|would|will|name|identify|in|on|at)\b/i.test(
+      stripped,
+    )
+  ) {
+    return stripped;
+  }
+
+  return trimmed;
+}
+
+function sanitizeQuestionTextForGameMode(
+  gameMode: QuizGenerationGameMode,
+  questionText: string,
+): string {
+  if (gameMode === "wwtbam") {
+    return sanitizeWwtbamQuestionText(questionText);
+  }
+
+  return questionText.trim();
+}
 
 function buildDifficultyPolicy(
   difficulty: QuizGenerationDifficulty,
@@ -213,6 +246,7 @@ function normalizedDifficultyForPosition(
 export function normalizeGeneratedQuiz(
   quiz: GeneratedQuiz,
   difficulty: QuizGenerationDifficulty,
+  gameMode: QuizGenerationGameMode,
 ): GeneratedQuiz {
   const questionCount = quiz.questions.length;
 
@@ -222,7 +256,7 @@ export function normalizeGeneratedQuiz(
     questions: quiz.questions.map((question, index) => ({
       ...question,
       difficulty: normalizedDifficultyForPosition(index, questionCount, difficulty),
-      questionText: question.questionText.trim(),
+      questionText: sanitizeQuestionTextForGameMode(gameMode, question.questionText),
       subject: question.subject.trim(),
       options: question.options.map((option) => ({
         text: option.text.trim(),
@@ -263,7 +297,7 @@ export async function generateQuizFromPrompt(input: {
   const { object, usage } = await generateObject(requestConfig);
 
   return {
-    quiz: normalizeGeneratedQuiz(object, input.difficulty),
+    quiz: normalizeGeneratedQuiz(object, input.difficulty, input.gameMode),
     usage,
   };
 }
