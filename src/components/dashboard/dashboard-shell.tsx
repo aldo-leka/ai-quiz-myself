@@ -179,7 +179,7 @@ export function DashboardShell({
                   <button
                     type="button"
                     className={cn(
-                      "relative inline-flex min-h-14 select-none items-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 py-3 pr-5 pl-16 text-base font-semibold text-[#e4e4e9] transition md:pr-6 md:pl-[4.5rem] md:text-xl",
+                      "relative inline-flex min-h-14 select-none items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-5 py-3 text-base font-semibold text-[#e4e4e9] transition md:px-6 md:text-xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
@@ -193,7 +193,11 @@ export function DashboardShell({
                         {userInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="select-none">{user.name}</span>
+                    <span className="block px-12 text-center select-none md:px-14">{user.name}</span>
+                    <Avatar
+                      aria-hidden="true"
+                      className="invisible absolute top-1/2 right-2 size-10 -translate-y-1/2 overflow-hidden border border-[#818cf8]/35 bg-[#1a1d2e]/86 shadow-none"
+                    />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent

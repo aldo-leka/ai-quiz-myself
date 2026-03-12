@@ -690,7 +690,7 @@ function HomePageContent() {
                   type="button"
                   onClick={() => router.push("/dashboard")}
                   className={cn(
-                    "relative inline-flex min-h-12 w-full select-none items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 py-2.5 pr-4 pl-14 text-lg font-semibold text-[#e4e4e9] transition sm:justify-self-end md:min-h-20 md:pr-7 md:pl-[5.25rem] md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
+                    "relative inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-2.5 text-lg font-semibold text-[#e4e4e9] transition sm:justify-self-end md:min-h-20 md:px-7 md:py-3 md:text-3xl xl:w-auto xl:text-4xl",
                     "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                   )}
                 >
@@ -712,7 +712,13 @@ function HomePageContent() {
                       {userInitials(sessionData.user.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="select-none">{sessionData.user.name.trim() || "Player"}</span>
+                  <span className="block w-full px-12 text-center select-none md:px-16">
+                    {sessionData.user.name.trim() || "Player"}
+                  </span>
+                  <Avatar
+                    aria-hidden="true"
+                    className="invisible absolute top-1/2 right-2 size-9 -translate-y-1/2 overflow-hidden border border-[#818cf8]/35 bg-[#1a1d2e]/86 shadow-none md:right-3 md:size-14"
+                  />
                 </button>
               ) : (
                 <button
