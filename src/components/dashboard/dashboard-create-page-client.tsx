@@ -25,6 +25,7 @@ type Difficulty = "easy" | "medium" | "hard" | "mixed" | "escalating";
 type BillingMode = "byok" | "platform_credits";
 
 type DashboardCreatePageClientProps = {
+  isAdmin: boolean;
   hasApiKey: boolean;
   initialLocale: string;
   walletBalanceCents: number;
@@ -160,6 +161,7 @@ function clampBatchCount(sourceType: SourceType, value: number): number {
 
 function computeInitialBillingMode(params: {
   sourceType: SourceType;
+  isAdmin: boolean;
   hasApiKey: boolean;
   platformBillingAvailable: boolean;
   walletBalanceCents: number;
@@ -174,6 +176,10 @@ function computeInitialBillingMode(params: {
   }
 
   if (!params.hasApiKey) {
+    return "platform_credits";
+  }
+
+  if (params.isAdmin) {
     return "platform_credits";
   }
 
@@ -206,6 +212,7 @@ function normalizeBillingModeForSource(params: {
 }
 
 export function DashboardCreatePageClient({
+  isAdmin,
   hasApiKey,
   initialLocale,
   walletBalanceCents,
@@ -228,6 +235,7 @@ export function DashboardCreatePageClient({
   const [billingMode, setBillingMode] = useState<BillingMode>(
     computeInitialBillingMode({
       sourceType: "theme",
+      isAdmin,
       hasApiKey,
       platformBillingAvailable,
       walletBalanceCents,
@@ -267,11 +275,12 @@ export function DashboardCreatePageClient({
   }, [maxBatchCount]);
   const parsedThemeBatchLines = useMemo(() => parseThemeBatchLines(themeBatchText), [themeBatchText]);
   const affordableGenerationCount =
-    effectiveBillingMode === "platform_credits"
+    effectiveBillingMode === "platform_credits" && !isAdmin
       ? Math.min(quantity, Math.floor(walletBalanceCents / generationCostCents))
       : quantity;
   const needsPartialBalanceConfirmation =
     effectiveBillingMode === "platform_credits" &&
+    !isAdmin &&
     affordableGenerationCount > 0 &&
     affordableGenerationCount < quantity;
   const schedulableGenerationCount =
@@ -710,7 +719,7 @@ export function DashboardCreatePageClient({
       </section>
 
       <section className="space-y-5 rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-5 md:p-7 xl:space-y-4">
-        {effectiveBillingMode === "platform_credits" && affordableGenerationCount <= 0 ? (
+        {effectiveBillingMode === "platform_credits" && !isAdmin && affordableGenerationCount <= 0 ? (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100 md:text-base">
             Insufficient balance for this generation. Required: {formatUsd(generationCostCents)}. Current:{" "}
             {formatUsd(walletBalanceCents)}.{" "}

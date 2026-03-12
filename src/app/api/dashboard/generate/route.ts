@@ -326,6 +326,8 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const isAdminComplimentaryGeneration =
+    Boolean(session.user.isAdmin) && platformBillingAvailable;
 
   const parsedRequest = await parseGenerateRequest(request);
   if (parsedRequest.error) {
@@ -409,9 +411,13 @@ export async function POST(request: Request) {
   const billingMode = resolveBillingMode({
     sourceType: payload.sourceType,
     requestedBillingMode: payload.billingMode,
-    hasSufficientCredits: walletBalanceCents >= generationCostCents,
+    hasSufficientCredits: isAdminComplimentaryGeneration || walletBalanceCents >= generationCostCents,
     platformBillingAvailable,
   });
+  const billingAmountCents =
+    billingMode === "platform_credits" && !isAdminComplimentaryGeneration
+      ? generationCostCents
+      : 0;
 
   if (payload.sourceType === "pdf" && payload.pdfObjectKey && !isR2Configured()) {
     return NextResponse.json(
@@ -438,7 +444,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (walletBalanceCents < generationCostCents) {
+    if (!isAdminComplimentaryGeneration && walletBalanceCents < generationCostCents) {
       return NextResponse.json(
         {
           error: "Insufficient balance for this generation.",
@@ -479,7 +485,7 @@ export async function POST(request: Request) {
   }
 
   const affordableCount =
-    billingMode === "platform_credits" && generationCostCents > 0
+    billingMode === "platform_credits" && billingAmountCents > 0
       ? Math.floor(walletBalanceCents / generationCostCents)
       : requestedCount;
   const maxScheduledCount =
@@ -487,7 +493,7 @@ export async function POST(request: Request) {
       ? Math.min(requestedCount, affordableCount)
       : requestedCount;
 
-  if (billingMode === "platform_credits" && maxScheduledCount <= 0) {
+  if (billingMode === "platform_credits" && billingAmountCents > 0 && maxScheduledCount <= 0) {
     return NextResponse.json(
       {
         error: "Insufficient balance for this generation.",
@@ -528,7 +534,7 @@ export async function POST(request: Request) {
           isPublic: true,
           apiKeyId: resolvedApiKeyId,
           billingMode,
-          billingAmountCents: billingMode === "platform_credits" ? generationCostCents : 0,
+          billingAmountCents,
           fileName: payload.fileName,
           fileSizeBytes: payload.fileSizeBytes,
           pdfObjectKey: payload.pdfObjectKey,
@@ -544,10 +550,10 @@ export async function POST(request: Request) {
 
     let reservedCharge = false;
 
-    if (billingMode === "platform_credits" && generationCostCents > 0) {
+    if (billingMode === "platform_credits" && billingAmountCents > 0) {
       const deducted = await tryDeductWalletBalanceCents({
         userId: session.user.id,
-        amountCents: generationCostCents,
+        amountCents: billingAmountCents,
       });
 
       if (!deducted) {
@@ -560,7 +566,7 @@ export async function POST(request: Request) {
       try {
         await db.insert(creditTransactions).values({
           userId: session.user.id,
-          amountCents: -generationCostCents,
+          amountCents: -billingAmountCents,
           currency: "usd",
           type: "generation",
           status: "pending",
@@ -577,7 +583,7 @@ export async function POST(request: Request) {
         reservedCharge = true;
         remainingAffordableCount -= 1;
       } catch {
-        await incrementWalletBalanceCents(session.user.id, generationCostCents);
+        await incrementWalletBalanceCents(session.user.id, billingAmountCents);
         await db.delete(quizGenerationJobs).where(eq(quizGenerationJobs.id, job.id));
         warnings.push("Failed to reserve balance for generation.");
         break;
@@ -600,7 +606,7 @@ export async function POST(request: Request) {
         jobId: job.id,
         sourceType: payload.sourceType,
         billingMode,
-        amountCents: reservedCharge ? generationCostCents : 0,
+        amountCents: reservedCharge ? billingAmountCents : 0,
         batchIndex: item.batchIndex,
         batchSize: item.batchSize,
         errorMessage: message,
@@ -630,14 +636,14 @@ export async function POST(request: Request) {
           jobId,
           sourceType: "url",
           billingMode,
-          amountCents: billingMode === "platform_credits" ? generationCostCents : 0,
+          amountCents: billingAmountCents,
           batchIndex: item.batchIndex,
           batchSize: item.batchSize,
           errorMessage: message,
         });
       }
 
-      if (billingMode === "platform_credits" && generationCostCents > 0) {
+      if (billingMode === "platform_credits" && billingAmountCents > 0) {
         remainingAffordableCount += scheduledJobIds.length;
       }
 
@@ -665,14 +671,14 @@ export async function POST(request: Request) {
           jobId,
           sourceType: "pdf",
           billingMode,
-          amountCents: billingMode === "platform_credits" ? generationCostCents : 0,
+          amountCents: billingAmountCents,
           batchIndex: item.batchIndex,
           batchSize: item.batchSize,
           errorMessage: message,
         });
       }
 
-      if (billingMode === "platform_credits" && generationCostCents > 0) {
+      if (billingMode === "platform_credits" && billingAmountCents > 0) {
         remainingAffordableCount += scheduledJobIds.length;
       }
 
@@ -687,6 +693,7 @@ export async function POST(request: Request) {
   if (scheduledCount <= 0) {
     if (
       billingMode === "platform_credits" &&
+      billingAmountCents > 0 &&
       (remainingAffordableCount <= 0 || balanceChangedDuringScheduling)
     ) {
       return NextResponse.json(

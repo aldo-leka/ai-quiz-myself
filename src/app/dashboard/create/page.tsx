@@ -59,6 +59,7 @@ export default async function DashboardCreatePage() {
 
   return (
     <DashboardCreatePageClient
+      isAdmin={Boolean(session.user.isAdmin)}
       hasApiKey={apiKeyRows.length > 0}
       initialLocale={userRow[0]?.locale ?? "en"}
       walletBalanceCents={Number(creditRow[0]?.balanceCents ?? 0)}

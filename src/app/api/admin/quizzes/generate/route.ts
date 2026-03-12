@@ -94,6 +94,8 @@ export async function POST(request: Request) {
         reviewForHub: false,
         isPublic,
         apiKeyId: selectedKey.id,
+        billingMode: "byok",
+        billingAmountCents: 0,
       },
       provider: selectedKey.provider,
       errorMessage: null,
