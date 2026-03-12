@@ -3,6 +3,12 @@ import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
 import { quizGenerationJobs } from "@/db/schema";
+import {
+  allocateSharedCostBreakdown,
+  createGenerationCostBreakdown,
+  createGenerationCostLineItem,
+  mergeGenerationCostBreakdowns,
+} from "@/lib/ai-pricing";
 import { extractPdfSourceText } from "@/lib/pdf-extraction";
 import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { generateUniqueSourceSubtopics } from "@/lib/url-batch-planning";
@@ -12,6 +18,7 @@ import {
   parseInputData,
   resolveGenerationCredentials,
   runGenerateQuizJob,
+  updateGenerationJobCostBreakdown,
   updateGenerationJobInputData,
   type JobInput,
   type LoadedGenerationJob,
@@ -147,6 +154,7 @@ export const generatePdfBatchTask = task({
     const lockedThemes = parsedJobs.map(({ input }) => normalizeOptionalTheme(input.theme));
     const existingPlannedThemes = lockedThemes.filter((value): value is string => value !== null);
     let generatedSubtopics: string[] = [];
+    let sharedCostBreakdowns = parsedJobs.map(() => createGenerationCostBreakdown([]));
 
     try {
       const credentials = await resolveGenerationCredentials(first.job.userId, first.input);
@@ -164,15 +172,42 @@ export const generatePdfBatchTask = task({
       sourceTitle = extracted.title || sourceTitle;
       sourceText = extracted.text;
 
+      if (extracted.costLineItem) {
+        sharedCostBreakdowns = allocateSharedCostBreakdown(
+          mergeGenerationCostBreakdowns(
+            createGenerationCostBreakdown([]),
+            createGenerationCostBreakdown([extracted.costLineItem]),
+          ),
+          parsedJobs.length,
+        );
+      }
+
       const missingThemeCount = lockedThemes.filter((value) => value === null).length;
       if (missingThemeCount > 0) {
-        generatedSubtopics = await generateUniqueSourceSubtopics({
+        const generatedSubtopicsResult = await generateUniqueSourceSubtopics({
           title: sourceTitle,
           sourceText,
           count: missingThemeCount,
           model: credentials.model,
           existingSubtopics: existingPlannedThemes,
         });
+        generatedSubtopics = generatedSubtopicsResult.subtopics;
+
+        const planningBreakdowns = allocateSharedCostBreakdown(
+          createGenerationCostBreakdown([
+            createGenerationCostLineItem({
+              kind: "source_subtopic_planning",
+              provider: credentials.provider,
+              model: credentials.modelName,
+              usage: generatedSubtopicsResult.usage,
+            }),
+          ]),
+          parsedJobs.length,
+        );
+
+        sharedCostBreakdowns = sharedCostBreakdowns.map((breakdown, index) =>
+          mergeGenerationCostBreakdowns(breakdown, planningBreakdowns[index]),
+        );
       }
     } catch (error) {
       const message = toErrorMessage(error);
@@ -198,6 +233,13 @@ export const generatePdfBatchTask = task({
 
       try {
         await updateGenerationJobInputData(entry.job.id, updatedInput);
+        await updateGenerationJobCostBreakdown(
+          entry.job.id,
+          mergeGenerationCostBreakdowns(
+            entry.job.generationCostBreakdown,
+            sharedCostBreakdowns[index],
+          ),
+        );
       } catch (error) {
         const message = toErrorMessage(error);
         await failGenerationJob({
@@ -206,6 +248,10 @@ export const generatePdfBatchTask = task({
           sourceType: "pdf",
           input: updatedInput,
           errorMessage: message,
+          generationCostBreakdown: mergeGenerationCostBreakdowns(
+            entry.job.generationCostBreakdown,
+            sharedCostBreakdowns[index],
+          ),
         });
         failedJobs.push({ jobId: entry.job.id, error: message });
         continue;

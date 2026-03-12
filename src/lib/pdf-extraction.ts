@@ -1,4 +1,9 @@
 import { extractText } from "unpdf";
+import {
+  createGenerationCostLineItem,
+  usageSnapshotFromOpenAiResponsesUsage,
+  type GenerationCostLineItem,
+} from "@/lib/ai-pricing";
 
 const MIN_DIRECT_TEXT_CHARS = 500;
 const MAX_SOURCE_TEXT_CHARS = 50_000;
@@ -15,12 +20,25 @@ type OpenAiFileUploadResponse = {
 
 type OpenAiResponse = {
   output_text?: string;
+  usage?: OpenAiResponsesUsage;
   output?: Array<{
     content?: Array<{
       type?: string;
       text?: string;
     }>;
   }>;
+};
+
+type OpenAiResponsesUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  input_tokens_details?: {
+    cached_tokens?: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens?: number;
+  };
 };
 
 function normalizeTitle(fileName: string): string {
@@ -129,9 +147,13 @@ async function deleteOpenAiFile(apiKey: string, fileId: string): Promise<void> {
 async function extractWithOpenAiOcr(params: {
   apiKey: string;
   fileId: string;
-}): Promise<string> {
+}): Promise<{
+  model: string;
+  text: string;
+  costLineItem: GenerationCostLineItem;
+}> {
   const model =
-    process.env.OPENAI_OCR_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
+    process.env.OPENAI_OCR_MODEL?.trim() || "gpt-5-mini";
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -172,12 +194,27 @@ async function extractWithOpenAiOcr(params: {
 
   const payload = (await response.json()) as OpenAiResponse;
   const text = readOpenAiOutputText(payload);
-  return normalizeExtractedText(text);
+
+  return {
+    model,
+    text: normalizeExtractedText(text),
+    costLineItem: createGenerationCostLineItem({
+      kind: "pdf_ocr",
+      provider: "openai",
+      model,
+      usage: usageSnapshotFromOpenAiResponsesUsage(payload.usage),
+    }),
+  };
 }
 
 export async function extractPdfSourceText(
   params: ExtractPdfSourceTextParams,
-): Promise<{ title: string; text: string; method: "text" | "ocr" }> {
+): Promise<{
+  title: string;
+  text: string;
+  method: "text" | "ocr";
+  costLineItem?: GenerationCostLineItem;
+}> {
   const title = normalizeTitle(params.fileName);
 
   let directText = "";
@@ -215,19 +252,20 @@ export async function extractPdfSourceText(
       fileName: params.fileName,
     });
 
-    const ocrText = await extractWithOpenAiOcr({
+    const ocrResult = await extractWithOpenAiOcr({
       apiKey: params.openAIApiKey,
       fileId,
     });
 
-    if (!ocrText) {
+    if (!ocrResult.text) {
       throw new Error("OCR returned empty content");
     }
 
     return {
       title,
-      text: truncateText(ocrText),
+      text: truncateText(ocrResult.text),
       method: "ocr",
+      costLineItem: ocrResult.costLineItem,
     };
   } catch (error) {
     if (directText.length > 0) {

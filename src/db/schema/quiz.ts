@@ -16,6 +16,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import type { HubCandidateSnapshot } from "@/lib/hub-candidate-snapshot";
+import type { GenerationCostBreakdown } from "@/lib/ai-pricing";
+
+const emptyGenerationCostBreakdown = sql`'{"currency":"USD","totalUsdMicros":0,"hasUnpricedLineItems":false,"lineItems":[]}'::jsonb`;
 
 export const quizDifficultyEnum = pgEnum("quiz_difficulty", [
   "easy",
@@ -106,6 +109,11 @@ export const quizzes = pgTable(
     gameMode: quizGameModeEnum("game_mode").notNull(),
     generationProvider: apiKeyProviderEnum("generation_provider"),
     generationModel: text("generation_model"),
+    generationCostUsdMicros: integer("generation_cost_usd_micros"),
+    generationCostBreakdown: jsonb("generation_cost_breakdown")
+      .$type<GenerationCostBreakdown>()
+      .notNull()
+      .default(emptyGenerationCostBreakdown),
     questionCount: integer("question_count").notNull(),
     sourceType: quizSourceTypeEnum("source_type").notNull(),
     sourceUrl: text("source_url"),
@@ -235,6 +243,11 @@ export const quizGenerationJobs = pgTable(
     sourceType: quizGenerationSourceTypeEnum("source_type").notNull(),
     inputData: jsonb("input_data").$type<Record<string, unknown>>().notNull(),
     provider: text("provider").notNull(),
+    generationCostUsdMicros: integer("generation_cost_usd_micros"),
+    generationCostBreakdown: jsonb("generation_cost_breakdown")
+      .$type<GenerationCostBreakdown>()
+      .notNull()
+      .default(emptyGenerationCostBreakdown),
     quizId: uuid("quiz_id").references(() => quizzes.id, { onDelete: "set null" }),
     errorMessage: text("error_message"),
     dismissedAt: timestamp("dismissed_at"),

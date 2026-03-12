@@ -1,4 +1,4 @@
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject, type LanguageModel, type LanguageModelUsage } from "ai";
 import { eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -34,6 +34,11 @@ export type GeneratedQuiz = {
   title: string;
   theme: string;
   questions: GeneratedQuestion[];
+};
+
+export type GeneratedQuizResult = {
+  quiz: GeneratedQuiz;
+  usage: LanguageModelUsage;
 };
 
 const modePromptLeads: Record<QuizGenerationGameMode, string> = {
@@ -234,7 +239,7 @@ export async function generateQuizFromPrompt(input: {
   model: LanguageModel;
   existingQuestions?: string[];
   sourceText?: string;
-}): Promise<GeneratedQuiz> {
+}): Promise<GeneratedQuizResult> {
   const questionCount = QUIZ_QUESTION_COUNT[input.gameMode];
   const generatedQuizSchema = z.object({
     title: z.string().min(4),
@@ -255,7 +260,10 @@ export async function generateQuizFromPrompt(input: {
     }),
   } satisfies Parameters<typeof generateObject>[0];
 
-  const { object } = await generateObject(requestConfig);
+  const { object, usage } = await generateObject(requestConfig);
 
-  return normalizeGeneratedQuiz(object, input.difficulty);
+  return {
+    quiz: normalizeGeneratedQuiz(object, input.difficulty),
+    usage,
+  };
 }

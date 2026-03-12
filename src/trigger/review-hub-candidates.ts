@@ -142,7 +142,7 @@ async function assessHubFit(input: {
   });
 
   const { object } = await generateObject({
-    model: openai(process.env.OPENAI_MODEL ?? "gpt-5-nano"),
+    model: openai(process.env.OPENAI_MODEL ?? "gpt-5-mini"),
     schema: hubFitSchema,
     prompt: buildReviewPrompt(input),
   });

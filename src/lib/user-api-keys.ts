@@ -17,7 +17,7 @@ export type UserApiKeyRecord = {
 
 export function getLanguageModelName(provider: ProviderName): string {
   if (provider === "openai") {
-    return process.env.OPENAI_MODEL ?? "gpt-5-nano";
+    return process.env.OPENAI_MODEL ?? "gpt-5-mini";
   }
 
   if (provider === "anthropic") {

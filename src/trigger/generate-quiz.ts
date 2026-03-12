@@ -3,6 +3,15 @@ import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
 import { creditTransactions, hubCandidates, questions, quizGenerationJobs, quizzes } from "@/db/schema";
+import {
+  createGenerationCostBreakdown,
+  createGenerationCostLineItem,
+  mergeGenerationCostBreakdowns,
+  normalizeGenerationCostBreakdown,
+  usageSnapshotFromLanguageModelUsage,
+  type GenerationCostBreakdown,
+  type GenerationCostLineItem,
+} from "@/lib/ai-pricing";
 import type { GenerationBillingMode } from "@/lib/billing";
 import { buildHubCandidateSnapshot, createHubCandidate } from "@/lib/hub-candidates";
 import { upsertHubThemeEmbedding } from "@/lib/hub-theme-embeddings";
@@ -58,6 +67,8 @@ export type LoadedGenerationJob = {
   quizId: string | null;
   sourceType: GenerationSourceType;
   inputData: unknown;
+  generationCostUsdMicros: number | null;
+  generationCostBreakdown: GenerationCostBreakdown;
 };
 type ResolvedGenerationCredentials = {
   provider: "openai" | "anthropic" | "google";
@@ -106,14 +117,21 @@ async function setJobStatus(
     status: "processing" | "completed" | "failed";
     quizId?: string | null;
     errorMessage?: string | null;
+    generationCostBreakdown?: GenerationCostBreakdown;
   },
 ) {
+  const normalizedCostBreakdown = update.generationCostBreakdown
+    ? normalizeGenerationCostBreakdown(update.generationCostBreakdown)
+    : undefined;
+
   await db
     .update(quizGenerationJobs)
     .set({
       status: update.status,
       quizId: update.quizId ?? null,
       errorMessage: update.errorMessage ?? null,
+      generationCostUsdMicros: normalizedCostBreakdown?.totalUsdMicros,
+      generationCostBreakdown: normalizedCostBreakdown,
     })
     .where(eq(quizGenerationJobs.id, jobId));
 }
@@ -127,12 +145,19 @@ export async function loadGenerationJob(jobId: string): Promise<LoadedGeneration
       quizId: quizGenerationJobs.quizId,
       sourceType: quizGenerationJobs.sourceType,
       inputData: quizGenerationJobs.inputData,
+      generationCostUsdMicros: quizGenerationJobs.generationCostUsdMicros,
+      generationCostBreakdown: quizGenerationJobs.generationCostBreakdown,
     })
     .from(quizGenerationJobs)
     .where(eq(quizGenerationJobs.id, jobId))
     .limit(1);
 
-  return job ?? null;
+  return job
+    ? {
+      ...job,
+      generationCostBreakdown: normalizeGenerationCostBreakdown(job.generationCostBreakdown),
+    }
+    : null;
 }
 
 export function parseInputData(inputData: unknown): JobInput {
@@ -165,6 +190,21 @@ export async function updateGenerationJobInputData(jobId: string, input: JobInpu
     .where(eq(quizGenerationJobs.id, jobId));
 }
 
+export async function updateGenerationJobCostBreakdown(
+  jobId: string,
+  breakdown: GenerationCostBreakdown,
+) {
+  const normalized = normalizeGenerationCostBreakdown(breakdown);
+
+  await db
+    .update(quizGenerationJobs)
+    .set({
+      generationCostUsdMicros: normalized.totalUsdMicros,
+      generationCostBreakdown: normalized,
+    })
+    .where(eq(quizGenerationJobs.id, jobId));
+}
+
 async function persistGeneratedQuiz(params: {
   userId: string;
   sourceType: GenerationSourceType;
@@ -173,19 +213,25 @@ async function persistGeneratedQuiz(params: {
   modelName: string;
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
+  generationCostBreakdown: GenerationCostBreakdown;
 }) {
+  const normalizedCostBreakdown = normalizeGenerationCostBreakdown(
+    params.generationCostBreakdown,
+  );
   const [createdQuiz] = await db
     .insert(quizzes)
     .values({
       creatorId: params.userId,
-      title: params.generated.title,
-      theme: params.generated.theme,
+      title: params.generated.quiz.title,
+      theme: params.generated.quiz.theme,
       language: params.input.language,
       difficulty: params.input.difficulty,
       gameMode: params.input.gameMode,
       generationProvider: params.provider,
       generationModel: params.modelName,
-      questionCount: params.generated.questions.length,
+      generationCostUsdMicros: normalizedCostBreakdown.totalUsdMicros,
+      generationCostBreakdown: normalizedCostBreakdown,
+      questionCount: params.generated.quiz.questions.length,
       sourceType: mapGenerationSourceToQuizSource(params.sourceType),
       sourceUrl: params.sourceUrl ?? null,
       isHub: params.input.isHub,
@@ -194,7 +240,7 @@ async function persistGeneratedQuiz(params: {
     .returning({ id: quizzes.id });
 
   await db.insert(questions).values(
-    params.generated.questions.map((question, index) => ({
+    params.generated.quiz.questions.map((question, index) => ({
       quizId: createdQuiz.id,
       position: index + 1,
       questionText: question.questionText,
@@ -451,10 +497,12 @@ export async function failGenerationJob(params: {
   sourceType: GenerationSourceType;
   input: JobInput;
   errorMessage: string;
+  generationCostBreakdown?: GenerationCostBreakdown;
 }) {
   await setJobStatus(params.jobId, {
     status: "failed",
     errorMessage: params.errorMessage,
+    generationCostBreakdown: params.generationCostBreakdown,
   });
 
   const refunded = await refundReservedGenerationChargeOnFailure({
@@ -526,6 +574,8 @@ export async function runGenerateQuizJob(params: {
     language: input.language.trim().toLowerCase(),
   };
 
+  const incurredCostLineItems: GenerationCostLineItem[] = [];
+
   await setJobStatus(job.id, { status: "processing", errorMessage: null });
 
   try {
@@ -564,6 +614,10 @@ export async function runGenerateQuizJob(params: {
           fileName: effectiveInput.fileName ?? "uploaded.pdf",
           openAIApiKey: process.env.OPENAI_API_KEY,
         });
+
+        if (extractedPdf.costLineItem) {
+          incurredCostLineItems.push(extractedPdf.costLineItem);
+        }
 
         effectiveTheme =
           effectiveInput.theme?.trim() ||
@@ -606,6 +660,20 @@ export async function runGenerateQuizJob(params: {
       sourceText,
     });
 
+    incurredCostLineItems.push(
+      createGenerationCostLineItem({
+        kind: "quiz_generation",
+        provider: credentials.provider,
+        model: credentials.modelName,
+        usage: usageSnapshotFromLanguageModelUsage(generated.usage),
+      }),
+    );
+
+    const mergedCostBreakdown = mergeGenerationCostBreakdowns(
+      job.generationCostBreakdown,
+      createGenerationCostBreakdown(incurredCostLineItems),
+    );
+
     const quizId = await persistGeneratedQuiz({
       userId: job.userId,
       sourceType,
@@ -614,9 +682,10 @@ export async function runGenerateQuizJob(params: {
       modelName: credentials.modelName,
       input: effectiveInput,
       generated,
+      generationCostBreakdown: mergedCostBreakdown,
     });
 
-    const questionTexts = generated.questions.map((question) => question.questionText);
+    const questionTexts = generated.quiz.questions.map((question) => question.questionText);
     let duplicate = false;
     if (
       effectiveInput.isHub &&
@@ -625,7 +694,7 @@ export async function runGenerateQuizJob(params: {
     ) {
       const uniquenessResult = await applyHubUniqueness(
         quizId,
-        generated.theme,
+        generated.quiz.theme,
         questionTexts,
         effectiveInput.gameMode,
       );
@@ -636,6 +705,7 @@ export async function runGenerateQuizJob(params: {
       status: "completed",
       quizId,
       errorMessage: null,
+      generationCostBreakdown: mergedCostBreakdown,
     });
 
     let hubCandidateId: string | null = null;
@@ -647,7 +717,7 @@ export async function runGenerateQuizJob(params: {
     ) {
       try {
         const snapshot = buildHubCandidateSnapshot({
-          generated,
+          generated: generated.quiz,
           language: effectiveInput.language,
           difficulty: effectiveInput.difficulty,
           gameMode: effectiveInput.gameMode,
@@ -714,6 +784,8 @@ export async function runGenerateQuizJob(params: {
       hubCandidateId,
       billingMode: effectiveInput.billingMode,
       billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
+      generationCostUsdMicros: mergedCostBreakdown.totalUsdMicros,
+      hasUnpricedGenerationCost: mergedCostBreakdown.hasUnpricedLineItems,
     });
 
     return {
@@ -732,6 +804,10 @@ export async function runGenerateQuizJob(params: {
       sourceType,
       input: effectiveInput,
       errorMessage: message,
+      generationCostBreakdown: mergeGenerationCostBreakdowns(
+        job.generationCostBreakdown,
+        createGenerationCostBreakdown(incurredCostLineItems),
+      ),
     });
   }
 }

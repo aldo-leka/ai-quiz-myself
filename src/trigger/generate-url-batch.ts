@@ -3,6 +3,12 @@ import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { db } from "@/db";
 import { quizGenerationJobs } from "@/db/schema";
+import {
+  allocateSharedCostBreakdown,
+  createGenerationCostBreakdown,
+  createGenerationCostLineItem,
+  mergeGenerationCostBreakdowns,
+} from "@/lib/ai-pricing";
 import { generateUniqueSourceSubtopics } from "@/lib/url-batch-planning";
 import { extractArticleText } from "@/lib/url-extraction";
 import {
@@ -11,6 +17,7 @@ import {
   parseInputData,
   resolveGenerationCredentials,
   runGenerateQuizJob,
+  updateGenerationJobCostBreakdown,
   updateGenerationJobInputData,
   type JobInput,
   type LoadedGenerationJob,
@@ -146,6 +153,7 @@ export const generateUrlBatchTask = task({
     const lockedThemes = parsedJobs.map(({ input }) => normalizeOptionalTheme(input.theme));
     const existingPlannedThemes = lockedThemes.filter((value): value is string => value !== null);
     let generatedSubtopics: string[] = [];
+    let sharedCostBreakdowns = parsedJobs.map(() => createGenerationCostBreakdown([]));
 
     try {
       const credentials = await resolveGenerationCredentials(first.job.userId, first.input);
@@ -155,13 +163,26 @@ export const generateUrlBatchTask = task({
 
       const missingThemeCount = lockedThemes.filter((value) => value === null).length;
       if (missingThemeCount > 0) {
-        generatedSubtopics = await generateUniqueSourceSubtopics({
+        const generatedSubtopicsResult = await generateUniqueSourceSubtopics({
           title: sourceTitle,
           sourceText,
           count: missingThemeCount,
           model: credentials.model,
           existingSubtopics: existingPlannedThemes,
         });
+        generatedSubtopics = generatedSubtopicsResult.subtopics;
+
+        const plannerCostLineItem = createGenerationCostLineItem({
+          kind: "source_subtopic_planning",
+          provider: credentials.provider,
+          model: credentials.modelName,
+          usage: generatedSubtopicsResult.usage,
+        });
+
+        sharedCostBreakdowns = allocateSharedCostBreakdown(
+          createGenerationCostBreakdown([plannerCostLineItem]),
+          parsedJobs.length,
+        );
       }
     } catch (error) {
       const message = toErrorMessage(error);
@@ -187,6 +208,13 @@ export const generateUrlBatchTask = task({
 
       try {
         await updateGenerationJobInputData(entry.job.id, updatedInput);
+        await updateGenerationJobCostBreakdown(
+          entry.job.id,
+          mergeGenerationCostBreakdowns(
+            entry.job.generationCostBreakdown,
+            sharedCostBreakdowns[index],
+          ),
+        );
       } catch (error) {
         const message = toErrorMessage(error);
         await failGenerationJob({
@@ -195,6 +223,10 @@ export const generateUrlBatchTask = task({
           sourceType: "url",
           input: updatedInput,
           errorMessage: message,
+          generationCostBreakdown: mergeGenerationCostBreakdowns(
+            entry.job.generationCostBreakdown,
+            sharedCostBreakdowns[index],
+          ),
         });
         failedJobs.push({ jobId: entry.job.id, error: message });
         continue;

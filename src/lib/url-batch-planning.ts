@@ -1,5 +1,10 @@
 import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
+import {
+  addUsageSnapshots,
+  usageSnapshotFromLanguageModelUsage,
+  type AiTokenUsageSnapshot,
+} from "@/lib/ai-pricing";
 
 const MAX_SOURCE_CONTEXT_CHARS = 14_000;
 const MAX_SUBTOPIC_ROUNDS = 4;
@@ -59,11 +64,12 @@ export async function generateUniqueSourceSubtopics(params: {
   count: number;
   model: LanguageModel;
   existingSubtopics?: string[];
-}): Promise<string[]> {
+}): Promise<{ subtopics: string[]; usage: AiTokenUsageSnapshot | null }> {
   const title = normalizeValue(params.title) || "Article";
   const sourceText = normalizeValue(params.sourceText).slice(0, MAX_SOURCE_CONTEXT_CHARS);
   const requestedCount = Math.max(1, Math.floor(params.count));
   const accepted: string[] = [];
+  let totalUsage: AiTokenUsageSnapshot | null = null;
   const existing = (params.existingSubtopics ?? [])
     .map((value) => normalizeValue(value))
     .filter((value) => value.length > 0);
@@ -84,7 +90,7 @@ export async function generateUniqueSourceSubtopics(params: {
       MAX_SUBTOPIC_CANDIDATES,
     );
     const minimumCount = Math.min(candidateCount, Math.max(1, remaining));
-    const { object } = await generateObject({
+    const { object, usage } = await generateObject({
       model: params.model,
       schema: z.object({
         subtopics: z
@@ -110,6 +116,8 @@ export async function generateUniqueSourceSubtopics(params: {
         sourceText,
       ].join("\n"),
     });
+
+    totalUsage = addUsageSnapshots(totalUsage, usageSnapshotFromLanguageModelUsage(usage));
 
     for (const rawSubtopic of object.subtopics) {
       if (accepted.length >= requestedCount) {
@@ -138,7 +146,10 @@ export async function generateUniqueSourceSubtopics(params: {
     throw new Error("Could not plan enough distinct quiz angles from this source");
   }
 
-  return accepted.slice(0, requestedCount);
+  return {
+    subtopics: accepted.slice(0, requestedCount),
+    usage: totalUsage,
+  };
 }
 
 export const generateUniqueUrlSubtopics = generateUniqueSourceSubtopics;

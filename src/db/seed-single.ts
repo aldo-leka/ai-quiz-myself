@@ -32,22 +32,23 @@ async function generateQuiz(theme: string, modelName: string) {
 }
 
 async function saveQuiz(quiz: Awaited<ReturnType<typeof generateQuiz>>) {
+  const generatedQuiz = quiz.quiz;
   const [createdQuiz] = await db
     .insert(quizzes)
     .values({
-      title: quiz.title,
-      theme: quiz.theme,
+      title: generatedQuiz.title,
+      theme: generatedQuiz.theme,
       language: "en",
       difficulty: "mixed",
       gameMode: "single",
-      questionCount: quiz.questions.length,
+      questionCount: generatedQuiz.questions.length,
       sourceType: "ai_generated",
       isHub: true,
     })
     .returning({ id: quizzes.id });
 
   await db.insert(questions).values(
-    quiz.questions.map((question, index) => ({
+    generatedQuiz.questions.map((question, index) => ({
       quizId: createdQuiz.id,
       position: index + 1,
       questionText: question.questionText,
@@ -69,7 +70,10 @@ async function main() {
     console.log(`Generating quiz for theme: ${theme}`);
     const quiz = await generateQuiz(theme, modelName);
     const quizId = await saveQuiz(quiz);
-    console.log(`Saved quiz ${quizId} (${quiz.title}) with ${quiz.questions.length} questions.`);
+    const generatedQuiz = quiz.quiz;
+    console.log(
+      `Saved quiz ${quizId} (${generatedQuiz.title}) with ${generatedQuiz.questions.length} questions.`,
+    );
   }
 
   console.log("Seed complete.");

@@ -49,7 +49,7 @@ async function validateApiKey(provider: (typeof apiKeyProviderEnum.enumValues)[n
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
     await generateText({
-      model: openai(process.env.OPENAI_MODEL ?? "gpt-5-nano"),
+      model: openai(process.env.OPENAI_MODEL ?? "gpt-5-mini"),
       prompt: "Reply with: ok",
       maxOutputTokens: 4,
     });
