@@ -179,12 +179,16 @@ export function DashboardShell({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex min-h-14 select-none items-center gap-4 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-3 text-base font-semibold text-[#e4e4e9] transition md:px-5 md:text-xl",
+                      "relative inline-flex min-h-14 select-none items-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 py-3 pr-5 pl-16 text-base font-semibold text-[#e4e4e9] transition md:pr-6 md:pl-[4.5rem] md:text-xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                     )}
                   >
-                    <Avatar size="lg" className="border border-[#252940]">
-                      <AvatarImage src={userImage ?? undefined} alt={user.name} />
+                    <Avatar className="absolute top-1/2 left-2 size-10 -translate-y-1/2 overflow-hidden border border-[#818cf8]/35 bg-[#1a1d2e]/86 shadow-none">
+                      <AvatarImage
+                        src={userImage ?? undefined}
+                        alt={user.name}
+                        className="object-cover object-center"
+                      />
                       <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
                         {userInitials(user.name)}
                       </AvatarFallback>

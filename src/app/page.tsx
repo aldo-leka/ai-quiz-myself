@@ -690,14 +690,23 @@ function HomePageContent() {
                   type="button"
                   onClick={() => router.push("/dashboard")}
                   className={cn(
-                    "inline-flex min-h-12 w-full select-none items-center justify-center gap-3 rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-4 py-2.5 text-lg font-semibold text-[#e4e4e9] transition sm:justify-self-end md:min-h-20 md:gap-4 md:px-7 md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
+                    "relative inline-flex min-h-12 w-full select-none items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 py-2.5 pr-4 pl-14 text-lg font-semibold text-[#e4e4e9] transition sm:justify-self-end md:min-h-20 md:pr-7 md:pl-[5.25rem] md:py-3 md:text-3xl xl:w-auto xl:justify-start xl:text-4xl",
                     "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
                   )}
                 >
-                  <Avatar size="lg" className="size-9 border border-[#252940] md:size-14">
+                  <Avatar className="absolute top-1/2 left-2 size-9 -translate-y-1/2 overflow-hidden border border-[#818cf8]/35 bg-[#1a1d2e]/86 shadow-none md:left-3 md:size-14">
                     <AvatarImage
-                      src={sessionData.user.image ?? undefined}
+                      src={
+                        (
+                          sessionData.user as typeof sessionData.user & {
+                            avatarUrl?: string | null;
+                          }
+                        ).avatarUrl ??
+                        sessionData.user.image ??
+                        undefined
+                      }
                       alt={sessionData.user.name}
+                      className="object-cover object-center"
                     />
                     <AvatarFallback className="bg-[#252940] text-[#e4e4e9]">
                       {userInitials(sessionData.user.name)}
