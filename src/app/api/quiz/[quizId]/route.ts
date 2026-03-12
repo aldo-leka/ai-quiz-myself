@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { hubCandidates, questions, quizzes, quizVotes, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { getQuizTtsCacheFingerprint, type SupportedQuizGameMode } from "@/lib/quiz-tts";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +149,7 @@ export async function GET(_: Request, { params }: RouteContext) {
         creatorName,
         creatorImage,
         currentVote: voteRow?.vote ?? null,
+        ttsFingerprint: getQuizTtsCacheFingerprint(quizRow.quiz.gameMode as SupportedQuizGameMode),
         questions: normalizedQuestions,
       },
     },

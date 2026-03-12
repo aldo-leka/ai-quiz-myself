@@ -38,6 +38,7 @@ export type QuizWithQuestions = QuizRecord & {
   creatorName?: string | null;
   creatorImage?: string | null;
   currentVote?: "like" | "dislike" | null;
+  ttsFingerprint?: string | null;
   questions: PlayableQuestion[];
 };
 

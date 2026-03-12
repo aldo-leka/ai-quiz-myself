@@ -67,6 +67,21 @@ export function getQuizTtsFormat(): "mp3" {
   return format === "mp3" ? "mp3" : "mp3";
 }
 
+export function getQuizTtsCacheFingerprint(gameMode: SupportedQuizGameMode): string {
+  return createHash("sha256")
+    .update(
+      [
+        QUIZ_TTS_CACHE_VERSION,
+        gameMode,
+        getQuizTtsModel(),
+        getQuizTtsVoice(gameMode),
+        getQuizTtsFormat(),
+      ].join("\n"),
+    )
+    .digest("hex")
+    .slice(0, 16);
+}
+
 export function getQuizTtsContentType(format: "mp3"): string {
   if (format === "mp3") {
     return "audio/mpeg";

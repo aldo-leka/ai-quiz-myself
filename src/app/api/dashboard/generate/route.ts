@@ -326,8 +326,6 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const isAdminComplimentaryGeneration =
-    Boolean(session.user.isAdmin) && platformBillingAvailable;
 
   const parsedRequest = await parseGenerateRequest(request);
   if (parsedRequest.error) {
@@ -342,6 +340,8 @@ export async function POST(request: Request) {
   const effectiveDifficulty =
     payload.gameMode === "wwtbam" ? "escalating" : payload.difficulty;
   const platformBillingAvailable = Boolean(process.env.OPENAI_API_KEY);
+  const isAdminComplimentaryGeneration =
+    Boolean(session.user.isAdmin) && platformBillingAvailable;
   const maxBatchCount = maxBatchCountForPayload(payload);
 
   if (payload.quantity > maxBatchCount) {

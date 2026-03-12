@@ -234,6 +234,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     }
 
     const endpoint = `/api/quiz/${quiz.id}/questions/${currentQuestion.id}/tts`;
+    const ttsFingerprint = quiz.ttsFingerprint?.trim() ?? "";
     const options = currentQuestion.options.map((option) => option.text);
     const buildAudioUrl = (segment: "question" | "options") => {
       const searchParams = new URLSearchParams({
@@ -245,6 +246,10 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         for (const option of options) {
           searchParams.append("option", option);
         }
+      }
+
+      if (ttsFingerprint) {
+        searchParams.set("tts", ttsFingerprint);
       }
 
       return `${endpoint}?${searchParams.toString()}`;
@@ -274,7 +279,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         },
       },
     ] as const;
-  }, [currentQuestion, currentQuestionIndex, quiz.id]);
+  }, [currentQuestion, currentQuestionIndex, quiz.id, quiz.ttsFingerprint]);
 
   const moveToNextQuestion = useCallback(() => {
     clearAutoAdvance();

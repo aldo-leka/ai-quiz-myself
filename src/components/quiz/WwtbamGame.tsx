@@ -65,6 +65,7 @@ type HostNarrationStage =
 
 const REVEAL_FEEDBACK_MIN_MS = 1500;
 const FINAL_LOCK_SUSPENSE_MIN_MS = 1000;
+const MAX_HOST_SPEECH_INPUT_CHARS = 3800;
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
@@ -72,12 +73,20 @@ function wait(ms: number) {
   });
 }
 
-function buildHostAudioUrl(text: string) {
+function buildHostAudioUrl(text: string, ttsFingerprint?: string) {
   const params = new URLSearchParams({
     text,
   });
 
+  if (ttsFingerprint) {
+    params.set("tts", ttsFingerprint);
+  }
+
   return `/api/quiz/host/audio?${params.toString()}`;
+}
+
+function normalizeHostSpeechText(text: string) {
+  return text.replace(/\s+/g, " ").trim().slice(0, MAX_HOST_SPEECH_INPUT_CHARS);
 }
 
 function buildQuestionAudioUrl(params: {
@@ -85,6 +94,7 @@ function buildQuestionAudioUrl(params: {
   questionId: string;
   position: number;
   includeQuestionNumber?: boolean;
+  ttsFingerprint?: string;
 }) {
   const search = new URLSearchParams({
     segment: "question",
@@ -95,6 +105,10 @@ function buildQuestionAudioUrl(params: {
     search.set("includeQuestionNumber", "false");
   }
 
+  if (params.ttsFingerprint) {
+    search.set("tts", params.ttsFingerprint);
+  }
+
   return `/api/quiz/${params.quizId}/questions/${params.questionId}/tts?${search.toString()}`;
 }
 
@@ -103,6 +117,7 @@ function buildOptionsAudioUrl(params: {
   questionId: string;
   position: number;
   options: string[];
+  ttsFingerprint?: string;
 }) {
   const search = new URLSearchParams({
     segment: "options",
@@ -113,17 +128,11 @@ function buildOptionsAudioUrl(params: {
     search.append("option", option);
   }
 
-  return `/api/quiz/${params.quizId}/questions/${params.questionId}/tts?${search.toString()}`;
-}
-
-function summarizeAskHostAdvice(advice: string): string {
-  const normalized = advice.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "The host had a thought, but kept it close to the chest.";
+  if (params.ttsFingerprint) {
+    search.set("tts", params.ttsFingerprint);
   }
 
-  const firstSentence = normalized.match(/[^.!?]+[.!?]?/)?.[0]?.trim() ?? normalized;
-  return firstSentence;
+  return `/api/quiz/${params.quizId}/questions/${params.questionId}/tts?${search.toString()}`;
 }
 
 function toHostNarrationErrorMessage(error: unknown): string {
@@ -229,6 +238,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   const questions = quiz.questions;
   const currentQuestion = questions[currentQuestionIndex];
+  const ttsFingerprint = quiz.ttsFingerprint?.trim() ?? "";
   const shouldAttemptAiHost = Boolean(sessionData?.user);
 
   const stopHostNarration = useCallback(() => {
@@ -605,7 +615,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       seed: `${loadedQuiz.id}:welcome:${playerName}`,
     });
     const narrationResult = await playOptionalHostNarration(
-      [buildHostAudioUrl(welcomeText)],
+      [buildHostAudioUrl(welcomeText, ttsFingerprint)],
       "welcome",
     );
 
@@ -640,12 +650,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       seed: `${quiz.id}:${question.id}:intro`,
     });
     const introNarrationResult = await playOptionalHostNarration([
-      buildHostAudioUrl(introText),
+      buildHostAudioUrl(introText, ttsFingerprint),
       buildQuestionAudioUrl({
         quizId: quiz.id,
         questionId: question.id,
         position: index + 1,
         includeQuestionNumber: false,
+        ttsFingerprint,
       }),
     ], "question-intro");
 
@@ -661,6 +672,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         questionId: question.id,
         position: index + 1,
         options: question.options.map((option) => option.text),
+        ttsFingerprint,
       }),
     ], "question-options");
 
@@ -708,7 +720,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     stopTimer();
 
     const narrationResult = await playOptionalHostNarration([
-      buildHostAudioUrl(buildTimeoutScript(`${quiz.id}:${currentQuestion.id}:timeout`)),
+      buildHostAudioUrl(buildTimeoutScript(`${quiz.id}:${currentQuestion.id}:timeout`), ttsFingerprint),
     ], "timeout");
 
     if (narrationResult === "interrupted") {
@@ -736,7 +748,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       .filter((idx) => !toEliminate.includes(idx))
       .map((idx) => `${String.fromCharCode(65 + idx)}: ${currentQuestion.options[idx]?.text ?? ""}`);
     void playOptionalHostNarration([
-      buildHostAudioUrl(buildFiftyFiftyScript(`${quiz.id}:${currentQuestion.id}:5050:${remaining.join("|")}`)),
+      buildHostAudioUrl(
+        buildFiftyFiftyScript(`${quiz.id}:${currentQuestion.id}:5050:${remaining.join("|")}`),
+        ttsFingerprint,
+      ),
     ], "manual");
   }
 
@@ -783,8 +798,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       });
     }
 
-    setAskHostAdvice(summarizeAskHostAdvice(hostAdviceText));
-    void playOptionalHostNarration([buildHostAudioUrl(hostAdviceText)], "manual");
+    const spokenAdviceText = normalizeHostSpeechText(hostAdviceText);
+    setAskHostAdvice(spokenAdviceText);
+    void playOptionalHostNarration([buildHostAudioUrl(spokenAdviceText, ttsFingerprint)], "manual");
   }
 
   async function confirmFinalAnswer() {
@@ -796,7 +812,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     const minimumSuspenseDelay = wait(FINAL_LOCK_SUSPENSE_MIN_MS);
 
     const narrationResult = await playOptionalHostNarration([
-      buildHostAudioUrl(buildFinalLockScript(`${quiz.id}:${currentQuestion.id}:lock:${selectedAnswerIndex}`)),
+      buildHostAudioUrl(
+        buildFinalLockScript(`${quiz.id}:${currentQuestion.id}:lock:${selectedAnswerIndex}`),
+        ttsFingerprint,
+      ),
     ], "final-lock");
 
     if (narrationResult === "interrupted") {
@@ -816,7 +835,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : buildWrongRevealScript(`${quiz.id}:${currentQuestion.id}:wrong`);
 
     const resultNarrationResult = await playOptionalHostNarration(
-      [buildHostAudioUrl(resultText)],
+      [buildHostAudioUrl(resultText, ttsFingerprint)],
       "result",
     );
 
@@ -910,12 +929,14 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             questionId: currentQuestion.id,
             position: currentQuestionIndex + 1,
             includeQuestionNumber: false,
+            ttsFingerprint,
           }),
           buildOptionsAudioUrl({
             quizId: quiz.id,
             questionId: currentQuestion.id,
             position: currentQuestionIndex + 1,
             options: currentQuestion.options.map((option) => option.text),
+            ttsFingerprint,
           }),
         ],
         "manual",
