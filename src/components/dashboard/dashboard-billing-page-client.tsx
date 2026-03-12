@@ -110,6 +110,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [savingAutoRecharge, setSavingAutoRecharge] = useState(false);
+  const [autoRechargeStatusMessage, setAutoRechargeStatusMessage] = useState<string | null>(null);
 
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
   const [thresholdInput, setThresholdInput] = useState("5.00");
@@ -158,6 +159,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
   useEffect(() => {
     void loadBilling();
   }, []);
+
+  useEffect(() => {
+    setAutoRechargeStatusMessage(null);
+  }, [autoRechargeEnabled, thresholdInput, targetInput, monthlyCapInput]);
 
   async function openTopUpCheckout() {
     if (topUpLoading) return;
@@ -219,42 +224,42 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
     const monthlyCapCents = parseDollarsToCents(monthlyCapInput);
 
     if (thresholdCents === null || targetCents === null) {
-      setStatusMessage("Threshold and target are required dollar amounts.");
+      setAutoRechargeStatusMessage("Threshold and target are required dollar amounts.");
       return;
     }
     if (thresholdCents < MIN_THRESHOLD_CENTS || thresholdCents > MAX_THRESHOLD_CENTS) {
-      setStatusMessage("Threshold must be between $5.00 and $95.00.");
+      setAutoRechargeStatusMessage("Threshold must be between $5.00 and $95.00.");
       return;
     }
     if (targetCents < MIN_TARGET_CENTS || targetCents > MAX_TARGET_CENTS) {
-      setStatusMessage("Target must be between $10.00 and $100.00.");
+      setAutoRechargeStatusMessage("Target must be between $10.00 and $100.00.");
       return;
     }
     if (targetCents <= thresholdCents) {
-      setStatusMessage("Target must be greater than threshold.");
+      setAutoRechargeStatusMessage("Target must be greater than threshold.");
       return;
     }
     if (monthlyCapInput.trim().length > 0) {
       if (monthlyCapCents === null) {
-        setStatusMessage("Monthly cap must be a valid dollar amount or empty.");
+        setAutoRechargeStatusMessage("Monthly cap must be a valid dollar amount or empty.");
         return;
       }
       if (monthlyCapCents < MIN_MONTHLY_CAP_CENTS || monthlyCapCents > MAX_MONTHLY_CAP_CENTS) {
-        setStatusMessage("Monthly cap must be between $10.00 and $1000.00.");
+        setAutoRechargeStatusMessage("Monthly cap must be between $10.00 and $1000.00.");
         return;
       }
       if (monthlyCapCents < targetCents) {
-        setStatusMessage("Monthly cap should be greater than or equal to target.");
+        setAutoRechargeStatusMessage("Monthly cap should be greater than or equal to target.");
         return;
       }
     }
     if (autoRechargeEnabled && !data.hasPaymentMethod) {
-      setStatusMessage("Add a payment method first, then enable auto recharge.");
+      setAutoRechargeStatusMessage("No saved payment method yet. Complete one top-up first.");
       return;
     }
 
     setSavingAutoRecharge(true);
-    setStatusMessage(null);
+    setAutoRechargeStatusMessage(null);
     try {
       const response = await fetch("/api/dashboard/billing", {
         method: "PATCH",
@@ -270,10 +275,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not save auto recharge settings");
       }
-      setStatusMessage("Auto recharge settings saved.");
+      setAutoRechargeStatusMessage("Auto recharge settings saved.");
       await loadBilling();
     } catch (saveError) {
-      setStatusMessage(
+      setAutoRechargeStatusMessage(
         saveError instanceof Error ? saveError.message : "Could not save auto recharge settings",
       );
     } finally {
@@ -329,11 +334,6 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                 </Button>
               </div>
             </div>
-            {!data.hasPaymentMethod ? (
-              <p className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-base text-amber-100 md:text-lg">
-                No saved payment method yet. Complete one top-up first, then auto recharge can run off-session.
-              </p>
-            ) : null}
           </section>
 
           <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/78 p-7 md:p-10">
@@ -430,6 +430,12 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   {savingAutoRecharge ? "Saving..." : "Save settings"}
                 </Button>
               </div>
+
+              {autoRechargeStatusMessage ? (
+                <p className="text-base text-[#9394a5] md:text-lg">
+                  {autoRechargeStatusMessage}
+                </p>
+              ) : null}
             </div>
           </section>
 
