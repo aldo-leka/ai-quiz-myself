@@ -5,7 +5,7 @@ import { requireEnv } from "@/lib/env";
 const MAX_TTS_INPUT_CHARS = 3800;
 const DEFAULT_TTS_MODEL = "gpt-4o-mini-tts";
 const DEFAULT_TTS_VOICE = "alloy";
-const DEFAULT_WWTBAM_TTS_VOICE = "onyx";
+const DEFAULT_WWTBAM_TTS_VOICE = "ballad";
 const QUIZ_TTS_CACHE_VERSION = "v1";
 
 export type SupportedQuizGameMode = "single" | "wwtbam" | "couch_coop";

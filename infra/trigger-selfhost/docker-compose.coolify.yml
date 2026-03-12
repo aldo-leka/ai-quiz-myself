@@ -9,10 +9,13 @@ x-logging: &logging-config
 
 services:
   webapp:
-    image: ghcr.io/triggerdotdev/trigger.dev:v4.4.2
+    image: ghcr.io/triggerdotdev/trigger.dev:v4.4.3
     restart: unless-stopped
     logging: *logging-config
     user: root
+    networks:
+      - default
+      - trigger-internal
     command: >-
       sh -c 'set -e;
       chown -R node:node /home/node/shared;
@@ -120,10 +123,12 @@ services:
       start_period: 15s
 
   supervisor:
-    image: ghcr.io/triggerdotdev/supervisor:v4.4.2
+    image: ghcr.io/triggerdotdev/supervisor:v4.4.3
     restart: unless-stopped
     logging: *logging-config
     user: root
+    networks:
+      - trigger-internal
     command: sh -c "chown -R node:node /home/node/shared && exec /usr/bin/dumb-init -- pnpm run --filter supervisor start"
     depends_on:
       webapp:
@@ -137,12 +142,11 @@ services:
       MANAGED_WORKER_SECRET: ${TRIGGER_MANAGED_WORKER_SECRET}
       TRIGGER_API_URL: http://webapp:3000
       OTEL_EXPORTER_OTLP_ENDPOINT: http://webapp:3000/otel
-      TRIGGER_WORKLOAD_API_DOMAIN: supervisor
       TRIGGER_WORKLOAD_API_PORT_EXTERNAL: "8020"
       ENFORCE_MACHINE_PRESETS: "1"
       TRIGGER_DEQUEUE_INTERVAL_MS: "1000"
       DOCKER_HOST: tcp://docker-proxy:2375
-      DOCKER_RUNNER_NETWORKS: trigger-webapp,trigger-supervisor
+      DOCKER_RUNNER_NETWORKS: trigger-internal
       DOCKER_REGISTRY_URL: ${TRIGGER_DOCKER_REGISTRY_URL}
       DOCKER_REGISTRY_USERNAME: ${TRIGGER_DOCKER_REGISTRY_USERNAME}
       DOCKER_REGISTRY_PASSWORD: ${TRIGGER_DOCKER_REGISTRY_PASSWORD}
@@ -163,6 +167,8 @@ services:
     image: tecnativa/docker-socket-proxy:v0.4.2
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -187,6 +193,8 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     command:
       - -c
       - wal_level=logical
@@ -209,6 +217,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     volumes:
       - redis:/data
     healthcheck:
@@ -225,6 +235,8 @@ services:
     image: electricsql/electric:1.2.9
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -247,6 +259,8 @@ services:
     image: clickhouse/clickhouse-server:25.8
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     volumes:
       - clickhouse:/var/lib/clickhouse
     environment:
@@ -275,6 +289,8 @@ services:
     image: bitnamilegacy/minio:latest
     restart: unless-stopped
     logging: *logging-config
+    networks:
+      - trigger-internal
     volumes:
       - minio:/bitnami/minio/data
     environment:
@@ -299,3 +315,7 @@ volumes:
   postgres:
   redis:
   shared:
+
+networks:
+  trigger-internal:
+    name: trigger-internal
