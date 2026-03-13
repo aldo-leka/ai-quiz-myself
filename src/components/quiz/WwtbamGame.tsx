@@ -203,6 +203,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [revealedAnswer, setRevealedAnswer] = useState(false);
   const [correctAnswerIndex, setCorrectAnswerIndex] = useState<number | null>(null);
   const [askHostAdvice, setAskHostAdvice] = useState<string | null>(null);
+  const [isAskHostThinking, setIsAskHostThinking] = useState(false);
   const [isHostNarrating, setIsHostNarrating] = useState(false);
   const [hostNarrationStage, setHostNarrationStage] = useState<HostNarrationStage>("idle");
   const [hostNarrationError, setHostNarrationError] = useState<string | null>(null);
@@ -231,6 +232,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const hasPersistedSessionRef = useRef(false);
   const isAdvancingRef = useRef(false);
   const questionFlowRunIdRef = useRef(0);
+  const askHostRequestIdRef = useRef(0);
+  const timerPausedAtRef = useRef<number | null>(null);
   const revealedAnswerRef = useRef(false);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const hostAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -644,6 +647,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       revealedAnswerRef.current = false;
       setCorrectAnswerIndex(null);
       setAskHostAdvice(null);
+      setIsAskHostThinking(false);
       setHostNarrationError(null);
       stopHostNarration();
       setUsedLifelines({ fiftyFifty: false, askHost: false });
@@ -655,6 +659,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       isAdvancingRef.current = false;
       hasStartedIntroRef.current = false;
       questionFlowRunIdRef.current = 0;
+      askHostRequestIdRef.current += 1;
       startedAtRef.current = new Date();
 
       if (!cancelled) {
@@ -671,6 +676,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     return () => {
       cancelled = true;
       questionFlowRunIdRef.current += 1;
+      askHostRequestIdRef.current += 1;
+      timerPausedAtRef.current = null;
       if (timerRef.current) clearInterval(timerRef.current);
       stopHostNarration();
       stopHostBed();
@@ -795,14 +802,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
   }
 
-  function startCountdown(seconds: number) {
-    if (countdownStartedRef.current) return;
-
-    countdownStartedRef.current = true;
-    questionStartedAtRef.current = Date.now();
-    setTotalTime(seconds);
-    setRemainingTime(seconds);
-
+  function runCountdownInterval() {
     stopTimer();
 
     timerRef.current = setInterval(() => {
@@ -818,6 +818,51 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         return next;
       });
     }, 1000);
+  }
+
+  function pauseCountdown() {
+    if (!countdownStartedRef.current || timerRef.current === null) {
+      return false;
+    }
+
+    timerPausedAtRef.current = Date.now();
+    stopTimer();
+    return true;
+  }
+
+  function resumeCountdown() {
+    if (!countdownStartedRef.current || timerRef.current !== null) {
+      return;
+    }
+
+    if (revealedAnswerRef.current || finalAnswerLocked || gameOver) {
+      timerPausedAtRef.current = null;
+      return;
+    }
+
+    if ((remainingTime ?? 0) <= 0) {
+      timerPausedAtRef.current = null;
+      return;
+    }
+
+    if (timerPausedAtRef.current !== null) {
+      questionStartedAtRef.current += Date.now() - timerPausedAtRef.current;
+      timerPausedAtRef.current = null;
+    }
+
+    runCountdownInterval();
+  }
+
+  function startCountdown(seconds: number) {
+    if (countdownStartedRef.current) return;
+
+    countdownStartedRef.current = true;
+    questionStartedAtRef.current = Date.now();
+    setTotalTime(seconds);
+    setRemainingTime(seconds);
+    timerPausedAtRef.current = null;
+
+    runCountdownInterval();
   }
 
   async function welcomePlayer(loadedQuiz: QuizWithQuestions) {
@@ -845,6 +890,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     questionFlowRunIdRef.current = flowRunId;
 
     countdownStartedRef.current = false;
+    timerPausedAtRef.current = null;
     stopTimer();
     stopHostNarration();
     setSelectedAnswerIndex(null);
@@ -856,6 +902,8 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     revealedAnswerRef.current = false;
     setCorrectAnswerIndex(null);
     setAskHostAdvice(null);
+    setIsAskHostThinking(false);
+    askHostRequestIdRef.current += 1;
 
     const introText = buildQuestionIntroScript({
       questionNumber: index + 1,
@@ -998,6 +1046,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     if (!currentQuestion || usedLifelines.askHost || !canUseAskHost) return;
 
     setUsedLifelines((previous) => ({ ...previous, askHost: true }));
+    setIsAskHostThinking(true);
+    const requestId = askHostRequestIdRef.current + 1;
+    askHostRequestIdRef.current = requestId;
+    const didPauseCountdown = pauseCountdown();
     const hostAdviceText =
       hasStoredWwtbamHostHint(currentQuestion) &&
       typeof currentQuestion.hostHintDisplayedOptionIndex === "number"
@@ -1008,13 +1060,32 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         : null;
 
     if (!hostAdviceText) {
+      if (askHostRequestIdRef.current === requestId) {
+        setIsAskHostThinking(false);
+        if (didPauseCountdown) {
+          resumeCountdown();
+          resumeQuestionBed();
+        }
+      }
+      return;
+    }
+
+    await wait(1000);
+
+    if (askHostRequestIdRef.current !== requestId) {
       return;
     }
 
     const spokenAdviceText = normalizeHostSpeechText(hostAdviceText);
+    setIsAskHostThinking(false);
     setAskHostAdvice(spokenAdviceText);
     void playOptionalHostNarration([buildHostAudioUrl(spokenAdviceText, ttsFingerprint)], "manual").finally(() => {
-      resumeQuestionBed();
+      if (askHostRequestIdRef.current === requestId) {
+        if (didPauseCountdown) {
+          resumeCountdown();
+        }
+        resumeQuestionBed();
+      }
     });
   }
 
@@ -1349,7 +1420,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
   const moneyLadderDisplay = [...MONEY_LADDER.entries()].reverse();
   const readAloudError = readAloudPreferenceError ?? hostNarrationError;
-  const showAskHostStatus = Boolean(askHostAdvice);
+  const showAskHostStatus = isAskHostThinking || Boolean(askHostAdvice);
+  const showActionRow =
+    (selectedAnswerIndex !== null && !revealedAnswer) ||
+    (selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0);
   const skipNarrationLabel =
     hostNarrationStage === "final-lock" || hostNarrationStage === "timeout"
         ? "Reveal now"
@@ -1526,41 +1600,45 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 </div>
                 <div ref={questionViewportAnchorRef} className="h-px" />
 
-                <div className="flex min-h-16 items-center justify-end">
-                  {selectedAnswerIndex !== null && !revealedAnswer ? (
-                    <div className="flex items-center justify-end gap-3">
-                      <p
-                        className={cn(
-                          "text-sm font-semibold text-[#9394a5] md:text-2xl",
-                          compactLayout && "md:text-base",
-                        )}
-                      >
-                        Lock in your final answer?
-                      </p>
+                {showActionRow ? (
+                  <div className="flex min-h-16 items-center justify-end">
+                    {selectedAnswerIndex !== null && !revealedAnswer ? (
+                      <div className="flex items-center justify-end gap-3">
+                        <p
+                          className={cn(
+                            "text-sm font-semibold text-[#9394a5] md:text-2xl",
+                            compactLayout && "md:text-base",
+                          )}
+                        >
+                          Lock in your final answer?
+                        </p>
+                        <CircularButton
+                          ref={registerFocusControlRef("final")}
+                          focused={focusedControl === "final"}
+                          selected={finalAnswerLocked}
+                          disabled={finalAnswerLocked}
+                          onClick={() => void confirmFinalAnswer()}
+                        >
+                          Final
+                        </CircularButton>
+                      </div>
+                    ) : null}
+
+                    {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
                       <CircularButton
-                        ref={registerFocusControlRef("final")}
-                        focused={focusedControl === "final"}
-                        selected={finalAnswerLocked}
-                        disabled={finalAnswerLocked}
-                        onClick={() => void confirmFinalAnswer()}
+                        ref={registerFocusControlRef("cashout")}
+                        focused={focusedControl === "cashout"}
+                        onClick={cashOut}
                       >
-                        Final
+                        Cash Out
                       </CircularButton>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
+                ) : null}
 
-                  {selectedAnswerIndex === null && !revealedAnswer && currentQuestionIndex > 0 ? (
-                    <CircularButton
-                      ref={registerFocusControlRef("cashout")}
-                      focused={focusedControl === "cashout"}
-                      onClick={cashOut}
-                    >
-                      Cash Out
-                    </CircularButton>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
+                <div
+                  className={cn("grid gap-2.5 md:grid-cols-2 md:gap-4", compactLayout && "md:gap-3")}
+                >
                   <GameButton
                     ref={registerFocusControlRef("lifeline-5050")}
                     centered
@@ -1597,9 +1675,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 {showAskHostStatus ? (
                   <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/72 px-4 py-3 text-sm text-[#cfd1df] md:text-base">
-                    <span>
-                      <span className="font-semibold text-amber-200">Host hint:</span> {askHostAdvice}
-                    </span>
+                    {isAskHostThinking ? (
+                      <span className="font-semibold text-amber-200">The host is thinking...</span>
+                    ) : (
+                      <span>
+                        <span className="font-semibold text-amber-200">Host hint:</span> {askHostAdvice}
+                      </span>
+                    )}
                   </div>
                 ) : null}
               </div>
