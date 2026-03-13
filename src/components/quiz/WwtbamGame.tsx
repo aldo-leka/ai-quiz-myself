@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, House, LoaderCircle, Square, ThumbsDown, ThumbsUp, User, Volume2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
@@ -48,7 +48,11 @@ type FocusControlId =
   | "final"
   | "cashout"
   | "lifeline-5050"
-  | "lifeline-ask-host";
+  | "lifeline-ask-host"
+  | "gameover-like"
+  | "gameover-dislike"
+  | "gameover-play-next"
+  | "gameover-play-again";
 
 type WwtbamGameProps = {
   quiz: QuizWithQuestions;
@@ -197,8 +201,10 @@ function toHostNarrationErrorMessage(error: unknown): string {
 
 export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
+  const retryToken = searchParams.get("retry") ?? "";
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -608,36 +614,57 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     );
   }, [eliminatedOptions, optionsDisabled, visibleOptions]);
 
-  const focusOrder = useMemo<FocusControlId[]>(() => {
-    const controls: FocusControlId[] = ["header-quit", "header-next"];
+  const focusRows = useMemo<FocusControlId[][]>(() => {
+    if (gameOver) {
+      return [
+        ["header-quit", "header-next"],
+        ["gameover-like", "gameover-dislike"],
+        ["gameover-play-next", "gameover-play-again"],
+      ];
+    }
+
+    const rows: FocusControlId[][] = [["header-quit", "header-next"]];
 
     if (availableAnswerIndexes.length > 0 && selectedAnswerIndex === null && !revealedAnswer) {
-      controls.push(...availableAnswerIndexes.map((index) => `answer-${index}` as const));
+      const topRow = [0, 1]
+        .filter((index) => availableAnswerIndexes.includes(index))
+        .map((index) => `answer-${index}` as const);
+      const bottomRow = [2, 3]
+        .filter((index) => availableAnswerIndexes.includes(index))
+        .map((index) => `answer-${index}` as const);
+
+      if (topRow.length > 0) rows.push(topRow);
+      if (bottomRow.length > 0) rows.push(bottomRow);
     }
 
     if (selectedAnswerIndex !== null && !revealedAnswer) {
-      controls.push("final");
+      rows.push(["final"]);
     }
 
     if (!revealedAnswer && selectedAnswerIndex === null && currentQuestionIndex > 0) {
-      controls.push("cashout");
+      rows.push(["cashout"]);
     }
 
     if (!revealedAnswer) {
-      if (!usedLifelines.fiftyFifty && !optionsDisabled) controls.push("lifeline-5050");
-      if (!usedLifelines.askHost && !optionsDisabled) controls.push("lifeline-ask-host");
+      const lifelineRow: FocusControlId[] = [];
+      if (!usedLifelines.fiftyFifty && !optionsDisabled) lifelineRow.push("lifeline-5050");
+      if (!usedLifelines.askHost && !optionsDisabled) lifelineRow.push("lifeline-ask-host");
+      if (lifelineRow.length > 0) rows.push(lifelineRow);
     }
 
-    return controls;
+    return rows;
   }, [
     availableAnswerIndexes,
     currentQuestionIndex,
+    gameOver,
     optionsDisabled,
     revealedAnswer,
     selectedAnswerIndex,
     usedLifelines.askHost,
     usedLifelines.fiftyFifty,
   ]);
+
+  const focusOrder = useMemo<FocusControlId[]>(() => focusRows.flat(), [focusRows]);
 
   useEffect(() => {
     rememberRecentQuiz("wwtbam", quiz.id);
@@ -709,7 +736,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     };
     // Game setup should rerun only when the quiz changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quiz.id, readAloudPreferenceReady, stopHostBed, stopHostNarration]);
+  }, [quiz.id, readAloudPreferenceReady, retryToken, stopHostBed, stopHostNarration]);
 
   useEffect(() => {
     if (isLoading || hasStartedIntroRef.current || !readAloudPreferenceReady) {
@@ -720,7 +747,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     void welcomePlayer(quiz);
     // Intentionally bound to the active quiz boot lifecycle rather than function identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, quiz.id, readAloudPreferenceReady]);
+  }, [isLoading, quiz.id, readAloudPreferenceReady, retryToken]);
 
   useEffect(() => {
     if (!focusOrder.length) {
@@ -754,7 +781,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }, [focusedControl]);
 
   useEffect(() => {
-    if (isLoading || gameOver) return;
+    if (isLoading) return;
 
     function onKeyDown(event: KeyboardEvent) {
       if (!focusOrder.length) return;
@@ -781,18 +808,40 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         return;
       }
 
-      const baseIndex = currentIndex;
-      const delta = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
-      const nextIndex = (baseIndex + delta + focusOrder.length) % focusOrder.length;
+      const currentRowIndex = focusRows.findIndex((row) => row.includes(focusedControl as FocusControlId));
+      const currentRow = currentRowIndex >= 0 ? focusRows[currentRowIndex] : null;
+      const currentColumnIndex = currentRow ? currentRow.findIndex((id) => id === focusedControl) : -1;
 
-      setFocusedControl(focusOrder[nextIndex]);
+      if (!currentRow || currentColumnIndex === -1) {
+        return;
+      }
+
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        const delta = key === "ArrowLeft" ? -1 : 1;
+        const nextColumnIndex =
+          (currentColumnIndex + delta + currentRow.length) % currentRow.length;
+        setFocusedControl(currentRow[nextColumnIndex] ?? null);
+        return;
+      }
+
+      const rowDelta = key === "ArrowUp" ? -1 : 1;
+      const nextRowIndex =
+        (currentRowIndex + rowDelta + focusRows.length) % focusRows.length;
+      const nextRow = focusRows[nextRowIndex];
+
+      if (!nextRow || nextRow.length === 0) {
+        return;
+      }
+
+      const nextColumnIndex = Math.min(currentColumnIndex, nextRow.length - 1);
+      setFocusedControl(nextRow[nextColumnIndex] ?? nextRow[0] ?? null);
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // Keyboard handler intentionally depends on current visible control state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusOrder, focusedControl, gameOver, isLoading]);
+  }, [focusOrder, focusRows, focusedControl, isLoading]);
 
   useEffect(() => {
     if (isLoading || gameOver || visibleOptions < 4 || optionsDisabled) return;
@@ -1368,6 +1417,26 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     if (controlId === "lifeline-ask-host") {
       void handleAskHost();
+      return;
+    }
+
+    if (controlId === "gameover-like") {
+      void submitVote("like");
+      return;
+    }
+
+    if (controlId === "gameover-dislike") {
+      void submitVote("dislike");
+      return;
+    }
+
+    if (controlId === "gameover-play-next") {
+      void playRandomAgain();
+      return;
+    }
+
+    if (controlId === "gameover-play-again") {
+      playAgain();
     }
   }
 
@@ -1458,20 +1527,24 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>
                 <div className="flex flex-wrap gap-3">
                   <GameButton
+                    ref={registerFocusControlRef("gameover-like")}
                     centered
                     icon={<ThumbsUp size={20} />}
                     onClick={() => void submitVote("like")}
                     disabled={isVoting}
+                    focused={focusedControl === "gameover-like"}
                     state={vote === "like" ? "selected" : "default"}
                     className="min-h-20 max-w-72 text-2xl md:text-3xl"
                   >
                     Like ({likes})
                   </GameButton>
                   <GameButton
+                    ref={registerFocusControlRef("gameover-dislike")}
                     centered
                     icon={<ThumbsDown size={20} />}
                     onClick={() => void submitVote("dislike")}
                     disabled={isVoting}
+                    focused={focusedControl === "gameover-dislike"}
                     state={vote === "dislike" ? "selected" : "default"}
                     className="min-h-20 max-w-72 text-2xl md:text-3xl"
                   >
@@ -1485,15 +1558,19 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
               </div>
 
               <GameButton
+                ref={registerFocusControlRef("gameover-play-next")}
                 centered
                 disabled={isLoadingNextQuiz}
+                focused={focusedControl === "gameover-play-next"}
                 className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
                 onClick={() => void playRandomAgain()}
               >
                 {isLoadingNextQuiz ? "Loading..." : "Play Next"}
               </GameButton>
               <GameButton
+                ref={registerFocusControlRef("gameover-play-again")}
                 centered
+                focused={focusedControl === "gameover-play-again"}
                 className="min-h-20 text-2xl md:text-3xl"
                 onClick={playAgain}
               >

@@ -50,7 +50,6 @@ type CompleteFocusTarget =
   | HeaderActionTarget
   | "like"
   | "dislike"
-  | `leaderboard-${number}`
   | "complete-rematch"
   | "complete-random";
 
@@ -212,13 +211,9 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     const rows: CompleteFocusTarget[][] = [["header-quit", "header-next"]];
     rows.push(["like", "dislike"]);
 
-    leaderboard.forEach((_, index) => {
-      rows.push([`leaderboard-${index}`]);
-    });
-
     rows.push(["complete-random", "complete-rematch"]);
     return rows;
-  }, [leaderboard]);
+  }, []);
 
   const {
     readAloudEnabled,
@@ -1419,14 +1414,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               {leaderboard.map((entry, index) => (
                 <div
                   key={`${entry.name}-${index}`}
-                  ref={(node) => {
-                    completeFocusRefs.current[`leaderboard-${index}`] = node;
-                  }}
-                  tabIndex={-1}
-                  className={cn(
-                    "flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-6 focus-visible:outline-none",
-                    focusedCompleteTarget === `leaderboard-${index}` && "ring-4 ring-[#818cf8]/70",
-                  )}
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#252940] bg-[#0f1117]/82 p-6"
                 >
                   <div className="flex items-center gap-3">
                     <span className="inline-flex size-14 items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e] text-xl font-bold">
