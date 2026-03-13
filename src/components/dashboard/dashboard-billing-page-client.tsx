@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type BillingTransaction = {
@@ -317,6 +318,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                 <Button
                   type="button"
                   onClick={() => setTopUpModalOpen(true)}
+                  data-tv-id="billing-topup-button"
                   className="min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
                 >
                   <Wallet className="mr-2 size-5" />
@@ -327,6 +329,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   variant="outline"
                   onClick={() => void openBillingPortal()}
                   disabled={portalLoading}
+                  data-tv-id="billing-manage-payment-button"
                   className="min-h-14 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-6 text-lg text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-xl"
                 >
                   <CreditCard className="mr-2 size-5" />
@@ -343,15 +346,16 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
             </p>
 
             <div className="mt-5 space-y-4">
-              <label className="inline-flex items-center gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 px-5 py-4 text-lg text-[#e4e4e9] md:text-xl">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-[#6c8aff]"
+              <div className="inline-flex items-center gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 px-5 py-4 text-lg text-[#e4e4e9] md:text-xl">
+                <Switch
                   checked={autoRechargeEnabled}
-                  onChange={(event) => setAutoRechargeEnabled(event.target.checked)}
+                  onCheckedChange={setAutoRechargeEnabled}
+                  aria-label="Enable auto recharge"
+                  data-tv-id="billing-auto-recharge-switch"
+                  className="data-[state=checked]:bg-[#6c8aff] data-[state=unchecked]:bg-[#252940]"
                 />
-                Enable auto recharge
-              </label>
+                <span>Enable auto recharge</span>
+              </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
@@ -359,6 +363,8 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   <p className="text-sm text-[#9394a5] md:text-base">Auto recharge starts at or below this balance.</p>
                   <div className="relative">
                     <Input
+                      data-tv-id="billing-threshold-input"
+                      data-tv-input="true"
                       value={thresholdInput}
                       onChange={(event) => setThresholdInput(event.target.value)}
                       type="text"
@@ -376,6 +382,8 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   <p className="text-sm text-[#9394a5] md:text-base">Each recharge brings your wallet back to this amount.</p>
                   <div className="relative">
                     <Input
+                      data-tv-id="billing-target-input"
+                      data-tv-input="true"
                       value={targetInput}
                       onChange={(event) => setTargetInput(event.target.value)}
                       type="text"
@@ -395,6 +403,8 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                   <p className="text-sm text-[#9394a5] md:text-base">Limit total auto recharges per calendar month.</p>
                   <div className="relative">
                     <Input
+                      data-tv-id="billing-monthly-cap-input"
+                      data-tv-input="true"
                       value={monthlyCapInput}
                       onChange={(event) => setMonthlyCapInput(event.target.value)}
                       type="text"

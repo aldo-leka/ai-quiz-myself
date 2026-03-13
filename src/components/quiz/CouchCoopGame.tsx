@@ -1106,6 +1106,15 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     const frame = window.requestAnimationFrame(() => {
       focusRemoteControl(node);
+      if (node instanceof HTMLInputElement) {
+        node.click();
+        const length = node.value.length;
+        try {
+          node.setSelectionRange(length, length);
+        } catch {
+          // Ignore inputs that don't support selection ranges.
+        }
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);

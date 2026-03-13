@@ -94,6 +94,13 @@ function isEditableElement(node: Element | null): boolean {
   );
 }
 
+function isTvFocusableInput(node: Element | null): node is HTMLInputElement | HTMLTextAreaElement {
+  return (
+    (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) &&
+    node.dataset.tvInput === "true"
+  );
+}
+
 function isFocusableDashboardControl(node: Element): node is HTMLElement {
   if (!(node instanceof HTMLElement)) return false;
   if (node.tabIndex < 0) return false;
@@ -101,13 +108,29 @@ function isFocusableDashboardControl(node: Element): node is HTMLElement {
   if (node.getAttribute("aria-hidden") === "true") return false;
   if (node.getAttribute("role") === "combobox") return false;
   if (node.dataset.tvIgnore === "true" || node.closest("[data-tv-ignore='true']")) return false;
-  if (isEditableElement(node)) return false;
+  if (isEditableElement(node) && !isTvFocusableInput(node)) return false;
 
   const style = window.getComputedStyle(node);
   if (style.display === "none" || style.visibility === "hidden") return false;
 
   const rect = node.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
+}
+
+function focusDashboardControl(node: HTMLElement | null, options?: ScrollIntoViewOptions) {
+  if (!node) return;
+
+  focusRemoteControl(node, options);
+
+  if (isTvFocusableInput(node)) {
+    node.click();
+    const length = node.value.length;
+    try {
+      node.setSelectionRange(length, length);
+    } catch {
+      // Ignore inputs that don't support range selection.
+    }
+  }
 }
 
 function findNextDashboardControl(
@@ -223,13 +246,16 @@ export function DashboardShell({
         return;
       }
 
-      if (isEditableElement(document.activeElement)) {
+      if (
+        isEditableElement(document.activeElement) &&
+        !isTvFocusableInput(document.activeElement)
+      ) {
         return;
       }
 
       const candidates = Array.from(
         document.querySelectorAll<HTMLElement>(
-          "main a[href], main button, main [role='button']",
+          "main a[href], main button, main [role='button'], main [role='switch'], main input[data-tv-input='true'], main textarea[data-tv-input='true']",
         ),
       ).filter(isFocusableDashboardControl);
 
@@ -244,7 +270,7 @@ export function DashboardShell({
       if (event.key === "Enter") {
         if (!currentNode) {
           event.preventDefault();
-          focusRemoteControl(candidates[0] ?? null);
+          focusDashboardControl(candidates[0] ?? null);
           return;
         }
 
@@ -258,13 +284,18 @@ export function DashboardShell({
           event.preventDefault();
           currentNode.click();
         }
+
+        if (isTvFocusableInput(currentNode)) {
+          currentNode.focus();
+          currentNode.click();
+        }
         return;
       }
 
       event.preventDefault();
 
       if (!currentNode) {
-        focusRemoteControl(candidates[0] ?? null);
+        focusDashboardControl(candidates[0] ?? null);
         return;
       }
 
@@ -273,7 +304,7 @@ export function DashboardShell({
           (node) => node.dataset.tvId === "dashboard-settings-link",
         );
         if (settingsLink) {
-          focusRemoteControl(settingsLink);
+          focusDashboardControl(settingsLink);
           return;
         }
       }
@@ -281,7 +312,110 @@ export function DashboardShell({
       if (event.key === "ArrowRight" && currentNode.dataset.tvId === "dashboard-settings-link") {
         const userPill = candidates.find((node) => node.dataset.tvId === "dashboard-user-pill");
         if (userPill) {
-          focusRemoteControl(userPill);
+          focusDashboardControl(userPill);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowDown" && currentNode.dataset.tvId === "dashboard-billing-link") {
+        const topUpButton = candidates.find((node) => node.dataset.tvId === "billing-topup-button");
+        if (topUpButton) {
+          focusDashboardControl(topUpButton);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "billing-topup-button") {
+        const managePaymentButton = candidates.find(
+          (node) => node.dataset.tvId === "billing-manage-payment-button",
+        );
+        if (managePaymentButton) {
+          focusDashboardControl(managePaymentButton);
+          return;
+        }
+      }
+
+      if (
+        event.key === "ArrowLeft" &&
+        currentNode.dataset.tvId === "billing-manage-payment-button"
+      ) {
+        const topUpButton = candidates.find((node) => node.dataset.tvId === "billing-topup-button");
+        if (topUpButton) {
+          focusDashboardControl(topUpButton);
+          return;
+        }
+      }
+
+      if (
+        event.key === "ArrowDown" &&
+        (currentNode.dataset.tvId === "billing-topup-button" ||
+          currentNode.dataset.tvId === "billing-manage-payment-button")
+      ) {
+        const autoRechargeSwitch = candidates.find(
+          (node) => node.dataset.tvId === "billing-auto-recharge-switch",
+        );
+        if (autoRechargeSwitch) {
+          focusDashboardControl(autoRechargeSwitch);
+          return;
+        }
+      }
+
+      if (
+        event.key === "ArrowDown" &&
+        currentNode.dataset.tvId === "billing-auto-recharge-switch"
+      ) {
+        const thresholdInput = candidates.find((node) => node.dataset.tvId === "billing-threshold-input");
+        if (thresholdInput) {
+          focusDashboardControl(thresholdInput);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowUp" && currentNode.dataset.tvId === "billing-threshold-input") {
+        const autoRechargeSwitch = candidates.find(
+          (node) => node.dataset.tvId === "billing-auto-recharge-switch",
+        );
+        if (autoRechargeSwitch) {
+          focusDashboardControl(autoRechargeSwitch);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "billing-threshold-input") {
+        const targetInput = candidates.find((node) => node.dataset.tvId === "billing-target-input");
+        if (targetInput) {
+          focusDashboardControl(targetInput);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowLeft" && currentNode.dataset.tvId === "billing-target-input") {
+        const thresholdInput = candidates.find(
+          (node) => node.dataset.tvId === "billing-threshold-input",
+        );
+        if (thresholdInput) {
+          focusDashboardControl(thresholdInput);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "billing-target-input") {
+        const monthlyCapInput = candidates.find(
+          (node) => node.dataset.tvId === "billing-monthly-cap-input",
+        );
+        if (monthlyCapInput) {
+          focusDashboardControl(monthlyCapInput);
+          return;
+        }
+      }
+
+      if (
+        event.key === "ArrowLeft" &&
+        currentNode.dataset.tvId === "billing-monthly-cap-input"
+      ) {
+        const targetInput = candidates.find((node) => node.dataset.tvId === "billing-target-input");
+        if (targetInput) {
+          focusDashboardControl(targetInput);
           return;
         }
       }
@@ -337,7 +471,7 @@ export function DashboardShell({
       const direction = event.key.replace("Arrow", "").toLowerCase() as Direction;
       const nextNode = findNextDashboardControl(currentNode, candidates, direction);
       if (nextNode) {
-        focusRemoteControl(nextNode);
+        focusDashboardControl(nextNode);
       }
     }
 
@@ -474,7 +608,13 @@ export function DashboardShell({
                   <Link
                     key={item.href}
                     href={item.href}
-                    data-tv-id={item.href === "/dashboard/settings" ? "dashboard-settings-link" : undefined}
+                    data-tv-id={
+                      item.href === "/dashboard/settings"
+                        ? "dashboard-settings-link"
+                        : item.href === "/dashboard/billing"
+                          ? "dashboard-billing-link"
+                          : undefined
+                    }
                     className={cn(
                       "inline-flex min-h-14 items-center gap-3 rounded-full border px-6 py-3 text-xl font-semibold transition md:min-h-16 md:px-7 md:text-[1.8rem]",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
