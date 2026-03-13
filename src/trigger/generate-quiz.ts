@@ -33,7 +33,10 @@ import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, getLanguageModelName, resolveUserApiKey } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
-import { generateWwtbamHostHintsTask } from "@/trigger/generate-wwtbam-host-hints";
+import {
+  generateWwtbamHostHints,
+  type GeneratedWwtbamHostHint,
+} from "@/lib/wwtbam-host-hints";
 import { reviewHubCandidateTask } from "@/trigger/review-hub-candidates";
 
 const taskPayloadSchema = z.object({
@@ -217,6 +220,7 @@ async function persistGeneratedQuiz(params: {
   input: JobInput;
   generated: Awaited<ReturnType<typeof generateQuizFromPrompt>>;
   generationCostBreakdown: GenerationCostBreakdown;
+  wwtbamHostHintsByPosition?: Map<number, GeneratedWwtbamHostHint>;
 }) {
   const normalizedCostBreakdown = normalizeGenerationCostBreakdown(
     params.generationCostBreakdown,
@@ -227,6 +231,9 @@ async function persistGeneratedQuiz(params: {
     questionText: question.questionText,
     options: question.options,
     correctOptionIndex: question.correctOptionIndex,
+    hostHintReasoning: params.wwtbamHostHintsByPosition?.get(index + 1)?.reasoning ?? null,
+    hostHintGuessedOptionIndex:
+      params.wwtbamHostHintsByPosition?.get(index + 1)?.guessedOptionIndex ?? null,
     difficulty: question.difficulty,
     subject: question.subject,
   }));
@@ -270,6 +277,8 @@ async function persistGeneratedQuiz(params: {
       questionText: question.questionText,
       options: question.options,
       correctOptionIndex: question.correctOptionIndex,
+      hostHintReasoning: question.hostHintReasoning,
+      hostHintGuessedOptionIndex: question.hostHintGuessedOptionIndex,
       difficulty: question.difficulty,
       subject: question.subject,
     })),
@@ -702,6 +711,40 @@ export async function runGenerateQuizJob(params: {
       createGenerationCostBreakdown(incurredCostLineItems),
     );
 
+    let wwtbamHostHintsByPosition: Map<number, GeneratedWwtbamHostHint> | undefined;
+    if (effectiveInput.gameMode === "wwtbam") {
+      const hostHintApiKey = process.env.OPENAI_API_KEY?.trim();
+      if (!hostHintApiKey) {
+        logger.warn("Skipping inline WWTBAM host hint generation because OPENAI_API_KEY is missing", {
+          jobId: job.id,
+        });
+      } else {
+        try {
+          const hostHintResult = await generateWwtbamHostHints({
+            apiKey: hostHintApiKey,
+            title: generated.quiz.title,
+            theme: generated.quiz.theme,
+            questions: generated.quiz.questions.map((question, index) => ({
+              position: index + 1,
+              questionText: question.questionText,
+              options: question.options.map((option) => ({
+                text: option.text,
+              })),
+            })),
+          });
+
+          wwtbamHostHintsByPosition = new Map(
+            hostHintResult.hints.map((hint) => [hint.position, hint] as const),
+          );
+        } catch (hostHintError) {
+          logger.error("Failed inline WWTBAM host hint generation", {
+            jobId: job.id,
+            error: toErrorMessage(hostHintError),
+          });
+        }
+      }
+    }
+
     const persistedQuiz = await persistGeneratedQuiz({
       userId: job.userId,
       sourceType,
@@ -711,6 +754,7 @@ export async function runGenerateQuizJob(params: {
       input: effectiveInput,
       generated,
       generationCostBreakdown: mergedCostBreakdown,
+      wwtbamHostHintsByPosition,
     });
     const quizId = persistedQuiz.quizId;
 
@@ -758,6 +802,7 @@ export async function runGenerateQuizJob(params: {
           estimatedTtsCostBreakdown: persistedQuiz.estimatedTtsCostBreakdown,
           sourceType: mapGenerationSourceToQuizSource(sourceType),
           sourceUrl,
+          wwtbamHostHintsByPosition,
         });
 
         const candidate = await createHubCandidate({
@@ -794,20 +839,6 @@ export async function runGenerateQuizJob(params: {
           jobId: job.id,
           quizId,
           error: toErrorMessage(candidateError),
-        });
-      }
-    }
-
-    if (effectiveInput.gameMode === "wwtbam") {
-      try {
-        await generateWwtbamHostHintsTask.trigger({
-          quizId,
-        });
-      } catch (hostHintTriggerError) {
-        logger.error("Failed to enqueue WWTBAM host hint generation", {
-          jobId: job.id,
-          quizId,
-          error: toErrorMessage(hostHintTriggerError),
         });
       }
     }

@@ -11,6 +11,7 @@ import {
   type HubCandidateSnapshotQuestion,
 } from "@/lib/hub-candidate-snapshot";
 import type { GeneratedQuiz } from "@/lib/quiz-generation";
+import type { GeneratedWwtbamHostHint } from "@/lib/wwtbam-host-hints";
 
 type BuildHubCandidateSnapshotParams = {
   generated: GeneratedQuiz;
@@ -25,6 +26,7 @@ type BuildHubCandidateSnapshotParams = {
   estimatedTtsCostBreakdown?: EstimatedTtsCostBreakdown | null;
   sourceType: "ai_generated" | "url" | "pdf" | "manual";
   sourceUrl?: string | null;
+  wwtbamHostHintsByPosition?: Map<number, GeneratedWwtbamHostHint>;
 };
 
 export function buildHubCandidateSnapshot(
@@ -53,8 +55,10 @@ export function buildHubCandidateSnapshot(
         questionText: question.questionText,
         options: question.options,
         correctOptionIndex: question.correctOptionIndex,
-        hostHintReasoning: null,
-        hostHintGuessedOptionIndex: null,
+        hostHintReasoning:
+          params.wwtbamHostHintsByPosition?.get(index + 1)?.reasoning ?? null,
+        hostHintGuessedOptionIndex:
+          params.wwtbamHostHintsByPosition?.get(index + 1)?.guessedOptionIndex ?? null,
         difficulty: question.difficulty,
         subject: question.subject ?? null,
       }),
