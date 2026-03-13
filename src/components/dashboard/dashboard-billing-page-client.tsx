@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CreditCard, Loader2, RefreshCcw, Wallet } from "lucide-react";
-import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +12,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { focusRemoteControl } from "@/lib/remote-focus";
 import { cn } from "@/lib/utils";
 
 type BillingTransaction = {
@@ -95,6 +102,8 @@ type DashboardBillingPageClientProps = {
 };
 
 export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBillingPageClientProps) {
+  type TopUpModalFocusTarget = "amount" | "cancel" | "continue";
+
   const [data, setData] = useState<BillingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +116,9 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
   );
 
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+  const [topUpSelectOpen, setTopUpSelectOpen] = useState(false);
+  const [topUpModalFocusTarget, setTopUpModalFocusTarget] =
+    useState<TopUpModalFocusTarget>("amount");
   const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -165,7 +177,39 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
     setAutoRechargeStatusMessage(null);
   }, [autoRechargeEnabled, thresholdInput, targetInput, monthlyCapInput]);
 
-  async function openTopUpCheckout() {
+  useEffect(() => {
+    if (!topUpModalOpen) {
+      setTopUpSelectOpen(false);
+      return;
+    }
+
+    setTopUpModalFocusTarget("amount");
+  }, [topUpModalOpen]);
+
+  useEffect(() => {
+    if (!topUpModalOpen || topUpSelectOpen) return;
+
+    const targetNode = (() => {
+      switch (topUpModalFocusTarget) {
+        case "amount":
+          return document.querySelector<HTMLElement>("[data-tv-id='billing-topup-amount-select']");
+        case "cancel":
+          return document.querySelector<HTMLElement>("[data-tv-id='billing-topup-cancel']");
+        case "continue":
+          return document.querySelector<HTMLElement>("[data-tv-id='billing-topup-continue']");
+      }
+    })();
+
+    if (!targetNode) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      focusRemoteControl(targetNode);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [topUpModalFocusTarget, topUpModalOpen, topUpSelectOpen]);
+
+  const openTopUpCheckout = useCallback(async () => {
     if (topUpLoading) return;
 
     const amountCents = Number(topUpAmount);
@@ -196,7 +240,75 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
       );
       setTopUpLoading(false);
     }
-  }
+  }, [topUpAmount, topUpLoading]);
+
+  useEffect(() => {
+    if (!topUpModalOpen) return;
+
+    function onTopUpModalKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTextInputActive =
+        activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
+
+      if (isTextInputActive) {
+        return;
+      }
+
+      if (topUpSelectOpen) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (event.key === "Enter") {
+        if (topUpModalFocusTarget === "amount") {
+          const trigger = document.querySelector<HTMLElement>(
+            "[data-tv-id='billing-topup-amount-select']",
+          );
+          trigger?.click();
+          return;
+        }
+
+        if (topUpModalFocusTarget === "cancel") {
+          setTopUpModalOpen(false);
+          return;
+        }
+
+        void openTopUpCheckout();
+        return;
+      }
+
+      setTopUpModalFocusTarget((previous) => {
+        if (previous === "amount") {
+          if (event.key === "ArrowDown") return "cancel";
+          return previous;
+        }
+
+        if (previous === "cancel") {
+          if (event.key === "ArrowUp") return "amount";
+          if (event.key === "ArrowRight") return "continue";
+          return previous;
+        }
+
+        if (previous === "continue") {
+          if (event.key === "ArrowUp") return "amount";
+          if (event.key === "ArrowLeft") return "cancel";
+          return previous;
+        }
+
+        return previous;
+      });
+    }
+
+    window.addEventListener("keydown", onTopUpModalKeyDown, true);
+    return () => window.removeEventListener("keydown", onTopUpModalKeyDown, true);
+  }, [openTopUpCheckout, topUpModalFocusTarget, topUpModalOpen, topUpSelectOpen]);
 
   async function openBillingPortal() {
     if (portalLoading) return;
@@ -513,7 +625,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
       ) : null}
 
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
-        <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
+        <DialogContent
+          data-tv-id="billing-topup-dialog"
+          className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]"
+        >
           <DialogHeader className="text-left">
             <DialogTitle className="text-2xl font-black text-[#e4e4e9]">Add to credit balance</DialogTitle>
             <DialogDescription className="text-[#9394a5]">
@@ -523,13 +638,43 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
 
           <div className="space-y-3">
             <p className="text-sm font-semibold text-[#9394a5]">Amount</p>
-            <PlayerSelect
+            <Select
               value={topUpAmount}
               onValueChange={setTopUpAmount}
-              placeholder="Select amount"
-              options={topUpSelectOptions}
-              widthClassName="w-full"
-            />
+              open={topUpSelectOpen}
+              onOpenChange={(open) => {
+                setTopUpSelectOpen(open);
+                if (!open) {
+                  setTopUpModalFocusTarget("amount");
+                }
+              }}
+            >
+              <SelectTrigger
+                data-tv-id="billing-topup-amount-select"
+                className={cn(
+                  "min-h-14 w-full rounded-full border-[#252940] bg-[#0f1117]/88 px-6 py-2.5 text-lg font-semibold text-[#e4e4e9] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] transition md:min-h-16 md:px-7 md:text-2xl data-[size=default]:h-auto",
+                  "data-[state=open]:border-[#818cf8]/55 data-[state=open]:shadow-[0_0_0_1px_rgba(129,140,248,0.24),0_16px_40px_rgba(15,17,23,0.46)]",
+                  "focus-visible:ring-[#818cf8]/55",
+                )}
+              >
+                <SelectValue placeholder="Select amount" />
+              </SelectTrigger>
+              <SelectContent
+                className="rounded-2xl border-[#6c8aff]/40 bg-[#1a1d2e]/96 text-[#e4e4e9] shadow-2xl backdrop-blur-md"
+                position="popper"
+                align="start"
+              >
+                {topUpSelectOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="rounded-xl py-3 pr-8 pl-4 text-base text-[#e4e4e9] focus:bg-[#6c8aff]/18 focus:text-[#e4e4e9] data-[state=checked]:bg-[#6c8aff]/14 md:text-lg"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-sm text-[#9394a5]">
               Current balance: {centsToUsd(data?.balanceCents ?? 0)}
             </p>
@@ -539,6 +684,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
             <Button
               type="button"
               variant="outline"
+              data-tv-id="billing-topup-cancel"
               className="min-h-11 border-[#252940] bg-[#1a1d2e]/86 text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]"
               disabled={topUpLoading}
               onClick={() => setTopUpModalOpen(false)}
@@ -547,6 +693,7 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
             </Button>
             <Button
               type="button"
+              data-tv-id="billing-topup-continue"
               className="min-h-11 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-[#e4e4e9] hover:bg-[#818cf8]/24"
               disabled={topUpLoading}
               onClick={() => void openTopUpCheckout()}
