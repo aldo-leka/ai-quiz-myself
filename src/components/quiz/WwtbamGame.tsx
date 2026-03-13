@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
-import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import {
   CHECKPOINTS,
@@ -1253,7 +1253,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRandomQuizId({
+      const nextQuizId = await getNextRecommendedQuizId({
         mode: "wwtbam",
         currentQuizId: quiz.id,
       });

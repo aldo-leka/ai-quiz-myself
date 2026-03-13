@@ -22,7 +22,7 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
-import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl, scrollRemoteControlIntoView } from "@/lib/remote-focus";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
@@ -284,7 +284,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRandomQuizId({
+      const nextQuizId = await getNextRecommendedQuizId({
         mode: "couch_coop",
         currentQuizId: quiz.id,
       });

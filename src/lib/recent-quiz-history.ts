@@ -96,26 +96,30 @@ export function getRecentQuizIds(mode: RecentQuizMode): string[] {
   return readHistory()[mode];
 }
 
-export async function getNextRandomQuizId(params: {
+export async function getNextRecommendedQuizId(params: {
   mode: RecentQuizMode;
   currentQuizId: string;
 }): Promise<string | null> {
   const recentIds = getRecentQuizIds(params.mode);
   const primaryExcludeIds = Array.from(new Set([...recentIds, params.currentQuizId]));
+  const primarySearchParams = buildRandomQuizSearchParams(params.mode, primaryExcludeIds);
+  primarySearchParams.set("currentQuizId", params.currentQuizId);
 
   const primaryResponse = await fetch(
-    `/api/quiz/random?${buildRandomQuizSearchParams(params.mode, primaryExcludeIds).toString()}`,
+    `/api/quiz/recommend-next?${primarySearchParams.toString()}`,
     { cache: "no-store" },
   );
 
   if (primaryResponse.ok) {
-    const payload = (await primaryResponse.json()) as { quiz: { id: string } };
-    return payload.quiz.id;
+    const payload = (await primaryResponse.json()) as { quizId: string };
+    return payload.quizId;
   }
 
   const fallbackExcludeIds = params.currentQuizId ? [params.currentQuizId] : [];
+  const fallbackSearchParams = buildRandomQuizSearchParams(params.mode, fallbackExcludeIds);
+  fallbackSearchParams.set("currentQuizId", params.currentQuizId);
   const fallbackResponse = await fetch(
-    `/api/quiz/random?${buildRandomQuizSearchParams(params.mode, fallbackExcludeIds).toString()}`,
+    `/api/quiz/recommend-next?${fallbackSearchParams.toString()}`,
     { cache: "no-store" },
   );
 
@@ -123,6 +127,6 @@ export async function getNextRandomQuizId(params: {
     return null;
   }
 
-  const payload = (await fallbackResponse.json()) as { quiz: { id: string } };
-  return payload.quiz.id;
+  const payload = (await fallbackResponse.json()) as { quizId: string };
+  return payload.quizId;
 }

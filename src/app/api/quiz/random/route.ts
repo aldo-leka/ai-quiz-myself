@@ -1,7 +1,10 @@
 import { and, asc, eq, notInArray, sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { questions, quizGameModeEnum, quizzes } from "@/db/schema";
+import { auth } from "@/lib/auth";
+import { parseRecommendationExcludeIds, recommendQuizId } from "@/lib/quiz-recommendation-service";
 
 const validModes = new Set(quizGameModeEnum.enumValues);
 
@@ -60,32 +63,52 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get("mode");
   const theme = searchParams.get("theme")?.trim();
-  const exclude = searchParams
-    .get("exclude")
-    ?.split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const exclude = parseRecommendationExcludeIds(searchParams.get("exclude") ?? undefined);
 
-  const filters = [eq(quizzes.isHub, true)];
+  let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null;
+  try {
+    session = await auth.api.getSession({
+      headers: new Headers(await headers()),
+    });
+  } catch {
+    session = null;
+  }
+
+  let quiz = null;
 
   if (mode && validModes.has(mode as (typeof quizGameModeEnum.enumValues)[number])) {
-    filters.push(eq(quizzes.gameMode, mode as (typeof quizGameModeEnum.enumValues)[number]));
+    quiz =
+      (await recommendQuizId({
+        mode: mode as (typeof quizGameModeEnum.enumValues)[number],
+        userId: session?.user?.id ?? null,
+        theme: theme ?? null,
+        excludeIds: exclude,
+      })) ?? null;
   }
 
-  if (theme) {
-    filters.push(eq(quizzes.theme, theme));
-  }
+  if (!quiz) {
+    const filters = [eq(quizzes.isHub, true)];
 
-  if (exclude && exclude.length > 0) {
-    filters.push(notInArray(quizzes.id, exclude));
-  }
+    if (mode && validModes.has(mode as (typeof quizGameModeEnum.enumValues)[number])) {
+      filters.push(eq(quizzes.gameMode, mode as (typeof quizGameModeEnum.enumValues)[number]));
+    }
 
-  const [quiz] = await db
-    .select()
-    .from(quizzes)
-    .where(and(...filters))
-    .orderBy(sql`random()`)
-    .limit(1);
+    if (theme) {
+      filters.push(eq(quizzes.theme, theme));
+    }
+
+    if (exclude.length > 0) {
+      filters.push(notInArray(quizzes.id, exclude));
+    }
+
+    const [fallbackQuiz] = await db
+      .select()
+      .from(quizzes)
+      .where(and(...filters))
+      .orderBy(sql`random()`)
+      .limit(1);
+    quiz = fallbackQuiz ?? null;
+  }
 
   if (!quiz) {
     return NextResponse.json({ error: "No matching quiz found" }, { status: 404 });

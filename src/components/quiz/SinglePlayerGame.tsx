@@ -22,7 +22,7 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { authClient } from "@/lib/auth-client";
-import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
@@ -212,7 +212,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRandomQuizId({
+      const nextQuizId = await getNextRecommendedQuizId({
         mode: "single",
         currentQuizId: quiz.id,
       });
