@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { getSiteUrl, SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
@@ -73,17 +74,112 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
+const browserSupportBootstrap = `(function () {
+  var doc = document;
+  var root = doc.documentElement;
+
+  function setState(state) {
+    root.setAttribute("data-browser-support", state);
+  }
+
+  function hasFeature(name) {
+    try {
+      switch (name) {
+        case "Promise":
+          return typeof window.Promise === "function";
+        case "fetch":
+          return typeof window.fetch === "function";
+        case "WebSocket":
+          return typeof window.WebSocket === "function";
+        case "URLSearchParams":
+          return typeof window.URLSearchParams === "function";
+        case "AbortController":
+          return typeof window.AbortController === "function";
+        case "requestAnimationFrame":
+          return typeof window.requestAnimationFrame === "function";
+        case "localStorage":
+          var key = "__quizplus_support_check__";
+          window.localStorage.setItem(key, "1");
+          window.localStorage.removeItem(key);
+          return true;
+        case "cssGrid":
+          return !!(window.CSS && window.CSS.supports && window.CSS.supports("display", "grid"));
+        default:
+          return false;
+      }
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isForcedUnsupported() {
+    try {
+      if (window.location.search.indexOf("unsupported-browser=1") !== -1) {
+        return true;
+      }
+
+      return window.localStorage.getItem("quizplus.forceUnsupportedBrowser") === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  var required = [
+    "Promise",
+    "fetch",
+    "WebSocket",
+    "URLSearchParams",
+    "AbortController",
+    "requestAnimationFrame",
+    "localStorage",
+    "cssGrid",
+  ];
+
+  if (isForcedUnsupported()) {
+    setState("unsupported");
+    return;
+  }
+
+  for (var index = 0; index < required.length; index += 1) {
+    if (!hasFeature(required[index])) {
+      setState("unsupported");
+      return;
+    }
+  }
+
+  setState("supported");
+})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-browser-support="checking">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <TooltipProvider>{children}</TooltipProvider>
+        <Script
+          id="quizplus-browser-support-bootstrap"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: browserSupportBootstrap }}
+        />
+        <div id="unsupported-browser-screen" aria-live="polite">
+          <main className="quizplus-browser-fallback">
+            <div className="quizplus-browser-fallback__card">
+              <p className="quizplus-browser-fallback__eyebrow">Browser not supported</p>
+              <h1 className="quizplus-browser-fallback__title">Try another browser to play QuizPlus.</h1>
+              <p className="quizplus-browser-fallback__note">
+                Some TV browsers and older in-app browsers do not support the game yet. If possible, install a newer
+                browser app on this device and try again.
+              </p>
+            </div>
+          </main>
+        </div>
+        <div id="app-shell">
+          <TooltipProvider>{children}</TooltipProvider>
+        </div>
         <SpeedInsights />
       </body>
     </html>
