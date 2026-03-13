@@ -60,7 +60,8 @@ export default async function AdminPage() {
 
   const [
     totalUsersRow,
-    totalQuizzesRow,
+    uniqueQuizzesRow,
+    totalHubQuizzesRow,
     totalGamesPlayedRow,
     totalRevenueRow,
     totalEstimatedCostsRow,
@@ -69,7 +70,22 @@ export default async function AdminPage() {
     sessionRows,
   ] = await Promise.all([
     db.select({ total: sql<number>`count(*)::int` }).from(user),
-    db.select({ total: sql<number>`count(*)::int` }).from(quizzes),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(quizzes)
+      .where(
+        notInArray(
+          quizzes.id,
+          db
+            .select({ id: hubCandidates.publishedQuizId })
+            .from(hubCandidates)
+          .where(isNotNull(hubCandidates.publishedQuizId)),
+        ),
+      ),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(quizzes)
+      .where(eq(quizzes.isHub, true)),
     db.select({ total: sql<number>`count(*)::int` }).from(quizSessions),
     db
       .select({ total: sql<number>`coalesce(sum(${creditTransactions.amountCents}), 0)::int` })
@@ -201,7 +217,8 @@ export default async function AdminPage() {
   });
 
   const totalUsers = asNumber(totalUsersRow[0]?.total);
-  const totalQuizzes = asNumber(totalQuizzesRow[0]?.total);
+  const uniqueQuizzes = asNumber(uniqueQuizzesRow[0]?.total);
+  const totalHubQuizzes = asNumber(totalHubQuizzesRow[0]?.total);
   const totalGamesPlayed = asNumber(totalGamesPlayedRow[0]?.total);
   const totalRevenueCents = asNumber(totalRevenueRow[0]?.total);
   const totalEstimatedCostsUsdMicros = asNumber(totalEstimatedCostsRow[0]?.total);
@@ -209,7 +226,7 @@ export default async function AdminPage() {
 
   return (
     <main className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Card>
           <CardHeader>
             <CardDescription>Total users</CardDescription>
@@ -218,8 +235,14 @@ export default async function AdminPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Total quizzes</CardDescription>
-            <CardTitle className="text-3xl">{totalQuizzes.toLocaleString()}</CardTitle>
+            <CardDescription>Unique quizzes</CardDescription>
+            <CardTitle className="text-3xl">{uniqueQuizzes.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Hub quizzes</CardDescription>
+            <CardTitle className="text-3xl">{totalHubQuizzes.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
