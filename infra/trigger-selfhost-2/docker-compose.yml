@@ -1,0 +1,339 @@
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: 20m
+    max-file: "5"
+    compress: "true"
+
+services:
+  webapp:
+    image: ghcr.io/triggerdotdev/trigger.dev:${TRIGGER_VERSION}
+    restart: unless-stopped
+    logging: *default-logging
+    user: root
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRIGGER_INGRESS_NETWORK}
+      traefik.http.middlewares.trigger-gzip.compress: "true"
+      traefik.http.middlewares.trigger-redirect.redirectscheme.scheme: https
+      traefik.http.routers.trigger-http.entrypoints: http
+      traefik.http.routers.trigger-http.middlewares: trigger-redirect
+      traefik.http.routers.trigger-http.rule: Host(`${TRIGGER_DOMAIN}`)
+      traefik.http.routers.trigger-http.service: trigger-webapp
+      traefik.http.routers.trigger-https.entrypoints: https
+      traefik.http.routers.trigger-https.middlewares: trigger-gzip
+      traefik.http.routers.trigger-https.rule: Host(`${TRIGGER_DOMAIN}`)
+      traefik.http.routers.trigger-https.service: trigger-webapp
+      traefik.http.routers.trigger-https.tls: "true"
+      traefik.http.routers.trigger-https.tls.certresolver: letsencrypt
+      traefik.http.services.trigger-webapp.loadbalancer.server.port: "3000"
+    command: >
+      sh -c '
+        set -e
+        chown -R node:node /home/node/shared
+        echo "Running prisma migrations"
+        pnpm --filter @trigger.dev/database db:migrate:deploy
+        echo "Prisma migrations done"
+        if [ -n "$$CLICKHOUSE_URL" ]; then
+          echo "Running ClickHouse migrations..."
+          export GOOSE_DRIVER=clickhouse
+          export GOOSE_DBSTRING="$$CLICKHOUSE_URL"
+          export GOOSE_MIGRATION_DIR=/triggerdotdev/internal-packages/clickhouse/schema
+          /usr/local/bin/goose up
+          echo "ClickHouse migrations complete."
+        else
+          echo "CLICKHOUSE_URL not set, skipping ClickHouse migrations."
+        fi
+        cp /triggerdotdev/internal-packages/database/prisma/schema.prisma /triggerdotdev/apps/webapp/prisma/
+        cp /triggerdotdev/node_modules/@prisma/engines/*.node /triggerdotdev/apps/webapp/prisma/
+        cd /triggerdotdev/apps/webapp
+        MAX_OLD_SPACE_SIZE="$${NODE_MAX_OLD_SPACE_SIZE:-4096}"
+        echo "Setting max old space size to $${MAX_OLD_SPACE_SIZE}"
+        NODE_PATH=/triggerdotdev/node_modules/.pnpm/node_modules exec dumb-init \
+          node --max-old-space-size=$${MAX_OLD_SPACE_SIZE} ./build/server.js
+      '
+    ports:
+      - "${WEBAPP_BIND_ADDRESS:-127.0.0.1}:${WEBAPP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      electric:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - shared:/home/node/shared
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${TRIGGER_PUBLIC_URL}
+      LOGIN_ORIGIN: ${TRIGGER_PUBLIC_URL}
+      API_ORIGIN: ${TRIGGER_PUBLIC_URL}
+      ELECTRIC_ORIGIN: http://electric:3000
+      DATABASE_URL: postgresql://${TRIGGER_POSTGRES_USER}:${TRIGGER_POSTGRES_PASSWORD}@postgres:5432/${TRIGGER_POSTGRES_DB}?schema=public&sslmode=disable
+      DIRECT_URL: postgresql://${TRIGGER_POSTGRES_USER}:${TRIGGER_POSTGRES_PASSWORD}@postgres:5432/${TRIGGER_POSTGRES_DB}?schema=public&sslmode=disable
+      SESSION_SECRET: ${TRIGGER_SESSION_SECRET}
+      MAGIC_LINK_SECRET: ${TRIGGER_MAGIC_LINK_SECRET}
+      ENCRYPTION_KEY: ${TRIGGER_ENCRYPTION_KEY}
+      MANAGED_WORKER_SECRET: ${TRIGGER_MANAGED_WORKER_SECRET}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_TLS_DISABLED: "true"
+      APP_LOG_LEVEL: info
+      DEV_OTEL_EXPORTER_OTLP_ENDPOINT: ${TRIGGER_PUBLIC_URL}/otel
+      DEPLOY_REGISTRY_HOST: ${TRIGGER_DOCKER_REGISTRY_URL}
+      DEPLOY_REGISTRY_PROTOCOL: https
+      DEPLOY_REGISTRY_NAMESPACE: ${TRIGGER_DOCKER_REGISTRY_NAMESPACE}
+      OBJECT_STORE_BASE_URL: http://minio:9000
+      OBJECT_STORE_ACCESS_KEY_ID: ${TRIGGER_OBJECT_STORE_ACCESS_KEY_ID}
+      OBJECT_STORE_SECRET_ACCESS_KEY: ${TRIGGER_OBJECT_STORE_SECRET_ACCESS_KEY}
+      CLICKHOUSE_URL: http://${TRIGGER_CLICKHOUSE_USER}:${TRIGGER_CLICKHOUSE_PASSWORD}@clickhouse:8123
+      CLICKHOUSE_LOG_LEVEL: info
+      RUN_REPLICATION_ENABLED: "1"
+      RUN_REPLICATION_CLICKHOUSE_URL: http://${TRIGGER_CLICKHOUSE_USER}:${TRIGGER_CLICKHOUSE_PASSWORD}@clickhouse:8123
+      RUN_REPLICATION_LOG_LEVEL: info
+      TRIGGER_BOOTSTRAP_ENABLED: "1"
+      TRIGGER_BOOTSTRAP_WORKER_GROUP_NAME: bootstrap
+      TRIGGER_BOOTSTRAP_WORKER_TOKEN_PATH: /home/node/shared/worker_token
+      GRACEFUL_SHUTDOWN_TIMEOUT: "1000"
+      NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE}
+      INTERNAL_OTEL_TRACE_LOGGING_ENABLED: "0"
+      TRIGGER_TELEMETRY_DISABLED: "true"
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_SECURE: ${SMTP_SECURE}
+      FROM_EMAIL: ${FROM_EMAIL}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL}
+      WHITELISTED_EMAILS: ${WHITELISTED_EMAILS}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      AUTH_GITHUB_CLIENT_ID: ${TRIGGER_AUTH_GITHUB_CLIENT_ID}
+      AUTH_GITHUB_CLIENT_SECRET: ${TRIGGER_AUTH_GITHUB_CLIENT_SECRET}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - require('http').get('http://127.0.0.1:3000/healthcheck',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - trigger
+      - ingress
+
+  supervisor:
+    image: ghcr.io/triggerdotdev/supervisor:${TRIGGER_VERSION}
+    restart: unless-stopped
+    logging: *default-logging
+    user: root
+    command: >
+      sh -c "chown -R node:node /home/node/shared && exec /usr/bin/dumb-init -- pnpm run --filter supervisor start"
+    depends_on:
+      webapp:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_healthy
+    volumes:
+      - shared:/home/node/shared
+    environment:
+      TRIGGER_WORKER_TOKEN: file:///home/node/shared/worker_token
+      MANAGED_WORKER_SECRET: ${TRIGGER_MANAGED_WORKER_SECRET}
+      TRIGGER_API_URL: http://webapp:3000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://webapp:3000/otel
+      TRIGGER_WORKLOAD_API_DOMAIN: ${TRIGGER_WORKLOAD_API_DOMAIN}
+      TRIGGER_WORKLOAD_API_PROTOCOL: ${TRIGGER_WORKLOAD_API_PROTOCOL}
+      TRIGGER_WORKLOAD_API_PORT_EXTERNAL: ${TRIGGER_WORKLOAD_API_PORT_EXTERNAL}
+      ENFORCE_MACHINE_PRESETS: "1"
+      TRIGGER_DEQUEUE_INTERVAL_MS: "1000"
+      DOCKER_HOST: tcp://docker-proxy:2375
+      DOCKER_RUNNER_NETWORKS: ${TRIGGER_INTERNAL_NETWORK}
+      DOCKER_REGISTRY_URL: ${TRIGGER_DOCKER_REGISTRY_URL}
+      DOCKER_REGISTRY_USERNAME: ${TRIGGER_DOCKER_REGISTRY_USERNAME}
+      DOCKER_REGISTRY_PASSWORD: ${TRIGGER_DOCKER_REGISTRY_PASSWORD}
+      DOCKER_AUTOREMOVE_EXITED_CONTAINERS: ${DOCKER_AUTOREMOVE_EXITED_CONTAINERS}
+      DEBUG: ${DEBUG}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - require('http').get('http://127.0.0.1:8020/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - trigger
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LOG_LEVEL: info
+      POST: "1"
+      CONTAINERS: "1"
+      IMAGES: "1"
+      INFO: "1"
+      NETWORKS: "1"
+      AUTH: "1"
+      DISTRIBUTION: "1"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nc -z 127.0.0.1 2375 || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - trigger
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - -c
+      - wal_level=logical
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${TRIGGER_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TRIGGER_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TRIGGER_POSTGRES_DB}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trigger
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - redis:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trigger
+
+  electric:
+    image: electricsql/electric:1.2.9
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${TRIGGER_POSTGRES_USER}:${TRIGGER_POSTGRES_PASSWORD}@postgres:5432/${TRIGGER_POSTGRES_DB}?schema=public&sslmode=disable
+      ELECTRIC_INSECURE: "true"
+      ELECTRIC_USAGE_REPORTING: "false"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://127.0.0.1:3000/v1/health
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trigger
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_USER: ${TRIGGER_CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${TRIGGER_CLICKHOUSE_PASSWORD}
+    healthcheck:
+      test:
+        - CMD
+        - clickhouse-client
+        - --host
+        - localhost
+        - --port
+        - "9000"
+        - --user
+        - ${TRIGGER_CLICKHOUSE_USER}
+        - --password
+        - ${TRIGGER_CLICKHOUSE_PASSWORD}
+        - --query
+        - SELECT 1
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - trigger
+
+  minio:
+    image: bitnamilegacy/minio:latest
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - minio:/bitnami/minio/data
+    environment:
+      MINIO_ROOT_USER: ${TRIGGER_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${TRIGGER_MINIO_ROOT_PASSWORD}
+      MINIO_DEFAULT_BUCKETS: packets
+      MINIO_BROWSER: "on"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://127.0.0.1:9000/minio/health/live
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - trigger
+
+volumes:
+  shared:
+    name: ${TRIGGER_VOLUME_SHARED}
+  postgres:
+    name: ${TRIGGER_VOLUME_POSTGRES}
+  redis:
+    name: ${TRIGGER_VOLUME_REDIS}
+  clickhouse:
+    name: ${TRIGGER_VOLUME_CLICKHOUSE}
+  minio:
+    name: ${TRIGGER_VOLUME_MINIO}
+
+networks:
+  trigger:
+    name: ${TRIGGER_INTERNAL_NETWORK}
+  ingress:
+    external: true
+    name: ${TRIGGER_INGRESS_NETWORK}
