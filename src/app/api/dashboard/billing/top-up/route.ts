@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { creditTransactions } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { TOP_UP_MAX_CENTS, TOP_UP_MIN_CENTS } from "@/lib/billing";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   createTopUpCheckoutSession,
   ensureStripeCustomer,
@@ -24,6 +25,12 @@ const requestSchema = z.object({
     .optional(),
 });
 
+const TOP_UP_RATE_LIMIT = {
+  limit: 6,
+  windowMs: 60_000,
+  errorMessage: "Too many top-up requests. Please wait a moment and try again.",
+} as const;
+
 export async function POST(request: Request) {
   let pendingTransactionId: string | null = null;
 
@@ -31,6 +38,16 @@ export async function POST(request: Request) {
     const session = await getUserSessionOrNull();
     if (!session?.user?.id || !session.user.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const rateLimitResponse = await enforceRateLimit({
+      scope: "billing_top_up",
+      identifier: `user:${session.user.id}`,
+      ...TOP_UP_RATE_LIMIT,
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     const parsed = requestSchema.safeParse(await request.json());

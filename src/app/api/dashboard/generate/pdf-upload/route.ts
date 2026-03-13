@@ -6,6 +6,7 @@ import {
   isR2Configured,
   MAX_R2_PDF_FILE_SIZE_BYTES,
 } from "@/lib/r2";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
 export const runtime = "nodejs";
@@ -16,10 +17,26 @@ const requestSchema = z.object({
   contentType: z.string().trim().min(1).max(120).optional(),
 });
 
+const PDF_UPLOAD_RATE_LIMIT = {
+  limit: 12,
+  windowMs: 60_000,
+  errorMessage: "Too many PDF upload requests. Please wait a moment and try again.",
+} as const;
+
 export async function POST(request: Request) {
   const session = await getUserSessionOrNull();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "pdf_upload_url",
+    identifier: `user:${session.user.id}`,
+    ...PDF_UPLOAD_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   if (!isR2Configured()) {

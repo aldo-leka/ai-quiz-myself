@@ -1,8 +1,4 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
 import { and, desc, eq } from "drizzle-orm";
-import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
@@ -45,35 +41,6 @@ async function listKeysForUser(userId: string) {
   }));
 }
 
-async function validateApiKey(provider: (typeof apiKeyProviderEnum.enumValues)[number], apiKey: string) {
-  if (provider === "openai") {
-    const openai = createOpenAI({ apiKey });
-    await generateText({
-      model: openai(process.env.OPENAI_MODEL ?? "gpt-5-mini"),
-      prompt: "Reply with: ok",
-      maxOutputTokens: 4,
-    });
-    return;
-  }
-
-  if (provider === "anthropic") {
-    const anthropic = createAnthropic({ apiKey });
-    await generateText({
-      model: anthropic(process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6"),
-      prompt: "Reply with: ok",
-      maxOutputTokens: 4,
-    });
-    return;
-  }
-
-  const google = createGoogleGenerativeAI({ apiKey });
-  await generateText({
-    model: google(process.env.GOOGLE_MODEL ?? "gemini-3-flash-preview"),
-    prompt: "Reply with: ok",
-    maxOutputTokens: 4,
-  });
-}
-
 export async function GET() {
   const session = await getUserSessionOrNull();
   if (!session?.user?.id) {
@@ -96,12 +63,6 @@ export async function POST(request: Request) {
   }
 
   const payload = parsed.data;
-
-  try {
-    await validateApiKey(payload.provider, payload.apiKey);
-  } catch {
-    return NextResponse.json({ error: "API key validation failed for selected provider." }, { status: 400 });
-  }
 
   const encrypted = encryptApiKey(payload.apiKey);
 

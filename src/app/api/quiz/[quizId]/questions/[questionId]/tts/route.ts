@@ -16,6 +16,7 @@ import {
   type QuizTtsSegment,
   type SupportedQuizGameMode,
 } from "@/lib/quiz-tts";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 import { downloadR2ObjectBuffer, isR2Configured, uploadR2ObjectBuffer } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -41,6 +42,12 @@ const searchSchema = z.object({
     .transform((value) => (value === undefined ? true : value === "true" || value === "1")),
   option: z.union([z.string().trim().min(1).max(500), z.array(z.string().trim().min(1).max(500))]).optional(),
 });
+
+const QUIZ_TTS_RATE_LIMIT = {
+  limit: 40,
+  windowMs: 60_000,
+  errorMessage: "Too many narration requests. Please wait a moment and try again.",
+} as const;
 
 function toAudioResponse(buffer: Buffer, contentType: string) {
   return new NextResponse(new Uint8Array(buffer), {
@@ -145,6 +152,16 @@ export async function GET(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
   }
 
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "quiz_tts_get",
+    identifier: `ip:${getClientIp(request)}`,
+    ...QUIZ_TTS_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const url = new URL(request.url);
   const parsed = searchSchema.safeParse({
     segment: url.searchParams.get("segment"),
@@ -195,6 +212,16 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
+  }
+
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "quiz_tts_post",
+    identifier: `ip:${getClientIp(request)}`,
+    ...QUIZ_TTS_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

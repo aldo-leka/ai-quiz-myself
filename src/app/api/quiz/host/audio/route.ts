@@ -9,6 +9,7 @@ import {
   getQuizTtsVoice,
   synthesizeQuizSpeech,
 } from "@/lib/quiz-tts";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 import { downloadR2ObjectBuffer, isR2Configured, uploadR2ObjectBuffer } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -16,6 +17,12 @@ export const runtime = "nodejs";
 const requestSchema = z.object({
   text: z.string().trim().min(1).max(4000),
 });
+
+const HOST_AUDIO_RATE_LIMIT = {
+  limit: 30,
+  windowMs: 60_000,
+  errorMessage: "Too many host narration requests. Please wait a moment and try again.",
+} as const;
 
 function toAudioResponse(buffer: Buffer, contentType: string) {
   return new NextResponse(new Uint8Array(buffer), {
@@ -86,6 +93,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
   }
 
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "host_audio_get",
+    identifier: `ip:${getClientIp(request)}`,
+    ...HOST_AUDIO_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const url = new URL(request.url);
   const parsed = requestSchema.safeParse({
     text: url.searchParams.get("text"),
@@ -104,6 +121,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return NextResponse.json({ error: "Text-to-speech is not configured." }, { status: 412 });
+  }
+
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "host_audio_post",
+    identifier: `ip:${getClientIp(request)}`,
+    ...HOST_AUDIO_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

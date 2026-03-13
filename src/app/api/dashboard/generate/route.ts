@@ -1,4 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
+import { tasks } from "@trigger.dev/sdk/v3";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
@@ -11,13 +12,11 @@ import {
   resolveGenerationCostCentsFromSettings,
   type GenerationBillingMode,
 } from "@/lib/billing";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isR2Configured } from "@/lib/r2";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import { resolveUserApiKey, type ProviderName } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
-import { generatePdfBatchTask } from "@/trigger/generate-pdf-batch";
-import { generateQuizTask } from "@/trigger/generate-quiz";
-import { generateUrlBatchTask } from "@/trigger/generate-url-batch";
 
 export const runtime = "nodejs";
 
@@ -25,6 +24,12 @@ const MAX_BATCH_COUNTS = {
   theme: 100,
   url: 5,
   pdf: 3,
+} as const;
+
+const GENERATE_RATE_LIMIT = {
+  limit: 6,
+  windowMs: 60_000,
+  errorMessage: "Too many generation requests. Please wait a moment and try again.",
 } as const;
 
 const requestSchema = z.object({
@@ -327,6 +332,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "dashboard_generate",
+    identifier: `user:${session.user.id}`,
+    ...GENERATE_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const parsedRequest = await parseGenerateRequest(request);
   if (parsedRequest.error) {
     return NextResponse.json(
@@ -506,120 +521,180 @@ export async function POST(request: Request) {
     );
   }
 
-  const itemsToSchedule = generationItems.slice(0, maxScheduledCount);
+  let finalScheduledCount = maxScheduledCount;
+  let reservedBalanceCents = 0;
+  let balanceChangedDuringScheduling = false;
+
+  if (billingMode === "platform_credits" && billingAmountCents > 0) {
+    while (finalScheduledCount > 0) {
+      const totalReservationCents = finalScheduledCount * billingAmountCents;
+      const deducted = await tryDeductWalletBalanceCents({
+        userId: session.user.id,
+        amountCents: totalReservationCents,
+      });
+
+      if (deducted) {
+        reservedBalanceCents = totalReservationCents;
+        break;
+      }
+
+      finalScheduledCount -= 1;
+      balanceChangedDuringScheduling = true;
+    }
+  }
+
+  const itemsToSchedule = generationItems.slice(0, finalScheduledCount);
   const shouldUseUrlBatchPlanner = payload.sourceType === "url" && itemsToSchedule.length > 1;
   const shouldUsePdfBatchPlanner = payload.sourceType === "pdf" && itemsToSchedule.length > 1;
   const scheduledJobIds: string[] = [];
   const triggerRunIds: string[] = [];
+  const triggerBatchIds: string[] = [];
   const warnings: string[] = [];
-  let remainingAffordableCount = maxScheduledCount;
-  let balanceChangedDuringScheduling = false;
+  if (
+    billingMode === "platform_credits" &&
+    billingAmountCents > 0 &&
+    reservedBalanceCents <= 0
+  ) {
+    return NextResponse.json(
+      {
+        error: "Insufficient balance for this generation.",
+        balanceCents: walletBalanceCents,
+        requiredCents: generationCostCents,
+        requestedCount,
+        schedulableCount: 0,
+      },
+      { status: 402 },
+    );
+  }
 
-  for (const item of itemsToSchedule) {
-    const [job] = await db
+  if (finalScheduledCount < requestedCount && balanceChangedDuringScheduling) {
+    warnings.push("Balance changed before all requested quizzes could be scheduled.");
+  }
+
+  try {
+    const insertedJobs = await db
       .insert(quizGenerationJobs)
-      .values({
-        userId: session.user.id,
-        status: "pending",
-        sourceType: payload.sourceType,
-        inputData: {
-          theme: item.theme,
-          displayTheme: item.displayTheme,
-          url: item.url,
-          gameMode: payload.gameMode,
-          difficulty: effectiveDifficulty,
-          language: normalizedLanguage,
-          isHub: false,
-          reviewForHub: payload.sourceType === "theme" || payload.sourceType === "url",
-          isPublic: true,
-          apiKeyId: resolvedApiKeyId,
-          billingMode,
-          billingAmountCents,
-          fileName: payload.fileName,
-          fileSizeBytes: payload.fileSizeBytes,
-          pdfObjectKey: payload.pdfObjectKey,
-          batchIndex: item.batchIndex,
-          batchSize: item.batchSize,
-        },
-        provider,
-        errorMessage: null,
-      })
+      .values(
+        itemsToSchedule.map((item) => ({
+          userId: session.user.id,
+          status: "pending" as const,
+          sourceType: payload.sourceType,
+          inputData: {
+            theme: item.theme,
+            displayTheme: item.displayTheme,
+            url: item.url,
+            gameMode: payload.gameMode,
+            difficulty: effectiveDifficulty,
+            language: normalizedLanguage,
+            isHub: false,
+            reviewForHub: payload.sourceType === "theme" || payload.sourceType === "url",
+            isPublic: true,
+            apiKeyId: resolvedApiKeyId,
+            billingMode,
+            billingAmountCents,
+            fileName: payload.fileName,
+            fileSizeBytes: payload.fileSizeBytes,
+            pdfObjectKey: payload.pdfObjectKey,
+            batchIndex: item.batchIndex,
+            batchSize: item.batchSize,
+          },
+          provider,
+          errorMessage: null,
+        })),
+      )
       .returning({
         id: quizGenerationJobs.id,
       });
 
-    let reservedCharge = false;
-
-    if (billingMode === "platform_credits" && billingAmountCents > 0) {
-      const deducted = await tryDeductWalletBalanceCents({
-        userId: session.user.id,
-        amountCents: billingAmountCents,
-      });
-
-      if (!deducted) {
-        await db.delete(quizGenerationJobs).where(eq(quizGenerationJobs.id, job.id));
-        balanceChangedDuringScheduling = true;
-        warnings.push("Balance changed before all requested quizzes could be scheduled.");
-        break;
-      }
-
-      try {
-        await db.insert(creditTransactions).values({
-          userId: session.user.id,
-          amountCents: -billingAmountCents,
-          currency: "usd",
-          type: "generation",
-          status: "pending",
-          description: "Quiz generation charge (reserved)",
-          generationJobId: job.id,
-          metadata: {
-            sourceType: payload.sourceType,
-            billingMode,
-            reason: "reserved_on_start",
-            batchIndex: item.batchIndex,
-            batchSize: item.batchSize,
-          },
-        });
-        reservedCharge = true;
-        remainingAffordableCount -= 1;
-      } catch {
-        await incrementWalletBalanceCents(session.user.id, billingAmountCents);
-        await db.delete(quizGenerationJobs).where(eq(quizGenerationJobs.id, job.id));
-        warnings.push("Failed to reserve balance for generation.");
-        break;
-      }
+    scheduledJobIds.push(...insertedJobs.map((job) => job.id));
+  } catch (error) {
+    if (reservedBalanceCents > 0) {
+      await incrementWalletBalanceCents(session.user.id, reservedBalanceCents);
     }
 
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to create generation jobs.",
+      },
+      { status: 500 },
+    );
+  }
+
+  if (billingMode === "platform_credits" && billingAmountCents > 0 && scheduledJobIds.length > 0) {
     try {
-      scheduledJobIds.push(job.id);
-
-      if (!shouldUseUrlBatchPlanner && !shouldUsePdfBatchPlanner) {
-        const run = await generateQuizTask.trigger({ jobId: job.id });
-        triggerRunIds.push(run.id);
-      }
+      await db.insert(creditTransactions).values(
+        scheduledJobIds.map((jobId, index) => {
+          const item = itemsToSchedule[index];
+          return {
+            userId: session.user.id,
+            amountCents: -billingAmountCents,
+            currency: "usd",
+            type: "generation" as const,
+            status: "pending" as const,
+            description: "Quiz generation charge (reserved)",
+            generationJobId: jobId,
+            metadata: {
+              sourceType: payload.sourceType,
+              billingMode,
+              reason: "reserved_on_start",
+              batchIndex: item?.batchIndex,
+              batchSize: item?.batchSize,
+            },
+          };
+        }),
+      );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to start generation task";
-      scheduledJobIds.pop();
-      await failJobStart({
-        userId: session.user.id,
-        jobId: job.id,
-        sourceType: payload.sourceType,
-        billingMode,
-        amountCents: reservedCharge ? billingAmountCents : 0,
-        batchIndex: item.batchIndex,
-        batchSize: item.batchSize,
-        errorMessage: message,
-      });
-      if (reservedCharge) remainingAffordableCount += 1;
+      if (reservedBalanceCents > 0) {
+        await incrementWalletBalanceCents(session.user.id, reservedBalanceCents);
+      }
 
-      warnings.push(message);
+      await db.delete(quizGenerationJobs).where(inArray(quizGenerationJobs.id, scheduledJobIds));
+
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to reserve balance for generation.",
+        },
+        { status: 500 },
+      );
     }
   }
 
-  if (shouldUseUrlBatchPlanner && scheduledJobIds.length > 0) {
+  if (payload.sourceType === "theme" && scheduledJobIds.length > 0) {
     try {
-      const run = await generateUrlBatchTask.trigger({
+      const batchHandle = await tasks.batchTrigger("generate-quiz", scheduledJobIds.map((jobId) => ({
+        payload: { jobId },
+      })));
+      triggerBatchIds.push(batchHandle.batchId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start generation batch.";
+
+      for (const [index, jobId] of scheduledJobIds.entries()) {
+        const item = itemsToSchedule[index];
+        if (!item) continue;
+
+        await failJobStart({
+          userId: session.user.id,
+          jobId,
+          sourceType: "theme",
+          billingMode,
+          amountCents: billingAmountCents,
+          batchIndex: item.batchIndex,
+          batchSize: item.batchSize,
+          errorMessage: message,
+        });
+      }
+
+      warnings.push(message);
+      scheduledJobIds.length = 0;
+    }
+  } else if (shouldUseUrlBatchPlanner && scheduledJobIds.length > 0) {
+    try {
+      const run = await tasks.trigger("generate-url-batch", {
         jobIds: scheduledJobIds,
       });
       triggerRunIds.push(run.id);
@@ -643,18 +718,12 @@ export async function POST(request: Request) {
         });
       }
 
-      if (billingMode === "platform_credits" && billingAmountCents > 0) {
-        remainingAffordableCount += scheduledJobIds.length;
-      }
-
       warnings.push(message);
       scheduledJobIds.length = 0;
     }
-  }
-
-  if (shouldUsePdfBatchPlanner && scheduledJobIds.length > 0) {
+  } else if (shouldUsePdfBatchPlanner && scheduledJobIds.length > 0) {
     try {
-      const run = await generatePdfBatchTask.trigger({
+      const run = await tasks.trigger("generate-pdf-batch", {
         jobIds: scheduledJobIds,
       });
       triggerRunIds.push(run.id);
@@ -678,8 +747,33 @@ export async function POST(request: Request) {
         });
       }
 
-      if (billingMode === "platform_credits" && billingAmountCents > 0) {
-        remainingAffordableCount += scheduledJobIds.length;
+      warnings.push(message);
+      scheduledJobIds.length = 0;
+    }
+  } else if (scheduledJobIds.length > 0) {
+    try {
+      const batchHandle = await tasks.batchTrigger("generate-quiz", scheduledJobIds.map((jobId) => ({
+        payload: { jobId },
+      })));
+      triggerBatchIds.push(batchHandle.batchId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to start generation batch.";
+
+      for (const [index, jobId] of scheduledJobIds.entries()) {
+        const item = itemsToSchedule[index];
+        if (!item) continue;
+
+        await failJobStart({
+          userId: session.user.id,
+          jobId,
+          sourceType: payload.sourceType,
+          billingMode,
+          amountCents: billingAmountCents,
+          batchIndex: item.batchIndex,
+          batchSize: item.batchSize,
+          errorMessage: message,
+        });
       }
 
       warnings.push(message);
@@ -694,7 +788,7 @@ export async function POST(request: Request) {
     if (
       billingMode === "platform_credits" &&
       billingAmountCents > 0 &&
-      (remainingAffordableCount <= 0 || balanceChangedDuringScheduling)
+      (finalScheduledCount <= 0 || balanceChangedDuringScheduling)
     ) {
       return NextResponse.json(
         {
@@ -721,6 +815,8 @@ export async function POST(request: Request) {
       jobIds: scheduledJobIds,
       triggerRunId: triggerRunIds[0] ?? null,
       triggerRunIds,
+      triggerBatchId: triggerBatchIds[0] ?? null,
+      triggerBatchIds,
       requestedCount,
       scheduledCount,
       skippedCount,

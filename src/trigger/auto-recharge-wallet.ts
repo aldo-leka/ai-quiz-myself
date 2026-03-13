@@ -7,9 +7,46 @@ import { createOffSessionAutoRechargePaymentIntent, getStripeDefaultCurrency } f
 
 const ENABLED_USERS_BATCH = 200;
 const DUPLICATE_PENDING_LOOKBACK_HOURS = 6;
+const FAILED_RETRY_COOLDOWN_HOURS = 6;
 
 function startOfUtcMonth(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0));
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message.slice(0, 500);
+  }
+
+  return "Unknown error";
+}
+
+function classifyHardAutoRechargeFailure(error: unknown): {
+  disableAutoRecharge: boolean;
+  clearCustomerId: boolean;
+  clearPaymentMethodId: boolean;
+} | null {
+  const message = getErrorMessage(error).toLowerCase();
+  const errorCode =
+    typeof error === "object" && error && "code" in error ? String(error.code) : null;
+
+  const missingCustomer =
+    message.includes("no such customer") ||
+    message.includes("customer") && message.includes("resource_missing");
+  const missingPaymentMethod =
+    message.includes("no such paymentmethod") ||
+    message.includes("no such payment method") ||
+    (message.includes("paymentmethod") && message.includes("resource_missing"));
+
+  if (errorCode !== "resource_missing" && !missingCustomer && !missingPaymentMethod) {
+    return null;
+  }
+
+  return {
+    disableAutoRecharge: true,
+    clearCustomerId: missingCustomer,
+    clearPaymentMethodId: missingCustomer || missingPaymentMethod || errorCode === "resource_missing",
+  };
 }
 
 export const autoRechargeWalletTask = schedules.task({
@@ -21,6 +58,9 @@ export const autoRechargeWalletTask = schedules.task({
     const monthStart = startOfUtcMonth(now);
     const pendingWindowStart = new Date(
       now.getTime() - DUPLICATE_PENDING_LOOKBACK_HOURS * 60 * 60 * 1000,
+    );
+    const recentFailureWindowStart = new Date(
+      now.getTime() - FAILED_RETRY_COOLDOWN_HOURS * 60 * 60 * 1000,
     );
 
     const configuredUsers = await db
@@ -100,6 +140,25 @@ export const autoRechargeWalletTask = schedules.task({
         .limit(1);
 
       if (existingPending) {
+        skipped += 1;
+        continue;
+      }
+
+      const [recentFailure] = await db
+        .select({ id: creditTransactions.id })
+        .from(creditTransactions)
+        .where(
+          and(
+            eq(creditTransactions.userId, account.userId),
+            eq(creditTransactions.type, "auto_reload"),
+            eq(creditTransactions.status, "failed"),
+            gte(creditTransactions.createdAt, recentFailureWindowStart),
+          ),
+        )
+        .orderBy(desc(creditTransactions.createdAt))
+        .limit(1);
+
+      if (recentFailure) {
         skipped += 1;
         continue;
       }
@@ -188,21 +247,56 @@ export const autoRechargeWalletTask = schedules.task({
         created += 1;
       } catch (error) {
         failed += 1;
+        const errorMessage = getErrorMessage(error);
+        const hardFailure = classifyHardAutoRechargeFailure(error);
+
         await db
           .update(creditTransactions)
           .set({
             status: "failed",
-            description: "Auto wallet reload failed",
+            description: hardFailure
+              ? "Auto wallet reload failed and was disabled"
+              : "Auto wallet reload failed",
             metadata: {
               source: "auto_reload",
               trigger: "scheduled",
               thresholdCents,
               targetCents,
               balanceAtChargeCents: balanceCents,
-              error: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
+              error: errorMessage,
+              autoDisabled: Boolean(hardFailure),
+              stalePaymentReference: Boolean(hardFailure),
             },
           })
           .where(eq(creditTransactions.id, pendingTransaction.id));
+
+        if (hardFailure) {
+          await db
+            .update(autoRechargeSettings)
+            .set({
+              enabled: false,
+            })
+            .where(eq(autoRechargeSettings.userId, account.userId));
+
+          const userPatch: Partial<typeof user.$inferInsert> = {};
+          if (hardFailure.clearCustomerId) {
+            userPatch.stripeCustomerId = null;
+          }
+          if (hardFailure.clearPaymentMethodId) {
+            userPatch.stripePaymentMethodId = null;
+          }
+
+          if (Object.keys(userPatch).length > 0) {
+            await db.update(user).set(userPatch).where(eq(user.id, account.userId));
+          }
+
+          logger.warn("Disabled auto recharge after unrecoverable Stripe error", {
+            userId: account.userId,
+            error: errorMessage,
+            clearCustomerId: hardFailure.clearCustomerId,
+            clearPaymentMethodId: hardFailure.clearPaymentMethodId,
+          });
+        }
       }
     }
 

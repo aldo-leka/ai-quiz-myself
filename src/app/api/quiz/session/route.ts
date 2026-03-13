@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { quizSessionAnswers, quizSessions, quizzes } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const payloadSchema = z.object({
   quizId: z.string().uuid(),
@@ -31,6 +32,12 @@ const payloadSchema = z.object({
     }),
   ),
 });
+
+const QUIZ_SESSION_RATE_LIMIT = {
+  limit: 20,
+  windowMs: 60_000,
+  errorMessage: "Too many quiz submissions. Please wait a moment and try again.",
+} as const;
 
 function computeNormalizedScore(
   totalQuestions: number,
@@ -71,6 +78,15 @@ export async function POST(request: Request) {
   const payload = payloadResult.data;
   const userId = session?.user?.id ?? null;
   const userName = session?.user?.name ?? "Guest";
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "quiz_session_submit",
+    identifier: userId ? `user:${userId}` : `ip:${getClientIp(request)}`,
+    ...QUIZ_SESSION_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
 
   const [quiz] = await db
     .select({

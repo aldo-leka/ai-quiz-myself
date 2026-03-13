@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { quizVotes, quizzes } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const payloadSchema = z.object({
   vote: z.enum(["like", "dislike"]),
@@ -12,6 +13,11 @@ const payloadSchema = z.object({
 
 const ANON_COOKIE_NAME = "quizplus_anon_id";
 const ANON_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 2;
+const QUIZ_RATE_LIMIT = {
+  limit: 30,
+  windowMs: 60_000,
+  errorMessage: "Too many rating requests. Please wait a moment and try again.",
+} as const;
 
 type RouteContext = {
   params: Promise<{ quizId: string }>;
@@ -59,6 +65,15 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const cookieStore = await cookies();
   const userId = session?.user?.id ?? null;
+  const rateLimitResponse = await enforceRateLimit({
+    scope: "quiz_vote",
+    identifier: userId ? `user:${userId}` : `ip:${getClientIp(request)}`,
+    ...QUIZ_RATE_LIMIT,
+  });
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
 
   let anonId: string | null = null;
   let shouldSetAnonCookie = false;

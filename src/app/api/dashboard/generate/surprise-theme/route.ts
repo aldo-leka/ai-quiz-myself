@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { surpriseThemeHistory } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { generateEmbedding } from "@/lib/quiz-embeddings";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 import {
   getLanguageModel,
@@ -21,6 +22,11 @@ const MAX_BATCH_COUNT = 100;
 const MAX_GENERATION_ROUNDS = 5;
 const HISTORY_LIMIT = 200;
 const THEME_SIMILARITY_THRESHOLD = 0.9;
+const SURPRISE_THEME_RATE_LIMIT = {
+  limit: 6,
+  windowMs: 60_000,
+  errorMessage: "Too many surprise theme requests. Please wait a moment and try again.",
+} as const;
 
 const requestSchema = z.object({
   gameMode: z.enum(["single", "wwtbam", "couch_coop"]),
@@ -89,6 +95,16 @@ export async function POST(request: Request) {
     const session = await getUserSessionOrNull();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const rateLimitResponse = await enforceRateLimit({
+      scope: "surprise_theme",
+      identifier: `user:${session.user.id}`,
+      ...SURPRISE_THEME_RATE_LIMIT,
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     const parsed = requestSchema.safeParse(await request.json());
