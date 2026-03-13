@@ -1,9 +1,14 @@
 import { and, eq, sql } from "drizzle-orm";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { quizVotes, quizzes } from "@/db/schema";
+import {
+  ANON_COOKIE_MAX_AGE_SECONDS,
+  ANON_COOKIE_NAME,
+  getOrCreateAnonId,
+} from "@/lib/anon-user";
 import { auth } from "@/lib/auth";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -11,8 +16,6 @@ const payloadSchema = z.object({
   vote: z.enum(["like", "dislike"]),
 });
 
-const ANON_COOKIE_NAME = "quizplus_anon_id";
-const ANON_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 2;
 const QUIZ_RATE_LIMIT = {
   limit: 30,
   windowMs: 60_000,
@@ -63,7 +66,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     session = null;
   }
 
-  const cookieStore = await cookies();
   const userId = session?.user?.id ?? null;
   const rateLimitResponse = await enforceRateLimit({
     scope: "quiz_vote",
@@ -79,15 +81,9 @@ export async function POST(request: Request, { params }: RouteContext) {
   let shouldSetAnonCookie = false;
 
   if (!userId) {
-    const existingAnonId = cookieStore.get(ANON_COOKIE_NAME)?.value;
-    const parsedAnonId = z.string().uuid().safeParse(existingAnonId);
-
-    if (parsedAnonId.success) {
-      anonId = parsedAnonId.data;
-    } else {
-      anonId = crypto.randomUUID();
-      shouldSetAnonCookie = true;
-    }
+    const anonIdentity = await getOrCreateAnonId();
+    anonId = anonIdentity.anonId;
+    shouldSetAnonCookie = anonIdentity.shouldSetCookie;
   }
 
   const whereActor = userId

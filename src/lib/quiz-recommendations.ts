@@ -20,7 +20,6 @@ export type RecommendationContext = {
 };
 
 export type UserRecommendationProfile = {
-  recentQuizIds: string[];
   averageModeScore: number | null;
   themeAffinity: Map<string, number>;
   creatorAffinity: Map<string, number>;
@@ -212,7 +211,6 @@ export function buildUserRecommendationProfile(params: {
       : null;
 
   return {
-    recentQuizIds: params.recentSessions.map((session) => session.quizId),
     averageModeScore,
     themeAffinity,
     creatorAffinity,

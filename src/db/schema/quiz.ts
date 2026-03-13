@@ -193,6 +193,7 @@ export const quizSessions = pgTable(
       .notNull()
       .references(() => quizzes.id),
     userId: text("user_id").references(() => user.id),
+    anonId: text("anon_id"),
     gameMode: quizGameModeEnum("game_mode").notNull(),
     players: jsonb("players")
       .$type<Array<{ name: string; isOwner: boolean }>>()
@@ -206,7 +207,12 @@ export const quizSessions = pgTable(
   (table) => [
     index("quiz_sessions_quiz_id_idx").on(table.quizId),
     index("quiz_sessions_user_id_idx").on(table.userId),
+    index("quiz_sessions_anon_id_idx").on(table.anonId),
     index("quiz_sessions_started_at_idx").on(table.startedAt),
+    check(
+      "quiz_sessions_actor_check",
+      sql`(("user_id" is not null and "anon_id" is null) or ("user_id" is null and "anon_id" is not null))`,
+    ),
   ],
 );
 

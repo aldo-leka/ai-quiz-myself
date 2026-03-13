@@ -14,6 +14,15 @@ const USER_RECENT_SESSION_LIMIT = 30;
 const USER_RECENT_VOTE_LIMIT = 50;
 
 export type RecommendationMode = (typeof quizGameModeEnum.enumValues)[number];
+type RecommendationActor =
+  | {
+      userId: string;
+      anonId?: null;
+    }
+  | {
+      userId?: null;
+      anonId: string;
+    };
 
 export function parseRecommendationExcludeIds(rawValue: string | undefined) {
   if (!rawValue) {
@@ -59,7 +68,19 @@ async function getRecommendationContextFromQuiz(
   };
 }
 
-async function getUserProfile(userId: string, mode: RecommendationMode) {
+function buildSessionActorSql(actor: RecommendationActor) {
+  return actor.userId != null
+    ? sql`"quiz_sessions"."user_id" = ${actor.userId}`
+    : sql`"quiz_sessions"."anon_id" = ${actor.anonId}`;
+}
+
+function buildVoteActorSql(actor: RecommendationActor) {
+  return actor.userId != null
+    ? eq(quizVotes.userId, actor.userId)
+    : eq(quizVotes.anonId, actor.anonId);
+}
+
+async function getActorProfile(actor: RecommendationActor, mode: RecommendationMode) {
   const recentSessions = await db
     .select({
       quizId: quizSessions.quizId,
@@ -69,7 +90,7 @@ async function getUserProfile(userId: string, mode: RecommendationMode) {
     })
     .from(quizSessions)
     .innerJoin(quizzes, eq(quizSessions.quizId, quizzes.id))
-    .where(and(eq(quizSessions.userId, userId), eq(quizSessions.gameMode, mode)))
+    .where(and(eq(quizSessions.gameMode, mode), buildSessionActorSql(actor)))
     .orderBy(desc(quizSessions.startedAt))
     .limit(USER_RECENT_SESSION_LIMIT);
 
@@ -81,7 +102,7 @@ async function getUserProfile(userId: string, mode: RecommendationMode) {
     })
     .from(quizVotes)
     .innerJoin(quizzes, eq(quizVotes.quizId, quizzes.id))
-    .where(and(eq(quizVotes.userId, userId), eq(quizzes.gameMode, mode), eq(quizzes.isHub, true)))
+    .where(and(buildVoteActorSql(actor), eq(quizzes.gameMode, mode), eq(quizzes.isHub, true)))
     .orderBy(desc(quizVotes.updatedAt))
     .limit(USER_RECENT_VOTE_LIMIT);
 
@@ -96,6 +117,7 @@ async function getCandidatePool(params: {
   language: string | null;
   theme: string | null;
   excludeIds: string[];
+  excludePlayedFor?: RecommendationActor | null;
 }) {
   const filters = [eq(quizzes.isHub, true), eq(quizzes.gameMode, params.mode)];
 
@@ -109,6 +131,18 @@ async function getCandidatePool(params: {
 
   if (params.excludeIds.length > 0) {
     filters.push(notInArray(quizzes.id, params.excludeIds));
+  }
+
+  if (params.excludePlayedFor) {
+    filters.push(
+      sql`not exists (
+        select 1
+        from "quiz_sessions"
+        where "quiz_sessions"."quiz_id" = ${quizzes.id}
+          and "quiz_sessions"."game_mode" = ${params.mode}
+          and ${buildSessionActorSql(params.excludePlayedFor)}
+      )`,
+    );
   }
 
   return db
@@ -131,6 +165,7 @@ async function getCandidatePool(params: {
 export async function recommendQuizId(params: {
   mode: RecommendationMode;
   userId: string | null;
+  anonId?: string | null;
   currentQuizId?: string | null;
   theme?: string | null;
   excludeIds?: string[];
@@ -152,29 +187,46 @@ export async function recommendQuizId(params: {
       currentCreatorId: null,
     };
 
-  const userProfile = params.userId ? await getUserProfile(params.userId, params.mode) : null;
+  const actor =
+    params.userId
+      ? ({ userId: params.userId } satisfies RecommendationActor)
+      : params.anonId
+        ? ({ anonId: params.anonId } satisfies RecommendationActor)
+        : null;
+  const userProfile = actor ? await getActorProfile(actor, params.mode) : null;
   const combinedExcludeIds = Array.from(
     new Set([
       ...(recommendationContext.currentQuizId ? [recommendationContext.currentQuizId] : []),
       ...(params.excludeIds ?? []),
-      ...(userProfile?.recentQuizIds ?? []),
     ]),
   ).slice(0, MAX_EXCLUDE_IDS);
 
-  let candidates = await getCandidatePool({
-    mode: params.mode,
-    language: recommendationContext.currentLanguage,
-    theme: params.theme?.trim() || null,
-    excludeIds: combinedExcludeIds,
-  });
-
-  if (candidates.length === 0 && recommendationContext.currentLanguage) {
-    candidates = await getCandidatePool({
+  async function findCandidates(excludePlayedFor: RecommendationActor | null) {
+    let candidates = await getCandidatePool({
       mode: params.mode,
-      language: null,
+      language: recommendationContext.currentLanguage,
       theme: params.theme?.trim() || null,
       excludeIds: combinedExcludeIds,
+      excludePlayedFor,
     });
+
+    if (candidates.length === 0 && recommendationContext.currentLanguage) {
+      candidates = await getCandidatePool({
+        mode: params.mode,
+        language: null,
+        theme: params.theme?.trim() || null,
+        excludeIds: combinedExcludeIds,
+        excludePlayedFor,
+      });
+    }
+
+    return candidates;
+  }
+
+  let candidates = await findCandidates(actor);
+
+  if (candidates.length === 0 && actor) {
+    candidates = await findCandidates(null);
   }
 
   if (candidates.length === 0) {

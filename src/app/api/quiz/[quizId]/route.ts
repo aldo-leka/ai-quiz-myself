@@ -1,8 +1,9 @@
 import { and, asc, eq } from "drizzle-orm";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { hubCandidates, questions, quizzes, quizVotes, user } from "@/db/schema";
+import { getAnonIdFromCookie } from "@/lib/anon-user";
 import { auth } from "@/lib/auth";
 import { getQuizTtsCacheFingerprint, type SupportedQuizGameMode } from "@/lib/quiz-tts";
 
@@ -75,9 +76,8 @@ export async function GET(_: Request, { params }: RouteContext) {
     session = null;
   }
 
-  const cookieStore = await cookies();
   const userId = session?.user?.id ?? null;
-  const anonId = userId ? null : cookieStore.get("quizplus_anon_id")?.value ?? null;
+  const anonId = userId ? null : await getAnonIdFromCookie();
 
   const [quizRow] = await db
     .select({

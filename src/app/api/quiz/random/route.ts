@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { questions, quizGameModeEnum, quizzes } from "@/db/schema";
+import { getAnonIdFromCookie } from "@/lib/anon-user";
 import { auth } from "@/lib/auth";
 import { parseRecommendationExcludeIds, recommendQuizId } from "@/lib/quiz-recommendation-service";
 
@@ -73,6 +74,8 @@ export async function GET(request: Request) {
   } catch {
     session = null;
   }
+  const userId = session?.user?.id ?? null;
+  const anonId = userId ? null : await getAnonIdFromCookie();
 
   let quiz = null;
 
@@ -80,7 +83,8 @@ export async function GET(request: Request) {
     quiz =
       (await recommendQuizId({
         mode: mode as (typeof quizGameModeEnum.enumValues)[number],
-        userId: session?.user?.id ?? null,
+        userId,
+        anonId,
         theme: theme ?? null,
         excludeIds: exclude,
       })) ?? null;

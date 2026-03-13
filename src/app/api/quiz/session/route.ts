@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { quizSessionAnswers, quizSessions, quizzes } from "@/db/schema";
+import { ANON_COOKIE_MAX_AGE_SECONDS, ANON_COOKIE_NAME, getOrCreateAnonId } from "@/lib/anon-user";
 import { auth } from "@/lib/auth";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -101,41 +102,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
   }
 
-  let createdSessionId: string | null = null;
+  const fallbackPlayerName = payload.players?.[0]?.name ?? userName;
+  const normalizedScore = computeNormalizedScore(quiz.questionCount, payload.answers);
+  const anonIdentity = userId ? null : await getOrCreateAnonId();
 
-  if (userId) {
-    const fallbackPlayerName = payload.players?.[0]?.name ?? userName;
-    const normalizedScore = computeNormalizedScore(quiz.questionCount, payload.answers);
+  const [createdSession] = await db
+    .insert(quizSessions)
+    .values({
+      quizId: payload.quizId,
+      userId,
+      anonId: userId ? null : anonIdentity!.anonId,
+      gameMode: payload.gameMode,
+      players: payload.players ?? [{ name: fallbackPlayerName, isOwner: true }],
+      totalScore: payload.score,
+      normalizedScore,
+      startedAt: new Date(payload.startedAt),
+      finishedAt: new Date(payload.finishedAt),
+    })
+    .returning({ id: quizSessions.id });
 
-    const [createdSession] = await db
-      .insert(quizSessions)
-      .values({
-        quizId: payload.quizId,
-        userId,
-        gameMode: payload.gameMode,
-        players: payload.players ?? [{ name: fallbackPlayerName, isOwner: true }],
-        totalScore: payload.score,
-        normalizedScore,
-        startedAt: new Date(payload.startedAt),
-        finishedAt: new Date(payload.finishedAt),
-      })
-      .returning({ id: quizSessions.id });
-
-    createdSessionId = createdSession.id;
-
-    if (payload.answers.length > 0) {
-      await db.insert(quizSessionAnswers).values(
-        payload.answers.map((answer) => ({
-          sessionId: createdSession.id,
-          questionId: answer.questionId,
-          playerName: answer.playerName ?? fallbackPlayerName,
-          selectedOptionIndex: answer.selectedOptionIndex,
-          isCorrect: answer.isCorrect,
-          timeTakenMs: answer.timeTakenMs,
-          createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
-        })),
-      );
-    }
+  if (payload.answers.length > 0) {
+    await db.insert(quizSessionAnswers).values(
+      payload.answers.map((answer) => ({
+        sessionId: createdSession.id,
+        questionId: answer.questionId,
+        playerName: answer.playerName ?? fallbackPlayerName,
+        selectedOptionIndex: answer.selectedOptionIndex,
+        isCorrect: answer.isCorrect,
+        timeTakenMs: answer.timeTakenMs,
+        createdAt: answer.createdAt ? new Date(answer.createdAt) : new Date(),
+      })),
+    );
   }
 
   await db
@@ -145,9 +142,23 @@ export async function POST(request: Request) {
     })
     .where(eq(quizzes.id, payload.quizId));
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
-    sessionId: createdSessionId,
-    sessionPersisted: Boolean(createdSessionId),
+    sessionId: createdSession.id,
+    sessionPersisted: true,
   });
+
+  if (anonIdentity?.shouldSetCookie) {
+    response.cookies.set({
+      name: ANON_COOKIE_NAME,
+      value: anonIdentity.anonId,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: ANON_COOKIE_MAX_AGE_SECONDS,
+      path: "/",
+    });
+  }
+
+  return response;
 }

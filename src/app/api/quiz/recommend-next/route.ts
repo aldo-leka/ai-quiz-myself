@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { quizGameModeEnum } from "@/db/schema";
+import { getAnonIdFromCookie } from "@/lib/anon-user";
 import { auth } from "@/lib/auth";
 import { parseRecommendationExcludeIds, recommendQuizId } from "@/lib/quiz-recommendation-service";
 
@@ -44,9 +45,11 @@ export async function GET(request: Request) {
 
   const clientExcludeIds = parseRecommendationExcludeIds(query.exclude);
   const userId = session?.user?.id ?? null;
+  const anonId = userId ? null : await getAnonIdFromCookie();
   const recommendation = await recommendQuizId({
     mode: query.mode,
     userId,
+    anonId,
     currentQuizId: query.currentQuizId,
     excludeIds: clientExcludeIds,
   });
