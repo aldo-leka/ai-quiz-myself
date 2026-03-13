@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
+import { focusRemoteControl } from "@/lib/remote-focus";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
@@ -79,6 +80,113 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+type Direction = "left" | "right" | "up" | "down";
+
+function isEditableElement(node: Element | null): boolean {
+  if (!node || !(node instanceof HTMLElement)) return false;
+
+  const tag = node.tagName.toLowerCase();
+  return (
+    node.isContentEditable ||
+    tag === "input" ||
+    tag === "textarea" ||
+    tag === "select"
+  );
+}
+
+function isFocusableDashboardControl(node: Element): node is HTMLElement {
+  if (!(node instanceof HTMLElement)) return false;
+  if (node.tabIndex < 0) return false;
+  if (node.hasAttribute("disabled") || node.getAttribute("aria-disabled") === "true") return false;
+  if (node.getAttribute("aria-hidden") === "true") return false;
+  if (node.getAttribute("role") === "combobox") return false;
+  if (node.dataset.tvIgnore === "true" || node.closest("[data-tv-ignore='true']")) return false;
+  if (isEditableElement(node)) return false;
+
+  const style = window.getComputedStyle(node);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+
+  const rect = node.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function findNextDashboardControl(
+  currentNode: HTMLElement,
+  nodes: HTMLElement[],
+  direction: Direction,
+) {
+  const currentRect = currentNode.getBoundingClientRect();
+  const currentX = currentRect.left + currentRect.width / 2;
+  const currentY = currentRect.top + currentRect.height / 2;
+  const verticalBand = Math.max(currentRect.height * 0.75, 36);
+  const horizontalBand = Math.max(currentRect.width * 0.75, 36);
+
+  const candidates = nodes
+    .filter((node) => node !== currentNode)
+    .map((node) => {
+      const rect = node.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const dx = x - currentX;
+      const dy = y - currentY;
+      const withinVerticalBand = Math.abs(dy) <= verticalBand;
+      const withinHorizontalBand = Math.abs(dx) <= horizontalBand;
+
+      switch (direction) {
+        case "left":
+          if (dx >= -4) return null;
+          return {
+            node,
+            primary: Math.abs(dx),
+            secondary: Math.abs(dy),
+            preferredAxis: withinVerticalBand ? 0 : 1,
+          };
+        case "right":
+          if (dx <= 4) return null;
+          return {
+            node,
+            primary: dx,
+            secondary: Math.abs(dy),
+            preferredAxis: withinVerticalBand ? 0 : 1,
+          };
+        case "up":
+          if (dy >= -4) return null;
+          return {
+            node,
+            primary: Math.abs(dy),
+            secondary: Math.abs(dx),
+            preferredAxis: withinHorizontalBand ? 0 : 1,
+          };
+        case "down":
+          if (dy <= 4) return null;
+          return {
+            node,
+            primary: dy,
+            secondary: Math.abs(dx),
+            preferredAxis: withinHorizontalBand ? 0 : 1,
+          };
+      }
+    })
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        node: HTMLElement;
+        primary: number;
+        secondary: number;
+        preferredAxis: number;
+      } =>
+        candidate !== null,
+    )
+    .sort((a, b) => {
+      const aScore = a.preferredAxis * 1_000_000 + a.primary * 1000 + a.secondary;
+      const bScore = b.preferredAxis * 1_000_000 + b.primary * 1000 + b.secondary;
+      return aScore - bScore;
+    });
+
+  return candidates[0]?.node ?? null;
+}
+
 export function DashboardShell({
   children,
   canAccessAdmin = false,
@@ -108,6 +216,134 @@ export function DashboardShell({
       setIsSigningOut(false);
     }
   }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      if (isEditableElement(document.activeElement)) {
+        return;
+      }
+
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "main a[href], main button, main [role='button']",
+        ),
+      ).filter(isFocusableDashboardControl);
+
+      if (!candidates.length) {
+        return;
+      }
+
+      const activeElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const currentNode = activeElement && candidates.includes(activeElement) ? activeElement : null;
+
+      if (event.key === "Enter") {
+        if (!currentNode) {
+          event.preventDefault();
+          focusRemoteControl(candidates[0] ?? null);
+          return;
+        }
+
+        if (currentNode instanceof HTMLAnchorElement) {
+          event.preventDefault();
+          currentNode.click();
+          return;
+        }
+
+        if (typeof currentNode.click === "function") {
+          event.preventDefault();
+          currentNode.click();
+        }
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!currentNode) {
+        focusRemoteControl(candidates[0] ?? null);
+        return;
+      }
+
+      if (event.key === "ArrowLeft" && currentNode.dataset.tvId === "dashboard-user-pill") {
+        const settingsLink = candidates.find(
+          (node) => node.dataset.tvId === "dashboard-settings-link",
+        );
+        if (settingsLink) {
+          focusRemoteControl(settingsLink);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "dashboard-settings-link") {
+        const userPill = candidates.find((node) => node.dataset.tvId === "dashboard-user-pill");
+        if (userPill) {
+          focusRemoteControl(userPill);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "create-billing-link") {
+        const sourceTheme = candidates.find((node) => node.dataset.tvId === "create-source-theme");
+        if (sourceTheme) {
+          focusRemoteControl(sourceTheme);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowLeft" && currentNode.dataset.tvId === "create-source-theme") {
+        const billingLink = candidates.find((node) => node.dataset.tvId === "create-billing-link");
+        if (billingLink) {
+          focusRemoteControl(billingLink);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "create-source-theme") {
+        const sourceUrl = candidates.find((node) => node.dataset.tvId === "create-source-url");
+        if (sourceUrl) {
+          focusRemoteControl(sourceUrl);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowLeft" && currentNode.dataset.tvId === "create-source-url") {
+        const sourceTheme = candidates.find((node) => node.dataset.tvId === "create-source-theme");
+        if (sourceTheme) {
+          focusRemoteControl(sourceTheme);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowRight" && currentNode.dataset.tvId === "create-source-url") {
+        const sourcePdf = candidates.find((node) => node.dataset.tvId === "create-source-pdf");
+        if (sourcePdf) {
+          focusRemoteControl(sourcePdf);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowLeft" && currentNode.dataset.tvId === "create-source-pdf") {
+        const sourceUrl = candidates.find((node) => node.dataset.tvId === "create-source-url");
+        if (sourceUrl) {
+          focusRemoteControl(sourceUrl);
+          return;
+        }
+      }
+
+      const direction = event.key.replace("Arrow", "").toLowerCase() as Direction;
+      const nextNode = findNextDashboardControl(currentNode, candidates, direction);
+      if (nextNode) {
+        focusRemoteControl(nextNode);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0f1117] text-[#e4e4e9]">
@@ -178,6 +414,7 @@ export function DashboardShell({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    data-tv-id="dashboard-user-pill"
                     className={cn(
                       "relative inline-flex min-h-14 select-none items-center justify-center rounded-full border border-[#252940] bg-[#1a1d2e]/86 px-5 py-3 text-base font-semibold text-[#e4e4e9] transition md:px-6 md:text-xl",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
@@ -237,6 +474,7 @@ export function DashboardShell({
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-tv-id={item.href === "/dashboard/settings" ? "dashboard-settings-link" : undefined}
                     className={cn(
                       "inline-flex min-h-14 items-center gap-3 rounded-full border px-6 py-3 text-xl font-semibold transition md:min-h-16 md:px-7 md:text-[1.8rem]",
                       "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",

@@ -685,7 +685,9 @@ export function DashboardCreatePageClient({
                 variant="outline"
                 className="min-h-12 rounded-2xl border-[#252940] bg-[#1a1d2e]/86 px-5 text-base text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9] md:text-lg"
               >
-                <Link href="/dashboard/billing">Billing & Auto Recharge</Link>
+                <Link href="/dashboard/billing" data-tv-id="create-billing-link">
+                  Billing & Auto Recharge
+                </Link>
               </Button>
             </div>
           </div>
@@ -700,6 +702,7 @@ export function DashboardCreatePageClient({
                 key={card.value}
                 type="button"
                 onClick={() => applySourceType(card.value)}
+                data-tv-id={`create-source-${card.value}`}
                 className={cn(
                   "rounded-3xl border p-5 text-left transition md:p-6",
                   active
