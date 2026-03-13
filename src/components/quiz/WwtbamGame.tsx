@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, House, LoaderCircle, Square, User, Volume2 } from "lucide-react";
+import { ArrowRight, House, LoaderCircle, Square, ThumbsDown, ThumbsUp, User, Volume2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -96,10 +96,18 @@ const WWTBAM_SFX_VOLUMES: Record<WwtbamSfxKey, number> = {
   checkpoint: 0.68,
 };
 
+type VoteType = "like" | "dislike";
+
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function computeLikeRatioLabel(likes: number, dislikes: number) {
+  const total = likes + dislikes;
+  if (total === 0) return "Be the first to rate this quiz";
+  return `${Math.round((likes / total) * 100)}% likes`;
 }
 
 function buildHostAudioUrl(text: string, ttsFingerprint?: string) {
@@ -219,6 +227,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [gameOver, setGameOver] = useState(false);
   const [wonAmount, setWonAmount] = useState(0);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
+  const [likes, setLikes] = useState(quiz.likes);
+  const [dislikes, setDislikes] = useState(quiz.dislikes);
+  const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
+  const [isVoting, setIsVoting] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   const [focusedControl, setFocusedControl] = useState<FocusControlId | null>(null);
 
@@ -267,6 +280,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     serverEnabled: sessionUser?.readAloudEnabled,
     serverPending: isSessionPending,
   });
+
+  useEffect(() => {
+    setLikes(quiz.likes);
+    setDislikes(quiz.dislikes);
+    setVote(quiz.currentVote ?? null);
+    setVoteError(null);
+  }, [quiz.currentVote, quiz.dislikes, quiz.id, quiz.likes]);
 
   const questions = quiz.questions;
   const currentQuestion = questions[currentQuestionIndex];
@@ -1271,6 +1291,47 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     }
   }
 
+  function playAgain() {
+    stopHostNarration();
+    stopTimer();
+    router.replace(`/play/${quiz.id}?retry=${Date.now()}`);
+  }
+
+  async function submitVote(nextVote: VoteType) {
+    if (isVoting) return;
+
+    setIsVoting(true);
+    setVoteError(null);
+
+    try {
+      const response = await fetch(`/api/quiz/${quiz.id}/rate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ vote: nextVote }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not save vote");
+      }
+
+      const payload = (await response.json()) as {
+        likes: number;
+        dislikes: number;
+        vote: VoteType;
+      };
+
+      setLikes(payload.likes);
+      setDislikes(payload.dislikes);
+      setVote(payload.vote);
+    } catch (error) {
+      setVoteError(error instanceof Error ? error.message : "Could not save vote");
+    } finally {
+      setIsVoting(false);
+    }
+  }
+
   function triggerControl(controlId: FocusControlId) {
     if (controlId === "header-quit") {
       router.push("/");
@@ -1393,19 +1454,50 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:col-span-2 md:p-7">
+                <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>
+                <div className="flex flex-wrap gap-3">
+                  <GameButton
+                    centered
+                    icon={<ThumbsUp size={20} />}
+                    onClick={() => void submitVote("like")}
+                    disabled={isVoting}
+                    state={vote === "like" ? "selected" : "default"}
+                    className="min-h-20 max-w-72 text-2xl md:text-3xl"
+                  >
+                    Like ({likes})
+                  </GameButton>
+                  <GameButton
+                    centered
+                    icon={<ThumbsDown size={20} />}
+                    onClick={() => void submitVote("dislike")}
+                    disabled={isVoting}
+                    state={vote === "dislike" ? "selected" : "default"}
+                    className="min-h-20 max-w-72 text-2xl md:text-3xl"
+                  >
+                    Dislike ({dislikes})
+                  </GameButton>
+                </div>
+                <p className="text-xl text-[#9394a5] md:text-2xl">
+                  {computeLikeRatioLabel(likes, dislikes)}
+                </p>
+                {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
+              </div>
+
               <GameButton
                 centered
-                className="min-h-20 text-2xl md:text-3xl"
-                onClick={() => router.push("/")}
+                disabled={isLoadingNextQuiz}
+                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
+                onClick={() => void playRandomAgain()}
               >
-                Back to Hub
+                {isLoadingNextQuiz ? "Loading..." : "Play Next"}
               </GameButton>
               <GameButton
                 centered
-                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl text-[#e4e4e9] md:text-3xl"
-                onClick={() => void playRandomAgain()}
+                className="min-h-20 text-2xl md:text-3xl"
+                onClick={playAgain}
               >
-                Play Random Quiz
+                Play Again
               </GameButton>
             </div>
           </section>

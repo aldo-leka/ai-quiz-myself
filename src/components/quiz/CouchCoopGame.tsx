@@ -8,6 +8,8 @@ import {
   LoaderCircle,
   Medal,
   Square,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Volume2,
   XCircle,
@@ -43,12 +45,14 @@ type SetupFocusTarget =
   | "setup-start"
   | "setup-back";
 type RevealFocusTarget = HeaderActionTarget | "reveal-next";
+type VoteType = "like" | "dislike";
 type CompleteFocusTarget =
   | HeaderActionTarget
+  | "like"
+  | "dislike"
   | `leaderboard-${number}`
   | "complete-rematch"
-  | "complete-random"
-  | "complete-back";
+  | "complete-random";
 
 type PlayerResult = {
   questionId: string;
@@ -68,6 +72,12 @@ const MAX_NAME_LENGTH = 20;
 
 function formatSecondsFromMs(durationMs: number) {
   return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function computeLikeRatioLabel(likes: number, dislikes: number) {
+  const total = likes + dislikes;
+  if (total === 0) return "Be the first to rate this quiz";
+  return `${Math.round((likes / total) * 100)}% likes`;
 }
 
 function timerBarClass(remainingSeconds: number) {
@@ -124,6 +134,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(QUESTION_TIME_SECONDS);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [likes, setLikes] = useState(quiz.likes);
+  const [dislikes, setDislikes] = useState(quiz.dislikes);
+  const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
+  const [isVoting, setIsVoting] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
   const [answerWindowOpen, setAnswerWindowOpen] = useState(false);
 
@@ -195,12 +210,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
   const completeFocusRows = useMemo<CompleteFocusTarget[][]>(() => {
     const rows: CompleteFocusTarget[][] = [["header-quit", "header-next"]];
+    rows.push(["like", "dislike"]);
 
     leaderboard.forEach((_, index) => {
       rows.push([`leaderboard-${index}`]);
     });
 
-    rows.push(["complete-rematch", "complete-random", "complete-back"]);
+    rows.push(["complete-random", "complete-rematch"]);
     return rows;
   }, [leaderboard]);
 
@@ -216,6 +232,13 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     serverEnabled: sessionUser?.readAloudEnabled,
     serverPending: isSessionPending,
   });
+
+  useEffect(() => {
+    setLikes(quiz.likes);
+    setDislikes(quiz.dislikes);
+    setVote(quiz.currentVote ?? null);
+    setVoteError(null);
+  }, [quiz.currentVote, quiz.dislikes, quiz.id, quiz.likes]);
 
   useEffect(() => {
     rememberRecentQuiz("couch_coop", quiz.id);
@@ -349,6 +372,41 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     beginRound(playerNames);
   }, [beginRound, playerNames]);
+
+  const submitVote = useCallback(async (nextVote: VoteType) => {
+    if (isVoting) return;
+
+    setIsVoting(true);
+    setVoteError(null);
+
+    try {
+      const response = await fetch(`/api/quiz/${quiz.id}/rate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ vote: nextVote }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not save vote");
+      }
+
+      const payload = (await response.json()) as {
+        likes: number;
+        dislikes: number;
+        vote: VoteType;
+      };
+
+      setLikes(payload.likes);
+      setDislikes(payload.dislikes);
+      setVote(payload.vote);
+    } catch (error) {
+      setVoteError(error instanceof Error ? error.message : "Could not save vote");
+    } finally {
+      setIsVoting(false);
+    }
+  }, [isVoting, quiz.id]);
 
   const questionReadAloudSegments = useMemo(() => {
     if (!currentQuestion) {
@@ -908,7 +966,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       if (event.key === "Enter") {
         if (!focusedCompleteTarget) return;
 
-        if (focusedCompleteTarget === "header-quit" || focusedCompleteTarget === "complete-back") {
+        if (focusedCompleteTarget === "header-quit") {
           router.push("/");
           return;
         }
@@ -920,6 +978,16 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
         if (focusedCompleteTarget === "complete-rematch") {
           rematch();
+          return;
+        }
+
+        if (focusedCompleteTarget === "like") {
+          void submitVote("like");
+          return;
+        }
+
+        if (focusedCompleteTarget === "dislike") {
+          void submitVote("dislike");
         }
         return;
       }
@@ -961,7 +1029,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [completeFocusRows, focusedCompleteTarget, phase, pickAnotherCouchQuiz, rematch, router]);
+  }, [completeFocusRows, focusedCompleteTarget, phase, pickAnotherCouchQuiz, rematch, router, submitVote]);
 
   useEffect(() => {
     return () => {
@@ -1377,6 +1445,44 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                   <p className="text-5xl font-black text-emerald-300">{entry.score}</p>
                 </div>
               ))}
+
+              <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+                <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>
+                <div className="flex flex-wrap gap-3">
+                  <GameButton
+                    ref={(node) => {
+                      completeFocusRefs.current.like = node;
+                    }}
+                    centered
+                    icon={<ThumbsUp size={20} />}
+                    onClick={() => void submitVote("like")}
+                    disabled={isVoting}
+                    focused={focusedCompleteTarget === "like"}
+                    state={vote === "like" ? "selected" : "default"}
+                    className="min-h-20 max-w-72 text-2xl md:text-3xl"
+                  >
+                    Like ({likes})
+                  </GameButton>
+                  <GameButton
+                    ref={(node) => {
+                      completeFocusRefs.current.dislike = node;
+                    }}
+                    centered
+                    icon={<ThumbsDown size={20} />}
+                    onClick={() => void submitVote("dislike")}
+                    disabled={isVoting}
+                    focused={focusedCompleteTarget === "dislike"}
+                    state={vote === "dislike" ? "selected" : "default"}
+                    className="min-h-20 max-w-72 text-2xl md:text-3xl"
+                  >
+                    Dislike ({dislikes})
+                  </GameButton>
+                </div>
+                <p className="text-xl text-[#9394a5] md:text-2xl">
+                  {computeLikeRatioLabel(likes, dislikes)}
+                </p>
+                {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
+              </div>
             </div>
 
             <div className="rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6">
@@ -1394,7 +1500,19 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
               ) : null}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
+              <GameButton
+                ref={(node) => {
+                  completeFocusRefs.current["complete-random"] = node;
+                }}
+                centered
+                disabled={isLoadingNextQuiz}
+                focused={focusedCompleteTarget === "complete-random"}
+                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
+                onClick={() => void pickAnotherCouchQuiz()}
+              >
+                {isLoadingNextQuiz ? "Loading..." : "Play Next"}
+              </GameButton>
               <GameButton
                 ref={(node) => {
                   completeFocusRefs.current["complete-rematch"] = node;
@@ -1404,29 +1522,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 className="min-h-20 text-2xl md:text-3xl"
                 onClick={rematch}
               >
-                Rematch
-              </GameButton>
-              <GameButton
-                ref={(node) => {
-                  completeFocusRefs.current["complete-random"] = node;
-                }}
-                centered
-                focused={focusedCompleteTarget === "complete-random"}
-                className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
-                onClick={() => void pickAnotherCouchQuiz()}
-              >
-                Pick Another Couch Quiz
-              </GameButton>
-              <GameButton
-                ref={(node) => {
-                  completeFocusRefs.current["complete-back"] = node;
-                }}
-                centered
-                focused={focusedCompleteTarget === "complete-back"}
-                className="min-h-20 text-2xl md:text-3xl"
-                onClick={() => router.push("/")}
-              >
-                Back to Hub
+                Play Again
               </GameButton>
             </div>
           </section>

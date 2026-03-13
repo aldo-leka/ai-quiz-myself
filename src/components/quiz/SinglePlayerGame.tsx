@@ -35,7 +35,7 @@ type GamePhase = "question" | "reveal" | "complete";
 type VoteType = "like" | "dislike";
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "anonymous";
 type HeaderActionTarget = "header-quit" | "header-next";
-type CompleteActionId = "play-next" | "play-again" | "back-to-hub";
+type CompleteActionId = "play-next" | "play-again";
 type CompleteActionTarget = `${"top" | "bottom"}-${CompleteActionId}`;
 type RevealFocusTarget = HeaderActionTarget | "reveal-next";
 type CompleteFocusTarget =
@@ -156,16 +156,15 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
     const rows: CompleteFocusTarget[][] = [
       ["header-quit", "header-next"],
       ["top-play-next", "top-play-again"],
-      ["top-back-to-hub"],
-      ...Array.from({ length: results.length }, (_, index) => [`breakdown-${index}` as const]),
       ["like", "dislike"],
+      ...Array.from({ length: results.length }, (_, index) => [`breakdown-${index}` as const]),
     ];
 
     if (saveStatus === "anonymous") {
       rows.push(["sign-in"]);
     }
 
-    rows.push(["bottom-play-next", "bottom-play-again"], ["bottom-back-to-hub"]);
+    rows.push(["bottom-play-next", "bottom-play-again"]);
     return rows;
   }, [results.length, saveStatus]);
 
@@ -969,7 +968,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   function renderCompleteActions(position: "top" | "bottom") {
     const playNextTarget = `${position}-play-next` as const;
     const playAgainTarget = `${position}-play-again` as const;
-    const backToHubTarget = `${position}-back-to-hub` as const;
 
     return (
       <div
@@ -983,7 +981,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
             ref={registerCompleteFocusRef(playNextTarget)}
             centered
             disabled={isLoadingNextQuiz}
-            className="min-h-20 text-2xl md:text-3xl"
+            className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
             focused={focusedCompleteTarget === playNextTarget}
             onClick={() => void playNext()}
           >
@@ -997,17 +995,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
             onClick={playAgain}
           >
             Play Again
-          </GameButton>
-        </div>
-        <div className="flex justify-center">
-          <GameButton
-            ref={registerCompleteFocusRef(backToHubTarget)}
-            centered
-            className="min-h-20 w-full border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl text-[#e4e4e9] md:w-[calc(50%-0.5rem)] md:text-3xl"
-            focused={focusedCompleteTarget === backToHubTarget}
-            onClick={() => router.push("/")}
-          >
-            Back to Hub
           </GameButton>
         </div>
       </div>
@@ -1294,40 +1281,6 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
             {renderCompleteActions("top")}
 
             <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
-              <h3 className="text-3xl font-bold text-[#e4e4e9] md:text-4xl">Question Breakdown</h3>
-              <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1">
-                {results.map((result, index) => (
-                  <div
-                    key={`${result.questionId}-${index}`}
-                    ref={registerCompleteFocusRef(`breakdown-${index}`)}
-                    tabIndex={-1}
-                    className={cn(
-                      "flex items-start justify-between gap-4 rounded-3xl border border-[#252940] bg-[#1a1d2e]/86 p-5 transition",
-                      focusedCompleteTarget === `breakdown-${index}` ? "border-amber-300 ring-4 ring-[#818cf8]/70" : "",
-                    )}
-                    aria-selected={focusedCompleteTarget === `breakdown-${index}`}
-                  >
-                    <div className="space-y-1">
-                      <p className="text-2xl font-semibold text-[#e4e4e9] md:text-3xl">
-                        {index + 1}. {result.questionText}
-                      </p>
-                      <p className="text-lg text-[#9394a5] md:text-xl">
-                        Time: {formatSecondsFromMs(result.timeTakenMs)}
-                      </p>
-                    </div>
-                    <div className="pt-1">
-                      {result.isCorrect ? (
-                        <CheckCircle2 className="size-7 text-emerald-400" aria-label="Correct" />
-                      ) : (
-                        <XCircle className="size-7 text-rose-400" aria-label="Incorrect" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
               <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>
               <div className="flex flex-wrap gap-3">
                 <GameButton
@@ -1359,6 +1312,40 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
                 {computeLikeRatioLabel(likes, dislikes)}
               </p>
               {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
+            </div>
+
+            <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+              <h3 className="text-3xl font-bold text-[#e4e4e9] md:text-4xl">Question Breakdown</h3>
+              <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1">
+                {results.map((result, index) => (
+                  <div
+                    key={`${result.questionId}-${index}`}
+                    ref={registerCompleteFocusRef(`breakdown-${index}`)}
+                    tabIndex={-1}
+                    className={cn(
+                      "flex items-start justify-between gap-4 rounded-3xl border border-[#252940] bg-[#1a1d2e]/86 p-5 transition",
+                      focusedCompleteTarget === `breakdown-${index}` ? "border-amber-300 ring-4 ring-[#818cf8]/70" : "",
+                    )}
+                    aria-selected={focusedCompleteTarget === `breakdown-${index}`}
+                  >
+                    <div className="space-y-1">
+                      <p className="text-2xl font-semibold text-[#e4e4e9] md:text-3xl">
+                        {index + 1}. {result.questionText}
+                      </p>
+                      <p className="text-lg text-[#9394a5] md:text-xl">
+                        Time: {formatSecondsFromMs(result.timeTakenMs)}
+                      </p>
+                    </div>
+                    <div className="pt-1">
+                      {result.isCorrect ? (
+                        <CheckCircle2 className="size-7 text-emerald-400" aria-label="Correct" />
+                      ) : (
+                        <XCircle className="size-7 text-rose-400" aria-label="Incorrect" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {shouldShowSaveStatusCard ? (
