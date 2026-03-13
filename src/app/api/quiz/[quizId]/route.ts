@@ -35,6 +35,7 @@ function normalizeOptions(
 function shuffleQuestionOptions(
   options: Array<{ text: string; explanation: string }>,
   correctOptionIndex: number,
+  hostHintGuessedOptionIndex: number | null,
 ) {
   const shuffled = options.map((option, index) => ({
     option,
@@ -49,10 +50,16 @@ function shuffleQuestionOptions(
   const remappedCorrectIndex = shuffled.findIndex(
     (entry) => entry.originalIndex === correctOptionIndex,
   );
+  const remappedHostHintIndex =
+    typeof hostHintGuessedOptionIndex === "number"
+      ? shuffled.findIndex((entry) => entry.originalIndex === hostHintGuessedOptionIndex)
+      : -1;
 
   return {
     options: shuffled.map((entry) => entry.option),
     correctOptionIndex: remappedCorrectIndex >= 0 ? remappedCorrectIndex : correctOptionIndex,
+    hostHintDisplayedOptionIndex:
+      remappedHostHintIndex >= 0 ? remappedHostHintIndex : null,
   };
 }
 
@@ -118,12 +125,17 @@ export async function GET(_: Request, { params }: RouteContext) {
 
   const normalizedQuestions = rawQuestions.map((question) => {
     const options = normalizeOptions(question.options);
-    const shuffled = shuffleQuestionOptions(options, question.correctOptionIndex);
+    const shuffled = shuffleQuestionOptions(
+      options,
+      question.correctOptionIndex,
+      question.hostHintGuessedOptionIndex,
+    );
 
     return {
       ...question,
       options: shuffled.options,
       correctOptionIndex: shuffled.correctOptionIndex,
+      hostHintDisplayedOptionIndex: shuffled.hostHintDisplayedOptionIndex,
     };
   });
 

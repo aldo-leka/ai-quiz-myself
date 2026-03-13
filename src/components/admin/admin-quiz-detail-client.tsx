@@ -30,6 +30,8 @@ type EditableQuestion = {
     explanation: string;
   }>;
   correctOptionIndex: number;
+  hostHintReasoning: string | null;
+  hostHintGuessedOptionIndex: number | null;
   difficulty: "easy" | "medium" | "hard";
   subject: string | null;
 };
@@ -132,6 +134,8 @@ export function AdminQuizDetailClient({
           questionText: current.questionText,
           options: current.options,
           correctOptionIndex: current.correctOptionIndex,
+          hostHintReasoning: current.hostHintReasoning,
+          hostHintGuessedOptionIndex: current.hostHintGuessedOptionIndex,
           difficulty: current.difficulty,
           subject: current.subject,
         }),
@@ -176,6 +180,18 @@ export function AdminQuizDetailClient({
     }
   }
 
+  function clearHostHint(question: EditableQuestion): EditableQuestion {
+    if (gameMode !== "wwtbam") {
+      return question;
+    }
+
+    return {
+      ...question,
+      hostHintReasoning: null,
+      hostHintGuessedOptionIndex: null,
+    };
+  }
+
   return (
     <main className="space-y-6">
       <Card>
@@ -218,7 +234,9 @@ export function AdminQuizDetailClient({
               onChange={(event) =>
                 setQuestions((previous) =>
                   previous.map((row) =>
-                    row.id === question.id ? { ...row, questionText: event.target.value } : row,
+                    row.id === question.id
+                      ? clearHostHint({ ...row, questionText: event.target.value })
+                      : row,
                   ),
                 )
               }
@@ -259,7 +277,9 @@ export function AdminQuizDetailClient({
                 onValueChange={(value) =>
                   setQuestions((previous) =>
                     previous.map((row) =>
-                      row.id === question.id ? { ...row, correctOptionIndex: Number(value) } : row,
+                      row.id === question.id
+                        ? clearHostHint({ ...row, correctOptionIndex: Number(value) })
+                        : row,
                     ),
                   )
                 }
@@ -292,7 +312,7 @@ export function AdminQuizDetailClient({
                             ...nextOptions[optionIndex],
                             text: event.target.value,
                           };
-                          return { ...row, options: nextOptions };
+                          return clearHostHint({ ...row, options: nextOptions });
                         }),
                       )
                     }
@@ -318,6 +338,66 @@ export function AdminQuizDetailClient({
                 </div>
               ))}
             </div>
+
+            {gameMode === "wwtbam" ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Ask the Host guessed option</p>
+                  <Select
+                    value={
+                      question.hostHintGuessedOptionIndex !== null
+                        ? String(question.hostHintGuessedOptionIndex)
+                        : "none"
+                    }
+                    onValueChange={(value) =>
+                      setQuestions((previous) =>
+                        previous.map((row) =>
+                          row.id === question.id
+                            ? {
+                                ...row,
+                                hostHintGuessedOptionIndex: value === "none" ? null : Number(value),
+                              }
+                            : row,
+                        ),
+                      )
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Host guess" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No host guess</SelectItem>
+                      <SelectItem value="0">Option A</SelectItem>
+                      <SelectItem value="1">Option B</SelectItem>
+                      <SelectItem value="2">Option C</SelectItem>
+                      <SelectItem value="3">Option D</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Ask the Host reasoning</p>
+                  <Textarea
+                    placeholder="Brief host reasoning without option letters or quoted answer text"
+                    value={question.hostHintReasoning ?? ""}
+                    onChange={(event) =>
+                      setQuestions((previous) =>
+                        previous.map((row) =>
+                          row.id === question.id
+                            ? {
+                                ...row,
+                                hostHintReasoning: event.target.value.trim().length
+                                  ? event.target.value
+                                  : null,
+                              }
+                            : row,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <Button
               disabled={savingQuestionId === question.id}

@@ -54,6 +54,8 @@ export default async function AdminQuizDetailPage({ params }: PageProps) {
       questionText: questions.questionText,
       options: questions.options,
       correctOptionIndex: questions.correctOptionIndex,
+      hostHintReasoning: questions.hostHintReasoning,
+      hostHintGuessedOptionIndex: questions.hostHintGuessedOptionIndex,
       difficulty: questions.difficulty,
       subject: questions.subject,
     })

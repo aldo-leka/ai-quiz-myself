@@ -17,6 +17,8 @@ type EditableQuestion = {
     explanation: string;
   }>;
   correctOptionIndex: number;
+  hostHintReasoning: string | null;
+  hostHintGuessedOptionIndex: number | null;
   difficulty: "easy" | "medium" | "hard";
   subject: string | null;
 };
@@ -45,6 +47,11 @@ const selectOptions = [
   { value: "1", label: "Option B" },
   { value: "2", label: "Option C" },
   { value: "3", label: "Option D" },
+] as const;
+
+const hostHintSelectOptions = [
+  { value: "none", label: "No host guess" },
+  ...selectOptions,
 ] as const;
 
 export function DashboardQuizDetailClient({
@@ -88,6 +95,18 @@ export function DashboardQuizDetailClient({
   function handleCancelEditing() {
     resetDrafts();
     setEditMode(false);
+  }
+
+  function clearHostHint(question: EditableQuestion): EditableQuestion {
+    if (gameMode !== "wwtbam") {
+      return question;
+    }
+
+    return {
+      ...question,
+      hostHintReasoning: null,
+      hostHintGuessedOptionIndex: null,
+    };
   }
 
   async function saveTitle() {
@@ -154,6 +173,8 @@ export function DashboardQuizDetailClient({
           questionText: current.questionText,
           options: current.options,
           correctOptionIndex: current.correctOptionIndex,
+          hostHintReasoning: current.hostHintReasoning,
+          hostHintGuessedOptionIndex: current.hostHintGuessedOptionIndex,
         }),
       });
 
@@ -306,7 +327,7 @@ export function DashboardQuizDetailClient({
                     setQuestions((previousQuestions) =>
                       previousQuestions.map((row) =>
                         row.id === question.id
-                          ? { ...row, questionText: event.target.value }
+                          ? clearHostHint({ ...row, questionText: event.target.value })
                           : row,
                       ),
                     )
@@ -335,7 +356,7 @@ export function DashboardQuizDetailClient({
                                 ...nextOptions[optionIndex],
                                 text: event.target.value,
                               };
-                              return { ...row, options: nextOptions };
+                              return clearHostHint({ ...row, options: nextOptions });
                             }),
                           )
                         }
@@ -371,7 +392,7 @@ export function DashboardQuizDetailClient({
                       setQuestions((previousQuestions) =>
                         previousQuestions.map((row) =>
                           row.id === question.id
-                            ? { ...row, correctOptionIndex: Number(value) }
+                            ? clearHostHint({ ...row, correctOptionIndex: Number(value) })
                             : row,
                         ),
                       )
@@ -380,6 +401,31 @@ export function DashboardQuizDetailClient({
                     placeholder="Correct option"
                     widthClassName="w-full sm:w-56"
                   />
+                  {gameMode === "wwtbam" ? (
+                    <PlayerSelect
+                      value={
+                        question.hostHintGuessedOptionIndex !== null
+                          ? String(question.hostHintGuessedOptionIndex)
+                          : "none"
+                      }
+                      onValueChange={(value) =>
+                        setQuestions((previousQuestions) =>
+                          previousQuestions.map((row) =>
+                            row.id === question.id
+                              ? {
+                                  ...row,
+                                  hostHintGuessedOptionIndex:
+                                    value === "none" ? null : Number(value),
+                                }
+                              : row,
+                          ),
+                        )
+                      }
+                      options={[...hostHintSelectOptions]}
+                      placeholder="Host guess"
+                      widthClassName="w-full sm:w-60"
+                    />
+                  ) : null}
                   <div className="flex items-center gap-3">
                     <p className="text-base text-[#9394a5] md:text-lg">
                       {statusByQuestionId[question.id] ?? "Not saved yet"}
@@ -397,6 +443,33 @@ export function DashboardQuizDetailClient({
                     </button>
                   </div>
                 </div>
+
+                {gameMode === "wwtbam" ? (
+                  <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/72 p-4">
+                    <p className="mb-3 text-base font-semibold uppercase tracking-[0.2em] text-[#818cf8]/75">
+                      Ask the Host Hint
+                    </p>
+                    <Textarea
+                      value={question.hostHintReasoning ?? ""}
+                      onChange={(event) =>
+                        setQuestions((previousQuestions) =>
+                          previousQuestions.map((row) =>
+                            row.id === question.id
+                              ? {
+                                  ...row,
+                                  hostHintReasoning: event.target.value.trim().length
+                                    ? event.target.value
+                                    : null,
+                                }
+                              : row,
+                          ),
+                        )
+                      }
+                      className={cn("min-h-28 text-base text-[#e4e4e9] md:text-lg", fieldClassName)}
+                      placeholder="Brief host reasoning without option letters or quoted answer text"
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <>
@@ -405,6 +478,13 @@ export function DashboardQuizDetailClient({
                 </h3>
                 {question.subject ? (
                   <p className="mt-2 text-base text-[#9394a5] md:text-lg">Subject: {question.subject}</p>
+                ) : null}
+                {gameMode === "wwtbam" && question.hostHintReasoning ? (
+                  <p className="mt-2 text-base text-[#9394a5] md:text-lg">
+                    Ask the Host: Option{" "}
+                    {String.fromCharCode(65 + (question.hostHintGuessedOptionIndex ?? 0))} ·{" "}
+                    {question.hostHintReasoning}
+                  </p>
                 ) : null}
                 <ul className="mt-4 space-y-2">
                   {question.options.map((option, index) => (

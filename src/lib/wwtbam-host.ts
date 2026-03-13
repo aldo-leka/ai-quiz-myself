@@ -63,13 +63,6 @@ const TIMEOUT_TEMPLATES = [
   "No answer before the clock. Time is up.",
 ] as const;
 
-const ASK_HOST_FALLBACK_TEMPLATES = [
-  "My instinct leans toward {guess}.",
-  "If I had to lean one way, I would go with {guess}.",
-  "I would shade toward {guess}, but it is still your call.",
-  "My best hunch is {guess}.",
-] as const;
-
 function interpolate(template: string, values: Record<string, string>): string {
   return Object.entries(values).reduce(
     (output, [key, value]) => output.replaceAll(`{${key}}`, value),
@@ -150,15 +143,6 @@ export function buildTimeoutScript(seed: string): string {
   return pickTemplate(TIMEOUT_TEMPLATES, seed);
 }
 
-export function buildAskHostFallbackScript(params: {
-  guess: string;
-  seed: string;
-}): string {
-  return interpolate(pickTemplate(ASK_HOST_FALLBACK_TEMPLATES, params.seed), {
-    guess: params.guess,
-  });
-}
-
 export function getWwtbamHostPrewarmTexts(): string[] {
   const texts = new Set<string>();
 
@@ -195,12 +179,6 @@ export function getWwtbamHostPrewarmTexts(): string[] {
           moneyValue: formatMoney(MONEY_LADDER[checkpoint] ?? 0),
         }),
       );
-    }
-  }
-
-  for (const template of ASK_HOST_FALLBACK_TEMPLATES) {
-    for (const guess of ["A", "B", "C", "D"]) {
-      texts.add(interpolate(template, { guess }));
     }
   }
 

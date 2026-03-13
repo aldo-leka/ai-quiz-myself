@@ -32,6 +32,7 @@ export type QuestionOption = {
 
 export type PlayableQuestion = QuestionRecord & {
   options: QuestionOption[];
+  hostHintDisplayedOptionIndex?: number | null;
 };
 
 export type QuizWithQuestions = QuizRecord & {

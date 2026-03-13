@@ -11,6 +11,8 @@ export const hubCandidateQuestionSchema = z.object({
   questionText: z.string().min(1),
   options: z.array(hubCandidateOptionSchema).length(4),
   correctOptionIndex: z.number().int().min(0).max(3),
+  hostHintReasoning: z.string().min(1).nullable().optional(),
+  hostHintGuessedOptionIndex: z.number().int().min(0).max(3).nullable().optional(),
   difficulty: z.enum(["easy", "medium", "hard"]),
   subject: z.string().nullable(),
 });

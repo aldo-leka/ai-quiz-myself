@@ -33,6 +33,7 @@ import { downloadR2ObjectBuffer } from "@/lib/r2";
 import { extractArticleText } from "@/lib/url-extraction";
 import { getLanguageModel, getLanguageModelName, resolveUserApiKey } from "@/lib/user-api-keys";
 import { incrementWalletBalanceCents, tryDeductWalletBalanceCents } from "@/lib/wallet";
+import { generateWwtbamHostHintsTask } from "@/trigger/generate-wwtbam-host-hints";
 import { reviewHubCandidateTask } from "@/trigger/review-hub-candidates";
 
 const taskPayloadSchema = z.object({
@@ -793,6 +794,20 @@ export async function runGenerateQuizJob(params: {
           jobId: job.id,
           quizId,
           error: toErrorMessage(candidateError),
+        });
+      }
+    }
+
+    if (effectiveInput.gameMode === "wwtbam") {
+      try {
+        await generateWwtbamHostHintsTask.trigger({
+          quizId,
+        });
+      } catch (hostHintTriggerError) {
+        logger.error("Failed to enqueue WWTBAM host hint generation", {
+          jobId: job.id,
+          quizId,
+          error: toErrorMessage(hostHintTriggerError),
         });
       }
     }

@@ -155,6 +155,8 @@ export const questions = pgTable(
       .$type<Array<{ text: string; explanation: string }>>()
       .notNull(),
     correctOptionIndex: integer("correct_option_index").notNull(),
+    hostHintReasoning: text("host_hint_reasoning"),
+    hostHintGuessedOptionIndex: integer("host_hint_guessed_option_index"),
     difficulty: questionDifficultyEnum("difficulty").notNull(),
     subject: text("subject"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -10,7 +10,6 @@ import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
-import { useHostCommunication } from "@/hooks/useHostCommunication";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
 import { getNextRandomQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
@@ -22,14 +21,12 @@ import {
   QUESTION_LENGTH_SECONDS,
 } from "@/lib/quiz-constants";
 import type {
-  HostMessage,
   PlayableQuestion,
   QuizWithQuestions,
   SaveQuizSessionPayload,
 } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 import {
-  buildAskHostFallbackScript,
   buildCheckpointReachedScript,
   buildCorrectRevealScript,
   buildFinalLockScript,
@@ -39,6 +36,10 @@ import {
   buildWelcomeScript,
   buildWrongRevealScript,
 } from "@/lib/wwtbam-host";
+import {
+  buildStoredAskHostScript,
+  hasStoredWwtbamHostHint,
+} from "@/lib/wwtbam-host-hints";
 
 type FocusControlId =
   | "header-quit"
@@ -196,7 +197,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState<number | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [finalAnswerLocked, setFinalAnswerLocked] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState<HostMessage[]>([]);
   const [visibleOptions, setVisibleOptions] = useState(0);
   const [optionsDisabled, setOptionsDisabled] = useState(true);
   const [eliminatedOptions, setEliminatedOptions] = useState<number[]>([]);
@@ -241,7 +241,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const prefetchedHostAudioUrlsRef = useRef(new Set<string>());
   const preloadedSfxAudioRefs = useRef<Partial<Record<WwtbamSfxKey, HTMLAudioElement>>>({});
   const activeSfxAudioRef = useRef(new Set<HTMLAudioElement>());
-  const askHostRequestIdRef = useRef(0);
   const readAloudEnabledRef = useRef(false);
   const hasStartedIntroRef = useRef(false);
 
@@ -252,11 +251,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
         readAloudEnabled?: boolean;
       }
     | undefined;
-
-  const { sendAction, isLoading: isAskHostThinking } = useHostCommunication({
-    conversationHistory,
-    setConversationHistory,
-  });
 
   const {
     readAloudEnabled,
@@ -274,7 +268,12 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const questions = quiz.questions;
   const currentQuestion = questions[currentQuestionIndex];
   const ttsFingerprint = quiz.ttsFingerprint?.trim() ?? "";
-  const shouldAttemptAiHost = Boolean(sessionData?.user);
+  const hasStoredAskHostHint = Boolean(
+    currentQuestion &&
+      hasStoredWwtbamHostHint(currentQuestion) &&
+      typeof currentQuestion.hostHintDisplayedOptionIndex === "number",
+  );
+  const canUseAskHost = hasStoredAskHostHint;
 
   const ensureHostBedAudio = useCallback(() => {
     if (typeof window === "undefined") {
@@ -638,7 +637,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       setCurrentQuestionIndex(0);
       setSelectedAnswerIndex(null);
       setFinalAnswerLocked(false);
-      setConversationHistory([]);
       setVisibleOptions(4);
       setOptionsDisabled(true);
       setEliminatedOptions([]);
@@ -658,7 +656,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       hasStartedIntroRef.current = false;
       questionFlowRunIdRef.current = 0;
       startedAtRef.current = new Date();
-      askHostRequestIdRef.current += 1;
 
       if (!cancelled) {
         setIsLoading(false);
@@ -674,7 +671,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     return () => {
       cancelled = true;
       questionFlowRunIdRef.current += 1;
-      askHostRequestIdRef.current += 1;
       if (timerRef.current) clearInterval(timerRef.current);
       stopHostNarration();
       stopHostBed();
@@ -860,7 +856,6 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
     revealedAnswerRef.current = false;
     setCorrectAnswerIndex(null);
     setAskHostAdvice(null);
-    askHostRequestIdRef.current += 1;
 
     const introText = buildQuestionIntroScript({
       questionNumber: index + 1,
@@ -1000,46 +995,20 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   }
 
   async function handleAskHost() {
-    if (!currentQuestion || usedLifelines.askHost) return;
+    if (!currentQuestion || usedLifelines.askHost || !canUseAskHost) return;
 
     setUsedLifelines((previous) => ({ ...previous, askHost: true }));
-    const requestId = askHostRequestIdRef.current + 1;
-    askHostRequestIdRef.current = requestId;
-
-    const remainingIndexes = [0, 1, 2, 3].filter((idx) => !eliminatedOptions.includes(idx));
-    const remainingOptions = remainingIndexes.map(
-      (idx) => `${String.fromCharCode(65 + idx)}: ${currentQuestion.options[idx]?.text ?? ""}`,
-    );
-
-    const aiResponse = await sendAction({
-      actionType: "LIFELINE_ASK_HOST",
-      action: "The player asks the host for advice.",
-      currentSetting: {
-        moneyValue: MONEY_LADDER[currentQuestionIndex],
-        remainingTime,
-        difficulty: currentQuestion.difficulty,
-        question: currentQuestion.questionText,
-        options: currentQuestion.options.map((option) => option.text),
-      },
-      additionalData: {
-        remainingOptions,
-      },
-      useAiHost: shouldAttemptAiHost,
-    });
-
-    if (requestId !== askHostRequestIdRef.current) {
-      return;
-    }
-
-    let hostAdviceText = aiResponse?.trim();
+    const hostAdviceText =
+      hasStoredWwtbamHostHint(currentQuestion) &&
+      typeof currentQuestion.hostHintDisplayedOptionIndex === "number"
+        ? buildStoredAskHostScript({
+            displayedOptionIndex: currentQuestion.hostHintDisplayedOptionIndex,
+            reasoning: currentQuestion.hostHintReasoning ?? "",
+          })
+        : null;
 
     if (!hostAdviceText) {
-      const guessIndex = remainingIndexes[Math.floor(Math.random() * remainingIndexes.length)] ?? 0;
-      const guess = String.fromCharCode(65 + guessIndex);
-      hostAdviceText = buildAskHostFallbackScript({
-        guess,
-        seed: `${quiz.id}:${currentQuestion.id}:ask-host:${guess}`,
-      });
+      return;
     }
 
     const spokenAdviceText = normalizeHostSpeechText(hostAdviceText);
@@ -1380,7 +1349,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
       : 100;
   const moneyLadderDisplay = [...MONEY_LADDER.entries()].reverse();
   const readAloudError = readAloudPreferenceError ?? hostNarrationError;
-  const showAskHostStatus = isAskHostThinking || Boolean(askHostAdvice);
+  const showAskHostStatus = Boolean(askHostAdvice);
   const skipNarrationLabel =
     hostNarrationStage === "final-lock" || hostNarrationStage === "timeout"
         ? "Reveal now"
@@ -1461,13 +1430,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                         }
                         void playCurrentPromptAloud();
                       }}
-                      disabled={!currentQuestion || isAskHostThinking}
+                      disabled={!currentQuestion}
                       className={cn(
                         "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition md:text-base",
                         isHostNarrating
                           ? "border-[#818cf8]/70 bg-[#818cf8]/18 text-[#eef1ff]"
                           : "border-[#252940] bg-[#0f1117]/72 text-[#c7cada] hover:border-[#6c8aff]/45 hover:text-[#eef1ff]",
-                        (!currentQuestion || isAskHostThinking) &&
+                        !currentQuestion &&
                           "cursor-not-allowed opacity-70 hover:border-[#252940] hover:text-[#c7cada]",
                       )}
                     >
@@ -1608,15 +1577,18 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                   <GameButton
                     ref={registerFocusControlRef("lifeline-ask-host")}
                     centered
-                    icon={
-                      isAskHostThinking ? <LoaderCircle className="size-5 animate-spin" /> : <User size={20} />
-                    }
+                    icon={<User size={20} />}
                     className={cn(
                       "min-h-12 text-sm md:min-h-16 md:text-xl",
                       compactLayout && "md:min-h-14 md:text-base",
                     )}
                     focused={focusedControl === "lifeline-ask-host"}
-                    disabled={usedLifelines.askHost || optionsDisabled || revealedAnswer || isAskHostThinking}
+                    disabled={
+                      usedLifelines.askHost ||
+                      optionsDisabled ||
+                      revealedAnswer ||
+                      !canUseAskHost
+                    }
                     onClick={() => void handleAskHost()}
                   >
                     Ask the Host
@@ -1625,17 +1597,9 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
                 {showAskHostStatus ? (
                   <div className="rounded-2xl border border-[#252940] bg-[#0f1117]/72 px-4 py-3 text-sm text-[#cfd1df] md:text-base">
-                    {isAskHostThinking ? (
-                      <span className="inline-flex items-center gap-2 font-medium text-amber-200">
-                        <LoaderCircle className="size-4 animate-spin" />
-                        The host is thinking...
-                      </span>
-                    ) : (
-                      <span>
-                        <span className="font-semibold text-amber-200">Host hint:</span>{" "}
-                        {askHostAdvice}
-                      </span>
-                    )}
+                    <span>
+                      <span className="font-semibold text-amber-200">Host hint:</span> {askHostAdvice}
+                    </span>
                   </div>
                 ) : null}
               </div>
