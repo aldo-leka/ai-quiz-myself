@@ -353,9 +353,14 @@ export function DashboardQuizzesPageClient({
                     <p className="text-lg text-[#9394a5] md:text-2xl">Difficulty: {job.difficulty}</p>
                     <div className="mt-6 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-5">
                       {isGenerating ? (
-                        <div className="flex items-center gap-3 text-lg text-amber-200 md:text-2xl">
-                          <Loader2 className="size-5 animate-spin" />
-                          Generating...
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3 text-lg text-amber-200 md:text-2xl">
+                            <Loader2 className="size-5 animate-spin" />
+                            Generating...
+                          </div>
+                          <p className="text-base text-amber-100/85 md:text-lg">
+                            This can take up to 1 minute.
+                          </p>
                         </div>
                       ) : (
                         <div className="space-y-2">
