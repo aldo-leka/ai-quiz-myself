@@ -394,6 +394,43 @@ export const surpriseThemeHistory = pgTable(
   ],
 );
 
+export const userQuizRandomHistory = pgTable(
+  "user_quiz_random_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "cascade" }),
+    gameModeFilter: text("game_mode_filter").notNull().default("all"),
+    languageFilter: text("language_filter").notNull().default("all"),
+    serveCount: integer("serve_count").notNull().default(0),
+    lastServedAt: timestamp("last_served_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("user_quiz_random_history_scope_quiz_uq").on(
+      table.userId,
+      table.gameModeFilter,
+      table.languageFilter,
+      table.quizId,
+    ),
+    index("user_quiz_random_history_scope_served_idx").on(
+      table.userId,
+      table.gameModeFilter,
+      table.languageFilter,
+      table.lastServedAt,
+    ),
+    index("user_quiz_random_history_quiz_id_idx").on(table.quizId),
+  ],
+);
+
 export const credits = pgTable(
   "credits",
   {
@@ -540,6 +577,7 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   generationJobs: many(quizGenerationJobs),
   embeddings: many(quizEmbeddings),
   themeEmbeddings: many(hubThemeEmbeddings),
+  randomHistory: many(userQuizRandomHistory),
   votes: many(quizVotes),
 }));
 
@@ -636,6 +674,20 @@ export const surpriseThemeHistoryRelations = relations(
     user: one(user, {
       fields: [surpriseThemeHistory.userId],
       references: [user.id],
+    }),
+  }),
+);
+
+export const userQuizRandomHistoryRelations = relations(
+  userQuizRandomHistory,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [userQuizRandomHistory.userId],
+      references: [user.id],
+    }),
+    quiz: one(quizzes, {
+      fields: [userQuizRandomHistory.quizId],
+      references: [quizzes.id],
     }),
   }),
 );

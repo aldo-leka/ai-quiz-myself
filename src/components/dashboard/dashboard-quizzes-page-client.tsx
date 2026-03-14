@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Play, Trash2 } from "lucide-react";
 import { PlayerSelect } from "@/components/dashboard/player-select";
@@ -15,6 +16,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { MY_QUIZZES_RANDOM_SOURCE, buildQuizPlayPath, type MyQuizzesRandomContext, type MyQuizzesRandomGameModeFilter, type MyQuizzesRandomLanguageFilter } from "@/lib/my-quizzes-random";
+import { selectMyQuizzesRandomQuizId } from "@/lib/my-quizzes-random-client";
 import { focusRemoteControl } from "@/lib/remote-focus";
 
 type UserQuizRow = {
@@ -53,10 +56,10 @@ type DashboardQuizzesResponse = {
   hasMore: boolean;
 };
 
-type ModeFilter = "all" | "single" | "wwtbam" | "couch_coop";
+type ModeFilter = MyQuizzesRandomGameModeFilter;
 type StatusFilter = "all" | "ready" | "generating" | "failed";
-type LanguageFilter = "all" | string;
-type QuizFilterFocusTarget = "mode" | "status" | "language";
+type LanguageFilter = MyQuizzesRandomLanguageFilter;
+type QuizFilterFocusTarget = "mode" | "status" | "language" | "random";
 
 const modeOptions: Array<{ value: ModeFilter; label: string }> = [
   { value: "all", label: "All Modes" },
@@ -94,6 +97,7 @@ const quizFilterIdByTarget: Record<QuizFilterFocusTarget, string> = {
   mode: "quizzes-filter-mode",
   status: "quizzes-filter-status",
   language: "quizzes-filter-language",
+  random: "quizzes-play-random",
 };
 
 function formatLanguageLabel(value: string): string {
@@ -113,6 +117,8 @@ function getQuizFilterTargetFromTvId(tvId: string | undefined): QuizFilterFocusT
       return "status";
     case "quizzes-filter-language":
       return "language";
+    case "quizzes-play-random":
+      return "random";
     default:
       return null;
   }
@@ -127,6 +133,7 @@ export function DashboardQuizzesPageClient({
   creatorImage,
   creatorName,
 }: DashboardQuizzesPageClientProps) {
+  const router = useRouter();
   const [rows, setRows] = useState<UserQuizRow[]>([]);
   const [jobs, setJobs] = useState<GenerationJobRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,11 +147,17 @@ export function DashboardQuizzesPageClient({
   const [hasMore, setHasMore] = useState(false);
   const [quizPendingDelete, setQuizPendingDelete] = useState<UserQuizRow | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
+  const [isRandomPlayLoading, setIsRandomPlayLoading] = useState(false);
   const [modeSelectOpen, setModeSelectOpen] = useState(false);
   const [statusSelectOpen, setStatusSelectOpen] = useState(false);
   const [languageSelectOpen, setLanguageSelectOpen] = useState(false);
   const lastQuizFilterTargetRef = useRef<QuizFilterFocusTarget>("mode");
   const anyQuizFilterSelectOpen = modeSelectOpen || statusSelectOpen || languageSelectOpen;
+  const canStartRandomPlay =
+    !loading &&
+    !isRandomPlayLoading &&
+    (status === "all" || status === "ready") &&
+    (rows.length > 0 || hasMore);
 
   const displayItems = useMemo(() => {
     const quizItems = rows.map((quiz) => ({
@@ -191,6 +204,22 @@ export function DashboardQuizzesPageClient({
     ];
   }, [availableLanguages, language]);
 
+  const playRandomContext = useMemo<MyQuizzesRandomContext>(
+    () => ({
+      source: MY_QUIZZES_RANDOM_SOURCE,
+      filters: {
+        gameMode: mode,
+        language,
+      },
+    }),
+    [language, mode],
+  );
+
+  const availableQuizFilterTargets = useMemo<QuizFilterFocusTarget[]>(
+    () => (canStartRandomPlay ? ["mode", "status", "language", "random"] : ["mode", "status", "language"]),
+    [canStartRandomPlay],
+  );
+
   const focusElementByTvId = useCallback((tvId: string) => {
     const node = document.querySelector<HTMLElement>(`[data-tv-id='${tvId}']`);
     if (!node) return false;
@@ -201,11 +230,44 @@ export function DashboardQuizzesPageClient({
 
   const focusQuizFilterControl = useCallback(
     (target: QuizFilterFocusTarget) => {
-      lastQuizFilterTargetRef.current = target;
-      return focusElementByTvId(quizFilterIdByTarget[target]);
+      const resolvedTarget = availableQuizFilterTargets.includes(target)
+        ? target
+        : availableQuizFilterTargets[availableQuizFilterTargets.length - 1] ?? "language";
+      lastQuizFilterTargetRef.current = resolvedTarget;
+      return focusElementByTvId(quizFilterIdByTarget[resolvedTarget]);
     },
-    [focusElementByTvId],
+    [availableQuizFilterTargets, focusElementByTvId],
   );
+
+  const startRandomPlay = useCallback(async () => {
+    if (isRandomPlayLoading) return;
+
+    if (status !== "all" && status !== "ready") {
+      setError("Random play only works with Ready or All status filters.");
+      return;
+    }
+
+    setIsRandomPlayLoading(true);
+    setError(null);
+    try {
+      const quizId = await selectMyQuizzesRandomQuizId({
+        filters: playRandomContext.filters,
+      });
+      router.push(
+        buildQuizPlayPath({
+          quizId,
+          playContext: playRandomContext,
+        }),
+      );
+    } catch (randomPlayError) {
+      setError(
+        randomPlayError instanceof Error
+          ? randomPlayError.message
+          : "Could not start a random quiz.",
+      );
+      setIsRandomPlayLoading(false);
+    }
+  }, [isRandomPlayLoading, playRandomContext, router, status]);
 
   const load = useCallback(async (options?: { background?: boolean }) => {
     const isBackground = options?.background ?? false;
@@ -341,15 +403,14 @@ export function DashboardQuizzesPageClient({
         return;
       }
 
-      const filterOrder: QuizFilterFocusTarget[] = ["mode", "status", "language"];
-      const currentIndex = filterOrder.indexOf(currentFilterTarget);
+      const currentIndex = availableQuizFilterTargets.indexOf(currentFilterTarget);
       if (currentIndex === -1) return;
 
       const nextIndex =
         event.key === "ArrowLeft"
           ? Math.max(0, currentIndex - 1)
-          : Math.min(filterOrder.length - 1, currentIndex + 1);
-      const nextTarget = filterOrder[nextIndex];
+          : Math.min(availableQuizFilterTargets.length - 1, currentIndex + 1);
+      const nextTarget = availableQuizFilterTargets[nextIndex];
       if (!nextTarget || nextTarget === currentFilterTarget) return;
 
       focusQuizFilterControl(nextTarget);
@@ -358,6 +419,7 @@ export function DashboardQuizzesPageClient({
     window.addEventListener("keydown", onQuizFilterKeyDown, true);
     return () => window.removeEventListener("keydown", onQuizFilterKeyDown, true);
   }, [
+    availableQuizFilterTargets,
     anyQuizFilterSelectOpen,
     focusElementByTvId,
     focusQuizFilterControl,
@@ -475,6 +537,31 @@ export function DashboardQuizzesPageClient({
                 triggerId={quizFilterIdByTarget.language}
                 widthClassName="w-full min-w-[190px] sm:w-[220px]"
               />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-transparent">
+                Random
+              </p>
+              <Button
+                type="button"
+                data-tv-id={quizFilterIdByTarget.random}
+                disabled={!canStartRandomPlay}
+                className={playerButtonBaseClass + " " + playerButtonCyanClass}
+                onClick={() => void startRandomPlay()}
+              >
+                {isRandomPlayLoading ? (
+                  <>
+                    <Loader2 className="mr-2 size-5 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 size-5" />
+                    Play Random
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

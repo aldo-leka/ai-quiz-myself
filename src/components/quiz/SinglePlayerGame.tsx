@@ -22,13 +22,16 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { authClient } from "@/lib/auth-client";
-import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
+import { getNextQuizIdForPlayback } from "@/lib/my-quizzes-random-client";
+import { rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
 type SinglePlayerGameProps = {
   quiz: QuizWithQuestions;
+  playContext?: MyQuizzesRandomContext | null;
 };
 
 type GamePhase = "question" | "reveal" | "complete";
@@ -75,7 +78,7 @@ function computeLikeRatioLabel(likes: number, dislikes: number) {
   return `${Math.round((likes / total) * 100)}% likes`;
 }
 
-export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
+export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameProps) {
   const router = useRouter();
   const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
@@ -131,6 +134,11 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
   const finalizedQuestionKeyRef = useRef<string | null>(null);
 
   const totalQuestions = quiz.questions.length;
+  const homePath = playContext ? "/dashboard" : "/";
+  const nextButtonLabel = playContext ? "Next Random" : "Play Next";
+  const nextHeaderLabel = playContext
+    ? (isLoadingNextQuiz ? "Loading next random" : "Next Random")
+    : (isLoadingNextQuiz ? "Loading next quiz" : "Next quiz");
   const currentQuestion = quiz.questions[currentQuestionIndex];
   const questionPlaybackKey = currentQuestion ? `${currentQuestionIndex}:${currentQuestion.id}` : null;
   const currentCorrectOptionIndex = currentQuestion?.correctOptionIndex ?? null;
@@ -211,23 +219,29 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRecommendedQuizId({
+      const nextQuizId = await getNextQuizIdForPlayback({
         mode: "single",
         currentQuizId: quiz.id,
+        playContext,
       });
 
       if (!nextQuizId) {
-        router.push("/");
+        router.push(homePath);
         return;
       }
 
-      router.push(`/play/${nextQuizId}`);
+      router.push(
+        buildQuizPlayPath({
+          quizId: nextQuizId,
+          playContext,
+        }),
+      );
     } catch {
-      router.push("/");
+      router.push(homePath);
     } finally {
       setIsLoadingNextQuiz(false);
     }
-  }, [isLoadingNextQuiz, quiz.id, router]);
+  }, [homePath, isLoadingNextQuiz, playContext, quiz.id, router]);
 
   const questionReadAloudSegments = useMemo(() => {
     if (!currentQuestion) {
@@ -467,7 +481,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
       if (focusedHeaderTarget) {
         if (event.key === "Enter") {
           if (focusedHeaderTarget === "header-quit") {
-            router.push("/");
+            router.push(homePath);
             return;
           }
 
@@ -526,7 +540,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [finalizeAnswer, focusedAnswerIndex, focusedHeaderTarget, phase, playNext, router]);
+  }, [finalizeAnswer, focusedAnswerIndex, focusedHeaderTarget, homePath, phase, playNext, router]);
 
   useEffect(() => {
     if (phase === "complete") {
@@ -842,7 +856,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
         if (!focusedCompleteTarget) return;
 
         if (focusedCompleteTarget === "header-quit") {
-          router.push("/");
+          router.push(homePath);
           return;
         }
 
@@ -880,7 +894,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           return;
         }
 
-        router.push("/");
+        router.push(homePath);
         return;
       }
 
@@ -894,7 +908,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusedCompleteTarget, getNextCompleteTarget, phase, playAgain, playNext, router, submitVote]);
+  }, [focusedCompleteTarget, getNextCompleteTarget, homePath, phase, playAgain, playNext, router, submitVote]);
 
   useEffect(() => {
     if (phase !== "reveal") return;
@@ -913,7 +927,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
       if (event.key === "Enter") {
         if (focusedRevealTarget === "header-quit") {
-          router.push("/");
+          router.push(homePath);
           return;
         }
 
@@ -948,7 +962,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusedRevealTarget, moveToNextQuestion, phase, playNext, router]);
+  }, [focusedRevealTarget, homePath, moveToNextQuestion, phase, playNext, router]);
 
   if (!currentQuestion && phase !== "complete") {
     return (
@@ -958,7 +972,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           <p className="text-lg text-[#9394a5]">Could not load this quiz.</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={playAgain}>Retry</CircularButton>
-            <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
+            <CircularButton onClick={() => router.push(homePath)}>Home</CircularButton>
           </div>
         </div>
       </div>
@@ -985,7 +999,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
             focused={focusedCompleteTarget === playNextTarget}
             onClick={() => void playNext()}
           >
-            {isLoadingNextQuiz ? "Loading..." : "Play Next"}
+            {isLoadingNextQuiz ? "Loading..." : nextButtonLabel}
           </GameButton>
           <GameButton
             ref={registerCompleteFocusRef(playAgainTarget)}
@@ -1014,7 +1028,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
           leftActionLabel="Quit"
-          leftActionOnClick={() => router.push("/")}
+          leftActionOnClick={() => router.push(homePath)}
           leftActionFocused={
             (phase === "question" && focusedHeaderTarget === "header-quit") ||
             (phase === "reveal" && focusedRevealTarget === "header-quit") ||
@@ -1022,7 +1036,7 @@ export function SinglePlayerGame({ quiz }: SinglePlayerGameProps) {
           }
           leftActionButtonRef={registerHeaderButtonRef("header-quit")}
           leftActionIcon={<House className="size-5 md:size-6" />}
-          rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+          rightActionLabel={nextHeaderLabel}
           rightActionOnClick={() => void playNext()}
           rightActionDisabled={isLoadingNextQuiz}
           rightActionFocused={

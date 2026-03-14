@@ -24,13 +24,16 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
-import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
+import { getNextQuizIdForPlayback } from "@/lib/my-quizzes-random-client";
+import { rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl, scrollRemoteControlIntoView } from "@/lib/remote-focus";
 import type { PlayableQuestion, QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
 import { cn } from "@/lib/utils";
 
 type CouchCoopGameProps = {
   quiz: QuizWithQuestions;
+  playContext?: MyQuizzesRandomContext | null;
 };
 
 type GamePhase = "setup" | "question" | "reveal" | "complete";
@@ -102,7 +105,7 @@ function normalizePlayerNames(rawNames: string[]): string[] {
   });
 }
 
-export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
+export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) {
   const router = useRouter();
   const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
@@ -113,6 +116,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
     | undefined;
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
+  const homePath = playContext ? "/dashboard" : "/";
 
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [setupNames, setSetupNames] = useState<string[]>(["", ""]);
@@ -140,6 +144,10 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
   const [voteError, setVoteError] = useState<string | null>(null);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
   const [answerWindowOpen, setAnswerWindowOpen] = useState(false);
+  const nextButtonLabel = playContext ? "Next Random" : "Play Next";
+  const nextHeaderLabel = playContext
+    ? (isLoadingNextQuiz ? "Loading next random" : "Next Random")
+    : (isLoadingNextQuiz ? "Loading next quiz" : "Next quiz");
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const headerButtonRefs = useRef<Record<HeaderActionTarget, HTMLButtonElement | null>>({
@@ -302,23 +310,29 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRecommendedQuizId({
+      const nextQuizId = await getNextQuizIdForPlayback({
         mode: "couch_coop",
         currentQuizId: quiz.id,
+        playContext,
       });
 
       if (!nextQuizId) {
-        router.push("/");
+        router.push(homePath);
         return;
       }
 
-      router.push(`/play/${nextQuizId}`);
+      router.push(
+        buildQuizPlayPath({
+          quizId: nextQuizId,
+          playContext,
+        }),
+      );
     } catch {
-      router.push("/");
+      router.push(homePath);
     } finally {
       setIsLoadingNextQuiz(false);
     }
-  }, [isLoadingNextQuiz, quiz.id, router]);
+  }, [homePath, isLoadingNextQuiz, playContext, quiz.id, router]);
 
   const beginRound = useCallback((nextPlayerNames: string[]) => {
     const trimmedPlayers = normalizePlayerNames(nextPlayerNames);
@@ -602,7 +616,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         if (!setupFocusTarget) return;
 
         if (setupFocusTarget === "header-quit" || setupFocusTarget === "setup-back") {
-          router.push("/");
+          router.push(homePath);
           return;
         }
 
@@ -737,7 +751,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [phase, pickAnotherCouchQuiz, router, setupFocusTarget, setupNames, startGameFromSetup]);
+  }, [homePath, phase, pickAnotherCouchQuiz, router, setupFocusTarget, setupNames, startGameFromSetup]);
 
   useEffect(() => {
     if (phase !== "question" || !currentQuestion) {
@@ -801,7 +815,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
       if (focusedHeaderTarget) {
         if (event.key === "Enter") {
           if (focusedHeaderTarget === "header-quit") {
-            router.push("/");
+            router.push(homePath);
             return;
           }
 
@@ -860,7 +874,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [finalizeAnswer, focusedAnswerIndex, focusedHeaderTarget, phase, pickAnotherCouchQuiz, router]);
+  }, [finalizeAnswer, focusedAnswerIndex, focusedHeaderTarget, homePath, phase, pickAnotherCouchQuiz, router]);
 
   useEffect(() => {
     if (phase === "question") {
@@ -891,7 +905,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
       if (event.key === "Enter") {
         if (focusedRevealTarget === "header-quit") {
-          router.push("/");
+          router.push(homePath);
           return;
         }
 
@@ -926,7 +940,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusedRevealTarget, moveToNextTurn, phase, pickAnotherCouchQuiz, router]);
+  }, [focusedRevealTarget, homePath, moveToNextTurn, phase, pickAnotherCouchQuiz, router]);
 
   useEffect(() => {
     if (phase === "complete") {
@@ -962,7 +976,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
         if (!focusedCompleteTarget) return;
 
         if (focusedCompleteTarget === "header-quit") {
-          router.push("/");
+          router.push(homePath);
           return;
         }
 
@@ -1024,7 +1038,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [completeFocusRows, focusedCompleteTarget, phase, pickAnotherCouchQuiz, rematch, router, submitVote]);
+  }, [completeFocusRows, focusedCompleteTarget, homePath, phase, pickAnotherCouchQuiz, rematch, router, submitVote]);
 
   useEffect(() => {
     return () => {
@@ -1200,11 +1214,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
             leftActionLabel="Quit"
-            leftActionOnClick={() => router.push("/")}
+            leftActionOnClick={() => router.push(homePath)}
             leftActionButtonRef={registerHeaderButtonRef("header-quit")}
             leftActionFocused={setupFocusTarget === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
-            rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+            rightActionLabel={nextHeaderLabel}
             rightActionOnClick={() => void pickAnotherCouchQuiz()}
             rightActionDisabled={isLoadingNextQuiz}
             rightActionButtonRef={registerHeaderButtonRef("header-next")}
@@ -1333,7 +1347,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 focused={setupFocusTarget === "setup-back"}
                 ref={registerSetupButtonRef("setup-back")}
                 className="min-h-16 max-w-sm text-lg md:text-xl"
-                onClick={() => router.push("/")}
+                onClick={() => router.push(homePath)}
               >
                 Back to Hub
               </GameButton>
@@ -1351,7 +1365,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
           <h1 className="text-3xl font-bold md:text-4xl">Quiz unavailable</h1>
           <p className="text-lg text-[#9394a5] md:text-xl">Could not load this couch co-op quiz.</p>
           <div className="flex justify-center">
-            <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
+            <CircularButton onClick={() => router.push(homePath)}>Home</CircularButton>
           </div>
         </div>
       </div>
@@ -1367,11 +1381,11 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
             leftActionLabel="Quit"
-            leftActionOnClick={() => router.push("/")}
+            leftActionOnClick={() => router.push(homePath)}
             leftActionButtonRef={registerHeaderButtonRef("header-quit")}
             leftActionFocused={focusedCompleteTarget === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
-            rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+            rightActionLabel={nextHeaderLabel}
             rightActionOnClick={() => void pickAnotherCouchQuiz()}
             rightActionDisabled={isLoadingNextQuiz}
             rightActionButtonRef={registerHeaderButtonRef("header-next")}
@@ -1508,7 +1522,7 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
                 className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
                 onClick={() => void pickAnotherCouchQuiz()}
               >
-                {isLoadingNextQuiz ? "Loading..." : "Play Next"}
+                {isLoadingNextQuiz ? "Loading..." : nextButtonLabel}
               </GameButton>
               <GameButton
                 ref={(node) => {
@@ -1544,14 +1558,14 @@ export function CouchCoopGame({ quiz }: CouchCoopGameProps) {
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
           leftActionLabel="Quit"
-          leftActionOnClick={() => router.push("/")}
+          leftActionOnClick={() => router.push(homePath)}
           leftActionButtonRef={registerHeaderButtonRef("header-quit")}
           leftActionFocused={
             (phase === "question" && focusedHeaderTarget === "header-quit") ||
             (phase === "reveal" && focusedRevealTarget === "header-quit")
           }
           leftActionIcon={<House className="size-5 md:size-6" />}
-          rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+          rightActionLabel={nextHeaderLabel}
           rightActionOnClick={() => void pickAnotherCouchQuiz()}
           rightActionDisabled={isLoadingNextQuiz}
           rightActionButtonRef={registerHeaderButtonRef("header-next")}

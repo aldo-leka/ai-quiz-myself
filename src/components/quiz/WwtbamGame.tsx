@@ -12,7 +12,9 @@ import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
-import { getNextRecommendedQuizId, rememberRecentQuiz } from "@/lib/recent-quiz-history";
+import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
+import { getNextQuizIdForPlayback } from "@/lib/my-quizzes-random-client";
+import { rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import {
   CHECKPOINTS,
@@ -56,6 +58,7 @@ type FocusControlId =
 
 type WwtbamGameProps = {
   quiz: QuizWithQuestions;
+  playContext?: MyQuizzesRandomContext | null;
 };
 
 type NarrationResult = "completed" | "skipped" | "interrupted";
@@ -199,12 +202,13 @@ function toHostNarrationErrorMessage(error: unknown): string {
   return "Read aloud is unavailable right now.";
 }
 
-export function WwtbamGame({ quiz }: WwtbamGameProps) {
+export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
   const retryToken = searchParams.get("retry") ?? "";
+  const homePath = playContext ? "/dashboard" : "/";
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -238,6 +242,10 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
   const [isVoting, setIsVoting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
+  const nextButtonLabel = playContext ? "Next Random" : "Play Next";
+  const nextHeaderLabel = playContext
+    ? (isLoadingNextQuiz ? "Loading next random" : "Next Random")
+    : (isLoadingNextQuiz ? "Loading next quiz" : "Next quiz");
 
   const [focusedControl, setFocusedControl] = useState<FocusControlId | null>(null);
 
@@ -1322,19 +1330,25 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
     setIsLoadingNextQuiz(true);
     try {
-      const nextQuizId = await getNextRecommendedQuizId({
+      const nextQuizId = await getNextQuizIdForPlayback({
         mode: "wwtbam",
         currentQuizId: quiz.id,
+        playContext,
       });
 
       if (!nextQuizId) {
-        router.push("/");
+        router.push(homePath);
         return;
       }
 
-      router.push(`/play/${nextQuizId}`);
+      router.push(
+        buildQuizPlayPath({
+          quizId: nextQuizId,
+          playContext,
+        }),
+      );
     } catch {
-      router.push("/");
+      router.push(homePath);
     } finally {
       setIsLoadingNextQuiz(false);
     }
@@ -1343,7 +1357,13 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
   function playAgain() {
     stopHostNarration();
     stopTimer();
-    router.replace(`/play/${quiz.id}?retry=${Date.now()}`);
+    router.replace(
+      buildQuizPlayPath({
+        quizId: quiz.id,
+        playContext,
+        retryToken: Date.now(),
+      }),
+    );
   }
 
   async function submitVote(nextVote: VoteType) {
@@ -1383,7 +1403,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
 
   function triggerControl(controlId: FocusControlId) {
     if (controlId === "header-quit") {
-      router.push("/");
+      router.push(homePath);
       return;
     }
 
@@ -1452,7 +1472,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           <p className="text-lg text-[#9394a5]">Could not load this quiz.</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={() => router.refresh()}>Retry</CircularButton>
-            <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
+            <CircularButton onClick={() => router.push(homePath)}>Home</CircularButton>
           </div>
         </div>
       </div>
@@ -1468,11 +1488,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
             creatorName={quiz.creatorName}
             creatorImage={quiz.creatorImage}
             leftActionLabel="Quit"
-            leftActionOnClick={() => router.push("/")}
+            leftActionOnClick={() => router.push(homePath)}
             leftActionButtonRef={registerFocusControlRef("header-quit")}
             leftActionFocused={focusedControl === "header-quit"}
             leftActionIcon={<House className="size-5 md:size-6" />}
-            rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+            rightActionLabel={nextHeaderLabel}
             rightActionOnClick={() => void playRandomAgain()}
             rightActionDisabled={isLoadingNextQuiz}
             rightActionButtonRef={registerFocusControlRef("header-next")}
@@ -1565,7 +1585,7 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
                 className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/18 text-2xl text-[#e4e4e9] md:text-3xl"
                 onClick={() => void playRandomAgain()}
               >
-                {isLoadingNextQuiz ? "Loading..." : "Play Next"}
+                {isLoadingNextQuiz ? "Loading..." : nextButtonLabel}
               </GameButton>
               <GameButton
                 ref={registerFocusControlRef("gameover-play-again")}
@@ -1618,11 +1638,11 @@ export function WwtbamGame({ quiz }: WwtbamGameProps) {
           creatorName={quiz.creatorName}
           creatorImage={quiz.creatorImage}
           leftActionLabel="Quit"
-          leftActionOnClick={() => router.push("/")}
+          leftActionOnClick={() => router.push(homePath)}
           leftActionButtonRef={registerFocusControlRef("header-quit")}
           leftActionFocused={focusedControl === "header-quit"}
           leftActionIcon={<House className="size-5 md:size-6" />}
-          rightActionLabel={isLoadingNextQuiz ? "Loading next quiz" : "Next quiz"}
+          rightActionLabel={nextHeaderLabel}
           rightActionOnClick={() => void playRandomAgain()}
           rightActionDisabled={isLoadingNextQuiz}
           rightActionButtonRef={registerFocusControlRef("header-next")}

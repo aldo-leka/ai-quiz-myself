@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { CouchCoopGame } from "@/components/quiz/CouchCoopGame";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { SinglePlayerGame } from "@/components/quiz/SinglePlayerGame";
 import { WwtbamGame } from "@/components/quiz/WwtbamGame";
+import { parseMyQuizzesRandomContext } from "@/lib/my-quizzes-random";
 import type { QuizWithQuestions } from "@/lib/quiz-types";
 
 export default function PlayQuizPage() {
   const params = useParams<{ quizId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const playContext = useMemo(
+    () => parseMyQuizzesRandomContext(searchParams),
+    [searchParams],
+  );
+  const homePath = playContext ? "/dashboard" : "/";
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,7 +79,7 @@ export default function PlayQuizPage() {
           <p className="text-lg text-[#9394a5]">{loadError ?? "Could not load this quiz."}</p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <CircularButton onClick={() => router.refresh()}>Retry</CircularButton>
-            <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
+            <CircularButton onClick={() => router.push(homePath)}>Home</CircularButton>
           </div>
         </div>
       </div>
@@ -80,15 +87,15 @@ export default function PlayQuizPage() {
   }
 
   if (quiz.gameMode === "wwtbam") {
-    return <WwtbamGame quiz={quiz} />;
+    return <WwtbamGame quiz={quiz} playContext={playContext} />;
   }
 
   if (quiz.gameMode === "single") {
-    return <SinglePlayerGame quiz={quiz} />;
+    return <SinglePlayerGame quiz={quiz} playContext={playContext} />;
   }
 
   if (quiz.gameMode === "couch_coop") {
-    return <CouchCoopGame quiz={quiz} />;
+    return <CouchCoopGame quiz={quiz} playContext={playContext} />;
   }
 
   return (
@@ -97,7 +104,7 @@ export default function PlayQuizPage() {
         <h1 className="text-3xl font-bold md:text-4xl">Couch Co-op</h1>
         <p className="text-lg text-[#9394a5] md:text-xl">Coming soon. This mode is next in the queue.</p>
         <div className="flex justify-center">
-          <CircularButton onClick={() => router.push("/")}>Home</CircularButton>
+          <CircularButton onClick={() => router.push(homePath)}>Home</CircularButton>
         </div>
       </div>
     </div>

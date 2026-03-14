@@ -477,7 +477,8 @@ export function DashboardShell({
           return (
             node.dataset.tvId === "quizzes-filter-mode" ||
             node.dataset.tvId === "quizzes-filter-status" ||
-            node.dataset.tvId === "quizzes-filter-language"
+            node.dataset.tvId === "quizzes-filter-language" ||
+            node.dataset.tvId === "quizzes-play-random"
           );
         });
         const nearestQuizFilter = findNextDashboardControl(
