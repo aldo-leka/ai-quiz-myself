@@ -21,6 +21,9 @@ type PlayerSelectProps<T extends string> = {
   placeholder?: string;
   widthClassName?: string;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  triggerId?: string;
 };
 
 export function PlayerSelect<T extends string>({
@@ -30,10 +33,20 @@ export function PlayerSelect<T extends string>({
   placeholder,
   widthClassName = "w-full sm:w-72",
   disabled = false,
+  open,
+  onOpenChange,
+  triggerId,
 }: PlayerSelectProps<T>) {
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <SelectTrigger
+        data-tv-id={triggerId}
         className={cn(
           "min-h-14 rounded-full border-[#252940] bg-[#0f1117]/88 px-6 py-2.5 text-lg font-semibold text-[#e4e4e9] shadow-[0_0_0_1px_rgba(108,138,255,0.14)] transition md:min-h-16 md:px-7 md:text-2xl data-[size=default]:h-auto",
           "data-[state=open]:border-[#818cf8]/55 data-[state=open]:shadow-[0_0_0_1px_rgba(129,140,248,0.24),0_16px_40px_rgba(15,17,23,0.46)]",

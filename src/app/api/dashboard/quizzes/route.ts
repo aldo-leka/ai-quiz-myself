@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   quizGameModeEnum,
@@ -35,16 +35,23 @@ function normalizeGameMode(value: string | null): GameModeFilter {
   return "all";
 }
 
+function normalizeLanguage(value: string | null): string | null {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? normalized : null;
+}
+
 function parseJobInputData(inputData: unknown): {
   theme: string;
   gameMode: (typeof quizGameModeEnum.enumValues)[number];
   difficulty: string;
+  language: string;
 } {
   if (!inputData || typeof inputData !== "object") {
     return {
       theme: "Unknown",
       gameMode: "single",
       difficulty: "mixed",
+      language: "en",
     };
   }
 
@@ -53,6 +60,7 @@ function parseJobInputData(inputData: unknown): {
     displayTheme?: unknown;
     gameMode?: unknown;
     difficulty?: unknown;
+    language?: unknown;
   };
 
   const gameMode =
@@ -69,6 +77,7 @@ function parseJobInputData(inputData: unknown): {
           : "Unknown",
     gameMode,
     difficulty: typeof payload.difficulty === "string" ? payload.difficulty : "mixed",
+    language: typeof payload.language === "string" ? payload.language.trim().toLowerCase() || "en" : "en",
   };
 }
 
@@ -84,16 +93,22 @@ export async function GET(request: Request) {
   const sort = normalizeSort(searchParams.get("sort"));
   const status = normalizeStatus(searchParams.get("status"));
   const mode = normalizeGameMode(searchParams.get("gameMode"));
+  const language = normalizeLanguage(searchParams.get("language"));
 
   const offset = (page - 1) * limit;
-  const quizFilters = [eq(quizzes.creatorId, session.user.id), eq(quizzes.isHub, false)];
+  const baseQuizFilters = [eq(quizzes.creatorId, session.user.id), eq(quizzes.isHub, false)];
+  const quizFilters = [...baseQuizFilters];
   if (mode !== "all") {
     quizFilters.push(eq(quizzes.gameMode, mode));
   }
+  if (language) {
+    quizFilters.push(eq(quizzes.language, language));
+  }
 
   const shouldIncludeReady = status === "all" || status === "ready";
-  const [quizCountRows, quizRows] = shouldIncludeReady
-    ? await Promise.all([
+  const shouldIncludeJobs = status === "all" || status === "generating" || status === "failed";
+  const readyRowsPromise = shouldIncludeReady
+    ? Promise.all([
         db
           .select({
             total: sql<number>`count(*)::int`,
@@ -105,6 +120,7 @@ export async function GET(request: Request) {
             id: quizzes.id,
             title: quizzes.title,
             theme: quizzes.theme,
+            language: quizzes.language,
             difficulty: quizzes.difficulty,
             gameMode: quizzes.gameMode,
             generationProvider: quizzes.generationProvider,
@@ -123,11 +139,10 @@ export async function GET(request: Request) {
           .limit(limit)
           .offset(offset),
       ])
-    : [[{ total: 0 }], []];
+    : Promise.resolve([[{ total: 0 }], []] as const);
 
-  const shouldIncludeJobs = status === "all" || status === "generating" || status === "failed";
-  const jobRows = shouldIncludeJobs
-    ? await db
+  const jobRowsPromise = shouldIncludeJobs
+    ? db
         .select({
           id: quizGenerationJobs.id,
           status: quizGenerationJobs.status,
@@ -145,7 +160,22 @@ export async function GET(request: Request) {
         )
         .orderBy(desc(quizGenerationJobs.createdAt))
         .limit(40)
-    : [];
+    : Promise.resolve([]);
+
+  const availableLanguageRowsPromise = db
+    .select({
+      language: quizzes.language,
+    })
+    .from(quizzes)
+    .where(and(...baseQuizFilters))
+    .groupBy(quizzes.language)
+    .orderBy(asc(quizzes.language));
+
+  const [[quizCountRows, quizRows], jobRows, availableLanguageRows] = await Promise.all([
+    readyRowsPromise,
+    jobRowsPromise,
+    availableLanguageRowsPromise,
+  ]);
 
   const filteredJobs = jobRows
     .map((row) => {
@@ -160,6 +190,7 @@ export async function GET(request: Request) {
     })
     .filter((job) => {
       if (mode !== "all" && job.gameMode !== mode) return false;
+      if (language && job.language !== language) return false;
       if (status === "generating") {
         return job.status === "pending" || job.status === "processing";
       }
@@ -184,10 +215,14 @@ export async function GET(request: Request) {
 
   const quizTotal = Number(quizCountRows[0]?.total ?? 0);
   const total = quizTotal + filteredJobs.length;
+  const availableLanguages = availableLanguageRows
+    .map((row) => row.language.trim().toLowerCase())
+    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
 
   return NextResponse.json({
     quizzes: quizzesPayload,
     jobs: filteredJobs,
+    availableLanguages,
     page,
     limit,
     total,

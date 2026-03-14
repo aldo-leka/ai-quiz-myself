@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Play, RotateCcw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Loader2, Play, Trash2 } from "lucide-react";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 import { QuizCard, type QuizCardGenerationProvider } from "@/components/quiz/QuizCard";
 import {
@@ -15,11 +15,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { focusRemoteControl } from "@/lib/remote-focus";
 
 type UserQuizRow = {
   id: string;
   title: string;
   theme: string;
+  language: string;
   difficulty: "easy" | "medium" | "hard" | "mixed" | "escalating";
   gameMode: "single" | "wwtbam" | "couch_coop";
   generationProvider: QuizCardGenerationProvider | null;
@@ -33,6 +35,7 @@ type UserQuizRow = {
 type GenerationJobRow = {
   id: string;
   theme: string;
+  language: string;
   gameMode: "single" | "wwtbam" | "couch_coop";
   difficulty: string;
   status: "pending" | "processing" | "failed";
@@ -43,6 +46,7 @@ type GenerationJobRow = {
 type DashboardQuizzesResponse = {
   quizzes: UserQuizRow[];
   jobs: GenerationJobRow[];
+  availableLanguages: string[];
   page: number;
   limit: number;
   total: number;
@@ -51,7 +55,8 @@ type DashboardQuizzesResponse = {
 
 type ModeFilter = "all" | "single" | "wwtbam" | "couch_coop";
 type StatusFilter = "all" | "ready" | "generating" | "failed";
-type SortFilter = "newest" | "most_played";
+type LanguageFilter = "all" | string;
+type QuizFilterFocusTarget = "mode" | "status" | "language";
 
 const modeOptions: Array<{ value: ModeFilter; label: string }> = [
   { value: "all", label: "All Modes" },
@@ -67,11 +72,6 @@ const statusOptions: Array<{ value: StatusFilter; label: string }> = [
   { value: "failed", label: "Failed" },
 ];
 
-const sortOptions: Array<{ value: SortFilter; label: string }> = [
-  { value: "newest", label: "Newest" },
-  { value: "most_played", label: "Most Played" },
-];
-
 const playerButtonBaseClass =
   "min-h-14 rounded-2xl border px-5 text-base transition focus-visible:ring-[#818cf8]/55 md:min-h-16 md:text-lg";
 const playerButtonCyanClass =
@@ -80,6 +80,43 @@ const playerButtonSecondaryClass =
   "border-[#252940] bg-[#1a1d2e]/86 text-[#e4e4e9] hover:border-[#818cf8]/55 hover:bg-[#6c8aff]/12 hover:text-[#e4e4e9]";
 const playerButtonDangerClass =
   "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100";
+const languageLabelByValue: Record<string, string> = {
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  nl: "Dutch",
+  sq: "Albanian",
+};
+const quizFilterIdByTarget: Record<QuizFilterFocusTarget, string> = {
+  mode: "quizzes-filter-mode",
+  status: "quizzes-filter-status",
+  language: "quizzes-filter-language",
+};
+
+function formatLanguageLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "Unknown";
+
+  const primaryTag = normalized.split("-")[0] ?? normalized;
+  const primaryLabel = languageLabelByValue[primaryTag] ?? primaryTag.toUpperCase();
+  return primaryTag === normalized ? primaryLabel : `${primaryLabel} (${normalized})`;
+}
+
+function getQuizFilterTargetFromTvId(tvId: string | undefined): QuizFilterFocusTarget | null {
+  switch (tvId) {
+    case "quizzes-filter-mode":
+      return "mode";
+    case "quizzes-filter-status":
+      return "status";
+    case "quizzes-filter-language":
+      return "language";
+    default:
+      return null;
+  }
+}
 
 type DashboardQuizzesPageClientProps = {
   creatorImage: string | null;
@@ -96,13 +133,18 @@ export function DashboardQuizzesPageClient({
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ModeFilter>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [sort, setSort] = useState<SortFilter>("newest");
+  const [language, setLanguage] = useState<LanguageFilter>("all");
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [quizPendingDelete, setQuizPendingDelete] = useState<UserQuizRow | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
-  const hasCustomFilters = mode !== "all" || status !== "all" || sort !== "newest";
+  const [modeSelectOpen, setModeSelectOpen] = useState(false);
+  const [statusSelectOpen, setStatusSelectOpen] = useState(false);
+  const [languageSelectOpen, setLanguageSelectOpen] = useState(false);
+  const lastQuizFilterTargetRef = useRef<QuizFilterFocusTarget>("mode");
+  const anyQuizFilterSelectOpen = modeSelectOpen || statusSelectOpen || languageSelectOpen;
 
   const displayItems = useMemo(() => {
     const quizItems = rows.map((quiz) => ({
@@ -117,18 +159,52 @@ export function DashboardQuizzesPageClient({
       job,
     }));
 
-    if (sort !== "newest") {
-      return [...quizItems, ...jobItems];
-    }
-
     return [...quizItems, ...jobItems].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [jobs, rows, sort]);
+  }, [jobs, rows]);
 
   const fetchKey = useMemo(
-    () => `${mode}|${status}|${sort}|${page}`,
-    [mode, status, sort, page],
+    () => `${mode}|${status}|${language}|${page}`,
+    [language, mode, page, status],
+  );
+
+  const languageOptions = useMemo<Array<{ value: LanguageFilter; label: string }>>(() => {
+    const values = new Set(
+      availableLanguages
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0),
+    );
+
+    if (language !== "all") {
+      values.add(language);
+    }
+
+    return [
+      { value: "all", label: "All Languages" },
+      ...Array.from(values)
+        .sort((left, right) => formatLanguageLabel(left).localeCompare(formatLanguageLabel(right)))
+        .map((value) => ({
+          value,
+          label: formatLanguageLabel(value),
+        })),
+    ];
+  }, [availableLanguages, language]);
+
+  const focusElementByTvId = useCallback((tvId: string) => {
+    const node = document.querySelector<HTMLElement>(`[data-tv-id='${tvId}']`);
+    if (!node) return false;
+
+    focusRemoteControl(node);
+    return true;
+  }, []);
+
+  const focusQuizFilterControl = useCallback(
+    (target: QuizFilterFocusTarget) => {
+      lastQuizFilterTargetRef.current = target;
+      return focusElementByTvId(quizFilterIdByTarget[target]);
+    },
+    [focusElementByTvId],
   );
 
   const load = useCallback(async (options?: { background?: boolean }) => {
@@ -144,8 +220,10 @@ export function DashboardQuizzesPageClient({
         limit: "12",
         gameMode: mode,
         status,
-        sort,
       });
+      if (language !== "all") {
+        params.set("language", language);
+      }
 
       const response = await fetch(`/api/dashboard/quizzes?${params.toString()}`, {
         cache: "no-store",
@@ -162,6 +240,7 @@ export function DashboardQuizzesPageClient({
         return payload.quizzes;
       });
       setJobs(payload.jobs);
+      setAvailableLanguages(payload.availableLanguages);
       setTotal(payload.total);
       setHasMore(payload.hasMore);
     } catch (fetchError) {
@@ -173,7 +252,7 @@ export function DashboardQuizzesPageClient({
         setLoading(false);
       }
     }
-  }, [mode, page, sort, status]);
+  }, [language, mode, page, status]);
 
   useEffect(() => {
     void load();
@@ -195,6 +274,84 @@ export function DashboardQuizzesPageClient({
 
     return () => clearInterval(interval);
   }, [jobs, load, page]);
+
+  useEffect(() => {
+    function onQuizFilterKeyDown(event: KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        return;
+      }
+
+      const activeElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      if (!activeElement) return;
+
+      const currentTvId = activeElement.dataset.tvId;
+      if (!currentTvId) return;
+
+      if (currentTvId === "dashboard-quizzes-link") {
+        if (event.key !== "ArrowDown") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        focusQuizFilterControl(lastQuizFilterTargetRef.current);
+        return;
+      }
+
+      if (currentTvId === "quizzes-create-button") {
+        if (event.key !== "ArrowUp") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        focusQuizFilterControl(lastQuizFilterTargetRef.current);
+        return;
+      }
+
+      const currentFilterTarget = getQuizFilterTargetFromTvId(currentTvId);
+      if (!currentFilterTarget) return;
+      if (anyQuizFilterSelectOpen) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (event.key === "Enter") {
+        activeElement.click();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        focusElementByTvId("dashboard-quizzes-link");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        focusElementByTvId("quizzes-create-button");
+        return;
+      }
+
+      const filterOrder: QuizFilterFocusTarget[] = ["mode", "status", "language"];
+      const currentIndex = filterOrder.indexOf(currentFilterTarget);
+      if (currentIndex === -1) return;
+
+      const nextIndex =
+        event.key === "ArrowLeft"
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(filterOrder.length - 1, currentIndex + 1);
+      const nextTarget = filterOrder[nextIndex];
+      if (!nextTarget || nextTarget === currentFilterTarget) return;
+
+      focusQuizFilterControl(nextTarget);
+    }
+
+    window.addEventListener("keydown", onQuizFilterKeyDown, true);
+    return () => window.removeEventListener("keydown", onQuizFilterKeyDown, true);
+  }, [
+    anyQuizFilterSelectOpen,
+    focusElementByTvId,
+    focusQuizFilterControl,
+  ]);
 
   async function deleteQuiz(quiz: UserQuizRow | null) {
     if (!quiz) return;
@@ -222,7 +379,17 @@ export function DashboardQuizzesPageClient({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-6">
+      <section
+        className="rounded-3xl border border-[#252940] bg-[#1a1d2e]/68 p-5 md:p-6"
+        onFocusCapture={(event) => {
+          const target =
+            event.target instanceof HTMLElement
+              ? getQuizFilterTargetFromTvId(event.target.dataset.tvId)
+              : null;
+          if (!target) return;
+          lastQuizFilterTargetRef.current = target;
+        }}
+      >
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap xl:justify-end">
             <div className="space-y-2">
@@ -236,6 +403,16 @@ export function DashboardQuizzesPageClient({
                   setMode(value);
                 }}
                 options={modeOptions}
+                open={modeSelectOpen}
+                onOpenChange={(open) => {
+                  setModeSelectOpen(open);
+                  if (!open) {
+                    window.requestAnimationFrame(() => {
+                      focusQuizFilterControl("mode");
+                    });
+                  }
+                }}
+                triggerId={quizFilterIdByTarget.mode}
                 widthClassName="w-full min-w-[190px] sm:w-[220px]"
               />
             </div>
@@ -251,46 +428,44 @@ export function DashboardQuizzesPageClient({
                   setStatus(value);
                 }}
                 options={statusOptions}
+                open={statusSelectOpen}
+                onOpenChange={(open) => {
+                  setStatusSelectOpen(open);
+                  if (!open) {
+                    window.requestAnimationFrame(() => {
+                      focusQuizFilterControl("status");
+                    });
+                  }
+                }}
+                triggerId={quizFilterIdByTarget.status}
                 widthClassName="w-full min-w-[190px] sm:w-[220px]"
               />
             </div>
 
             <div className="space-y-2">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9394a5]">
-                Sort
+                Language
               </p>
               <PlayerSelect
-                value={sort}
+                value={language}
                 onValueChange={(value) => {
                   setPage(1);
-                  setSort(value);
+                  setLanguage(value);
                 }}
-                options={sortOptions}
+                options={languageOptions}
+                open={languageSelectOpen}
+                onOpenChange={(open) => {
+                  setLanguageSelectOpen(open);
+                  if (!open) {
+                    window.requestAnimationFrame(() => {
+                      focusQuizFilterControl("language");
+                    });
+                  }
+                }}
+                triggerId={quizFilterIdByTarget.language}
                 widthClassName="w-full min-w-[190px] sm:w-[220px]"
               />
             </div>
-
-            {hasCustomFilters ? (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-transparent">
-                  Reset
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={playerButtonBaseClass + " " + playerButtonSecondaryClass}
-                  onClick={() => {
-                    setPage(1);
-                    setMode("all");
-                    setStatus("all");
-                    setSort("newest");
-                  }}
-                >
-                  <RotateCcw className="mr-2 size-5" />
-                  Reset
-                </Button>
-              </div>
-            ) : null}
           </div>
         </div>
       </section>
@@ -304,6 +479,7 @@ export function DashboardQuizzesPageClient({
             <p className="text-xl text-[#9394a5] md:text-3xl">{total} items</p>
             <Button
               asChild
+              data-tv-id="quizzes-create-button"
               className={playerButtonBaseClass + " " + playerButtonCyanClass}
             >
               <Link href="/dashboard/create">Create Quiz</Link>

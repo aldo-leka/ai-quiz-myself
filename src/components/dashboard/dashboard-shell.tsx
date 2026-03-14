@@ -609,7 +609,9 @@ export function DashboardShell({
                     key={item.href}
                     href={item.href}
                     data-tv-id={
-                      item.href === "/dashboard/settings"
+                      item.href === "/dashboard"
+                        ? "dashboard-quizzes-link"
+                        : item.href === "/dashboard/settings"
                         ? "dashboard-settings-link"
                         : item.href === "/dashboard/billing"
                           ? "dashboard-billing-link"
