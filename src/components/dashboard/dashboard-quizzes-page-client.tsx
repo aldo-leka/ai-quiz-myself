@@ -286,6 +286,16 @@ export function DashboardQuizzesPageClient({
       if (!activeElement) return;
 
       const currentTvId = activeElement.dataset.tvId;
+      const isDashboardNavButton = Boolean(activeElement.closest("[data-tv-scope='dashboard-nav']"));
+
+      if (isDashboardNavButton && event.key === "ArrowDown") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        focusQuizFilterControl(lastQuizFilterTargetRef.current);
+        return;
+      }
+
       if (!currentTvId) return;
 
       if (currentTvId === "dashboard-quizzes-link") {
@@ -514,7 +524,10 @@ export function DashboardQuizzesPageClient({
         ) : null}
 
         {!loading ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div
+            data-tv-scope="quizzes-grid"
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+          >
             {displayItems.map((item) => {
               if (item.kind === "job") {
                 const { job } = item;

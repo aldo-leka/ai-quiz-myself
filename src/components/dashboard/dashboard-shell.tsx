@@ -468,6 +468,29 @@ export function DashboardShell({
         }
       }
 
+      if (
+        pathname === "/dashboard" &&
+        event.key === "ArrowUp" &&
+        currentNode.closest("[data-tv-scope='quizzes-grid']")
+      ) {
+        const quizFilterCandidates = candidates.filter((node) => {
+          return (
+            node.dataset.tvId === "quizzes-filter-mode" ||
+            node.dataset.tvId === "quizzes-filter-status" ||
+            node.dataset.tvId === "quizzes-filter-language"
+          );
+        });
+        const nearestQuizFilter = findNextDashboardControl(
+          currentNode,
+          quizFilterCandidates,
+          "up",
+        );
+        if (nearestQuizFilter) {
+          focusDashboardControl(nearestQuizFilter);
+          return;
+        }
+      }
+
       const direction = event.key.replace("Arrow", "").toLowerCase() as Direction;
       const nextNode = findNextDashboardControl(currentNode, candidates, direction);
       if (nextNode) {
@@ -477,7 +500,7 @@ export function DashboardShell({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [pathname]);
 
   return (
     <div className="min-h-screen bg-[#0f1117] text-[#e4e4e9]">
@@ -600,7 +623,7 @@ export function DashboardShell({
               </Popover>
             </div>
 
-            <nav className="flex flex-wrap gap-3">
+            <nav data-tv-scope="dashboard-nav" className="flex flex-wrap gap-3">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = isActivePath(pathname, item.href);
