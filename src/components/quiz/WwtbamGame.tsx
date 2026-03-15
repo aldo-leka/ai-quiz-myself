@@ -254,6 +254,7 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const [gameOver, setGameOver] = useState(false);
   const [wonAmount, setWonAmount] = useState(0);
   const [isLoadingNextQuiz, setIsLoadingNextQuiz] = useState(false);
+  const [moneyLadderHeight, setMoneyLadderHeight] = useState<number | null>(null);
   const [likes, setLikes] = useState(quiz.likes);
   const [dislikes, setDislikes] = useState(quiz.dislikes);
   const [vote, setVote] = useState<VoteType | null>(quiz.currentVote ?? null);
@@ -279,6 +280,7 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const askHostRequestIdRef = useRef(0);
   const timerPausedAtRef = useRef<number | null>(null);
   const revealedAnswerRef = useRef(false);
+  const questionCardRef = useRef<HTMLElement | null>(null);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const hostAudioRef = useRef<HTMLAudioElement | null>(null);
   const hostAudioPlaybackResolverRef = useRef<((played: boolean) => void) | null>(null);
@@ -1022,6 +1024,46 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
 
     return () => window.cancelAnimationFrame(frame);
   }, [currentQuestionIndex, gameOver, isLoading, optionsDisabled, visibleOptions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateMoneyLadderHeight = () => {
+      const questionCard = questionCardRef.current;
+      const anchor = questionViewportAnchorRef.current;
+
+      if (!questionCard || !anchor || !window.matchMedia("(min-width: 1024px)").matches) {
+        setMoneyLadderHeight(null);
+        return;
+      }
+
+      const questionCardRect = questionCard.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const nextHeight = Math.max(0, Math.round(anchorRect.top - questionCardRect.top));
+
+      setMoneyLadderHeight((previous) => (previous === nextHeight ? previous : nextHeight));
+    };
+
+    const frame = window.requestAnimationFrame(updateMoneyLadderHeight);
+    window.addEventListener("resize", updateMoneyLadderHeight);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateMoneyLadderHeight);
+    };
+  }, [
+    compactLayout,
+    currentQuestionIndex,
+    eliminatedOptions,
+    hostNarrationError,
+    hostNarrationStage,
+    isHostNarrating,
+    readAloudPreferenceError,
+    tvLikeLayout,
+    visibleOptions,
+  ]);
 
   function stopTimer() {
     if (timerRef.current) {
@@ -1816,12 +1858,15 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
         />
         <div
           className={cn(
-            "grid gap-6 lg:grid-cols-[minmax(0,85%)_minmax(11rem,15%)] lg:items-stretch lg:gap-0",
+            "grid gap-6 lg:grid-cols-[minmax(0,85%)_minmax(11rem,15%)] lg:items-start lg:gap-0",
             compactLayout && "lg:gap-0",
           )}
         >
           <section className="space-y-5 md:space-y-6 lg:space-y-0">
-            <article className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e] lg:h-full lg:rounded-r-none lg:border-r-0">
+            <article
+              ref={questionCardRef}
+              className="overflow-hidden rounded-3xl border border-[#252940] bg-[#1a1d2e] lg:rounded-r-none lg:border-r-0"
+            >
               <SlantedBar
                 value={Math.max(0, timerPercentage)}
                 className="h-3 border-x-0 border-t-0 md:h-4"
@@ -2047,7 +2092,10 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
             </article>
           </section>
 
-          <aside className="rounded-3xl border border-[#252940] bg-[#1a1d2e] p-2 lg:h-full lg:rounded-l-none lg:border-l">
+          <aside
+            className="rounded-3xl border border-[#252940] bg-[#1a1d2e] p-2 lg:self-start lg:rounded-l-none lg:border-l"
+            style={moneyLadderHeight !== null ? { height: moneyLadderHeight } : undefined}
+          >
             <div className="grid h-full gap-1.5 content-stretch">
               {moneyLadderDisplay.map(([index, amount]) => {
                 const isCheckpoint = CHECKPOINTS.includes(index as (typeof CHECKPOINTS)[number]);
