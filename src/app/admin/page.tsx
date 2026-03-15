@@ -137,37 +137,53 @@ export default async function AdminPage() {
     db
       .select({
         userId: quizSessions.userId,
+        anonId: quizSessions.anonId,
         startedAt: quizSessions.startedAt,
       })
       .from(quizSessions)
-      .where(and(isNotNull(quizSessions.userId), gte(quizSessions.startedAt, oneYearAgo))),
+      .where(gte(quizSessions.startedAt, oneYearAgo)),
   ]);
 
-  const dailyUserSets = new Map<string, Set<string>>();
-  const weeklyUserSets = new Map<string, Set<string>>();
-  const monthlyUserSets = new Map<string, Set<string>>();
+  const dailyActivePlayerSets = new Map<string, Set<string>>();
+  const weeklyActivePlayerSets = new Map<string, Set<string>>();
+  const monthlyActivePlayerSets = new Map<string, Set<string>>();
+  const dailySignedInUserSets = new Map<string, Set<string>>();
+  const weeklySignedInUserSets = new Map<string, Set<string>>();
+  const monthlySignedInUserSets = new Map<string, Set<string>>();
 
   for (const row of sessionRows) {
-    const userId = row.userId;
-    if (!userId) continue;
+    const actorId = row.userId ? `user:${row.userId}` : row.anonId ? `anon:${row.anonId}` : null;
     const startedAt = row.startedAt ? new Date(row.startedAt) : null;
-    if (!startedAt) continue;
 
-    const day = toUtcDayStart(startedAt);
-    const week = toUtcWeekStart(startedAt);
-    const month = toUtcMonthStart(startedAt);
+    if (startedAt) {
+      const day = toUtcDayStart(startedAt);
+      const week = toUtcWeekStart(startedAt);
+      const month = toUtcMonthStart(startedAt);
 
-    const dKey = dayKey(day);
-    const wKey = dayKey(week);
-    const mKey = monthKey(month);
+      const dKey = dayKey(day);
+      const wKey = dayKey(week);
+      const mKey = monthKey(month);
 
-    if (!dailyUserSets.has(dKey)) dailyUserSets.set(dKey, new Set());
-    if (!weeklyUserSets.has(wKey)) weeklyUserSets.set(wKey, new Set());
-    if (!monthlyUserSets.has(mKey)) monthlyUserSets.set(mKey, new Set());
+      if (actorId) {
+        if (!dailyActivePlayerSets.has(dKey)) dailyActivePlayerSets.set(dKey, new Set());
+        if (!weeklyActivePlayerSets.has(wKey)) weeklyActivePlayerSets.set(wKey, new Set());
+        if (!monthlyActivePlayerSets.has(mKey)) monthlyActivePlayerSets.set(mKey, new Set());
 
-    dailyUserSets.get(dKey)?.add(userId);
-    weeklyUserSets.get(wKey)?.add(userId);
-    monthlyUserSets.get(mKey)?.add(userId);
+        dailyActivePlayerSets.get(dKey)?.add(actorId);
+        weeklyActivePlayerSets.get(wKey)?.add(actorId);
+        monthlyActivePlayerSets.get(mKey)?.add(actorId);
+      }
+
+      if (row.userId) {
+        if (!dailySignedInUserSets.has(dKey)) dailySignedInUserSets.set(dKey, new Set());
+        if (!weeklySignedInUserSets.has(wKey)) weeklySignedInUserSets.set(wKey, new Set());
+        if (!monthlySignedInUserSets.has(mKey)) monthlySignedInUserSets.set(mKey, new Set());
+
+        dailySignedInUserSets.get(dKey)?.add(row.userId);
+        weeklySignedInUserSets.get(wKey)?.add(row.userId);
+        monthlySignedInUserSets.get(mKey)?.add(row.userId);
+      }
+    }
   }
 
   const dayLabelFormat = new Intl.DateTimeFormat("en-US", {
@@ -191,7 +207,8 @@ export default async function AdminPage() {
     const key = dayKey(bucketDate);
     return {
       label: dayLabelFormat.format(bucketDate),
-      activeUsers: dailyUserSets.get(key)?.size ?? 0,
+      activePlayers: dailyActivePlayerSets.get(key)?.size ?? 0,
+      signedInUsers: dailySignedInUserSets.get(key)?.size ?? 0,
     };
   });
 
@@ -201,7 +218,8 @@ export default async function AdminPage() {
     const key = dayKey(bucketDate);
     return {
       label: dayLabelFormat.format(bucketDate),
-      activeUsers: weeklyUserSets.get(key)?.size ?? 0,
+      activePlayers: weeklyActivePlayerSets.get(key)?.size ?? 0,
+      signedInUsers: weeklySignedInUserSets.get(key)?.size ?? 0,
     };
   });
 
@@ -212,7 +230,8 @@ export default async function AdminPage() {
     const key = monthKey(bucketDate);
     return {
       label: monthLabelFormat.format(bucketDate),
-      activeUsers: monthlyUserSets.get(key)?.size ?? 0,
+      activePlayers: monthlyActivePlayerSets.get(key)?.size ?? 0,
+      signedInUsers: monthlySignedInUserSets.get(key)?.size ?? 0,
     };
   });
 
@@ -270,8 +289,10 @@ export default async function AdminPage() {
       <section className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Active Users</CardTitle>
-            <CardDescription>Unique authenticated users in each time bucket.</CardDescription>
+            <CardTitle>Player Activity</CardTitle>
+            <CardDescription>
+              Signed-in players, all active players, and game volume in each time bucket.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ActiveUsersChart daily={daily} weekly={weekly} monthly={monthly} />
