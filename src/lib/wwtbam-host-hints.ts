@@ -1,6 +1,7 @@
 import { generateObject, type LanguageModelUsage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { createWwtbamHostHintsPrompt } from "@/lib/quiz-ai-prompts";
 
 type HostHintQuestion = {
   position: number;
@@ -99,34 +100,11 @@ export async function generateWwtbamHostHints(params: {
   const { object, usage } = await generateObject({
     model: openai(modelName),
     schema: generatedWwtbamHostHintsSchema,
-    prompt: [
-      "You are writing precomputed 'Ask the Host' hints for a quiz show.",
-      "For each question, act like a knowledgeable but imperfect quiz-show host.",
-      "Choose the option you would lean toward based on general knowledge and the option wording alone, then give brief reasoning.",
-      "Rules:",
-      "- Return one hint for every question.",
-      "- guessedOptionIndex must reference the original option order (0=A, 1=B, 2=C, 3=D).",
-      "- reasoning must be 1 or 2 short sentences.",
-      "- Do not mention option letters.",
-      "- Do not mention option text verbatim.",
-      "- Do not say 'I'd lean' or 'I would choose'.",
-      "- Do not mention money values, host phrases, or game-show framing.",
-      "- Do not act like you are certain unless the question is obviously easy.",
-      "- Do not use hidden metadata, explanations, or answer-key style reasoning.",
-      "- Sound like an informed hunch, not a guaranteed solve.",
-      "",
-      `Quiz title: ${params.title}`,
-      `Theme: ${params.theme}`,
-      "",
-      "Questions:",
-      ...params.questions.flatMap((question) => [
-        `Question ${question.position}: ${question.questionText}`,
-        ...question.options.map(
-          (option, optionIndex) => `Option ${optionIndex}: ${option.text}`,
-        ),
-        "",
-      ]),
-    ].join("\n"),
+    prompt: createWwtbamHostHintsPrompt({
+      title: params.title,
+      theme: params.theme,
+      questions: params.questions,
+    }),
   });
 
   const hintsByPosition = new Map<number, GeneratedWwtbamHostHint>();

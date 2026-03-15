@@ -3,6 +3,7 @@ import { eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { questions, quizzes } from "@/db/schema";
+import { createQuizGenerationPrompt } from "@/lib/quiz-ai-prompts";
 
 export const QUIZ_QUESTION_COUNT = {
   single: 14,
@@ -41,26 +42,6 @@ export type GeneratedQuizResult = {
   usage: LanguageModelUsage;
 };
 
-const modePromptLeads: Record<QuizGenerationGameMode, string> = {
-  single: "You are a senior quiz designer building a fast single-player trivia quiz.",
-  wwtbam: 'You are a senior TV game-show producer building a "Who Wants to Be a Millionaire" style quiz.',
-  couch_coop: "You are a senior quiz writer creating a couch co-op trivia round for families.",
-};
-
-const modeExtraRequirements: Record<QuizGenerationGameMode, string[]> = {
-  single: [
-    "Keep the pace brisk and varied.",
-  ],
-  wwtbam: [
-    "Questions should feel dramatic and TV-ready.",
-    'Question text must contain only the pure question itself, with no host lead-in, no money ladder values, and no phrasing like "For £200" or "Question 3 for $500".',
-  ],
-  couch_coop: [
-    "Questions should be short enough to read comfortably on a TV.",
-    "Avoid joke answers and keep distractors plausible.",
-  ],
-};
-
 const WWTBAM_QUESTION_PREFIX_PATTERN =
   /^(?:for\s+(?:the\s+)?(?:[£$€]\s*)?\d[\d,]*(?:\s*(?:pounds?|dollars?|euros?|quid))?(?:\s+(?:question|round))?|question\s+\d+\s+(?:for|worth)\s+(?:[£$€]\s*)?\d[\d,]*(?:\s*(?:pounds?|dollars?|euros?|quid))?)\s*[,.:;!?-–—…]*/i;
 
@@ -91,103 +72,6 @@ function sanitizeQuestionTextForGameMode(
   }
 
   return questionText.trim();
-}
-
-function buildDifficultyPolicy(
-  difficulty: QuizGenerationDifficulty,
-  questionCount: number,
-): string {
-  if (difficulty === "easy" || difficulty === "medium" || difficulty === "hard") {
-    return `Set every question difficulty to "${difficulty}".`;
-  }
-
-  if (difficulty === "mixed") {
-    return "Balance difficulty across the quiz with about 1/3 easy, 1/3 medium, and 1/3 hard.";
-  }
-
-  const easyCount = Math.max(1, Math.floor(questionCount / 3));
-  const mediumCount = Math.max(1, Math.floor(questionCount / 3));
-  const hardStart = easyCount + mediumCount + 1;
-
-  return `Difficulty must escalate across the quiz:
-- Questions 1-${easyCount}: easy
-- Questions ${easyCount + 1}-${easyCount + mediumCount}: medium
-- Questions ${hardStart}-${questionCount}: hard`;
-}
-
-export function createQuizGenerationPrompt(input: {
-  theme: string;
-  gameMode: QuizGenerationGameMode;
-  difficulty: QuizGenerationDifficulty;
-  questionCount?: number;
-  existingQuestions?: string[];
-  sourceText?: string;
-}): string {
-  const questionCount = input.questionCount ?? QUIZ_QUESTION_COUNT[input.gameMode];
-  const existingQuestions = (input.existingQuestions ?? [])
-    .map((question) => question.trim())
-    .filter((question) => question.length > 0)
-    .slice(0, 80);
-  const sourceText = input.sourceText?.trim() ?? "";
-  const lines = [
-    modePromptLeads[input.gameMode],
-    "",
-    `Create one polished quiz with exactly ${questionCount} multiple-choice questions for the theme: ${input.theme}.`,
-    "",
-    "Requirements:",
-    "- Family friendly and educational.",
-    "- Exactly 4 options per question.",
-    "- Only one correct option.",
-    "- Options should be plausible distractors that trigger discussion.",
-    "- Explanations must teach something useful, including why the correct answer is correct.",
-    "- Keep subjects varied within the theme.",
-    "- Avoid repetitive phrasing and avoid trick wording.",
-    ...modeExtraRequirements[input.gameMode].map((requirement) => `- ${requirement}`),
-    `- ${buildDifficultyPolicy(input.difficulty, questionCount)}`,
-  ];
-
-  if (sourceText.length > 0) {
-    lines.push(
-      "",
-      "Generate questions based on the following article content.",
-      "Questions must be derived from this source, not from unrelated general knowledge.",
-      "",
-      sourceText,
-    );
-  }
-
-  if (existingQuestions.length > 0) {
-    lines.push(
-      "",
-      "The following questions already exist for this topic. Do NOT repeat, rephrase, or create variations of any of them:",
-      ...existingQuestions.map((question, index) => `${index + 1}. ${question}`),
-    );
-  }
-
-  lines.push(
-    "",
-    "Return ONLY valid JSON matching this shape:",
-    "{",
-    '  "title": "string",',
-    '  "theme": "string",',
-    '  "questions": [',
-    "    {",
-    '      "questionText": "string",',
-    '      "options": [',
-    '        { "text": "string", "explanation": "string" },',
-    '        { "text": "string", "explanation": "string" },',
-    '        { "text": "string", "explanation": "string" },',
-    '        { "text": "string", "explanation": "string" }',
-    "      ],",
-    '      "correctOptionIndex": 0,',
-    '      "difficulty": "easy|medium|hard",',
-    '      "subject": "string"',
-    "    }",
-    "  ]",
-    "}",
-  );
-
-  return lines.join("\n");
 }
 
 export async function getExistingQuestionsForTheme(theme: string): Promise<string[]> {
