@@ -13,7 +13,10 @@ import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQui
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
 import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
-import { getNextQuizIdForPlayback } from "@/lib/my-quizzes-random-client";
+import {
+  getNextQuizIdForPlayback,
+  setMyQuizzesRandomPlaybackContext,
+} from "@/lib/my-quizzes-random-client";
 import { rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import {
@@ -1341,10 +1344,13 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
         return;
       }
 
+      setMyQuizzesRandomPlaybackContext({
+        quizId: nextQuizId,
+        playContext,
+      });
       router.push(
         buildQuizPlayPath({
           quizId: nextQuizId,
-          playContext,
         }),
       );
     } catch {
@@ -1357,10 +1363,13 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   function playAgain() {
     stopHostNarration();
     stopTimer();
+    setMyQuizzesRandomPlaybackContext({
+      quizId: quiz.id,
+      playContext,
+    });
     router.replace(
       buildQuizPlayPath({
         quizId: quiz.id,
-        playContext,
         retryToken: Date.now(),
       }),
     );

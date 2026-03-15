@@ -20,10 +20,6 @@ export type MyQuizzesRandomContext = {
   filters: MyQuizzesRandomFilters;
 };
 
-type SearchParamsLike = {
-  get(name: string): string | null;
-};
-
 export function normalizeMyQuizzesRandomGameMode(
   value: string | null | undefined,
 ): MyQuizzesRandomGameModeFilter {
@@ -63,16 +59,9 @@ export function buildMyQuizzesRandomApiSearchParams(
 
 export function buildQuizPlayPath(params: {
   quizId: string;
-  playContext?: MyQuizzesRandomContext | null;
   retryToken?: string | number | null;
 }) {
   const searchParams = new URLSearchParams();
-
-  if (params.playContext?.source === MY_QUIZZES_RANDOM_SOURCE) {
-    searchParams.set("playSource", MY_QUIZZES_RANDOM_SOURCE);
-    searchParams.set("randomGameMode", params.playContext.filters.gameMode);
-    searchParams.set("randomLanguage", params.playContext.filters.language);
-  }
 
   if (params.retryToken !== undefined && params.retryToken !== null) {
     searchParams.set("retry", String(params.retryToken));
@@ -80,25 +69,4 @@ export function buildQuizPlayPath(params: {
 
   const query = searchParams.toString();
   return query.length > 0 ? `/play/${params.quizId}?${query}` : `/play/${params.quizId}`;
-}
-
-export function parseMyQuizzesRandomContext(
-  searchParams: SearchParamsLike | null | undefined,
-): MyQuizzesRandomContext | null {
-  if (!searchParams) {
-    return null;
-  }
-
-  const playSource = searchParams.get("playSource");
-  if (playSource !== MY_QUIZZES_RANDOM_SOURCE) {
-    return null;
-  }
-
-  return {
-    source: MY_QUIZZES_RANDOM_SOURCE,
-    filters: {
-      gameMode: normalizeMyQuizzesRandomGameMode(searchParams.get("randomGameMode")),
-      language: normalizeMyQuizzesRandomLanguage(searchParams.get("randomLanguage")),
-    },
-  };
 }

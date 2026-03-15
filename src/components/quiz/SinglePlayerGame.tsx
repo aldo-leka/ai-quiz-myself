@@ -23,7 +23,10 @@ import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { authClient } from "@/lib/auth-client";
 import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
-import { getNextQuizIdForPlayback } from "@/lib/my-quizzes-random-client";
+import {
+  getNextQuizIdForPlayback,
+  setMyQuizzesRandomPlaybackContext,
+} from "@/lib/my-quizzes-random-client";
 import { rememberRecentQuiz } from "@/lib/recent-quiz-history";
 import { focusRemoteControl } from "@/lib/remote-focus";
 import type { QuizWithQuestions, SaveQuizSessionPayload } from "@/lib/quiz-types";
@@ -230,10 +233,13 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
         return;
       }
 
+      setMyQuizzesRandomPlaybackContext({
+        quizId: nextQuizId,
+        playContext,
+      });
       router.push(
         buildQuizPlayPath({
           quizId: nextQuizId,
-          playContext,
         }),
       );
     } catch {

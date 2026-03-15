@@ -16,8 +16,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { MY_QUIZZES_RANDOM_SOURCE, buildQuizPlayPath, type MyQuizzesRandomContext, type MyQuizzesRandomGameModeFilter, type MyQuizzesRandomLanguageFilter } from "@/lib/my-quizzes-random";
-import { selectMyQuizzesRandomQuizId } from "@/lib/my-quizzes-random-client";
+import {
+  MY_QUIZZES_RANDOM_SOURCE,
+  buildQuizPlayPath,
+  normalizeMyQuizzesRandomGameMode,
+  normalizeMyQuizzesRandomLanguage,
+  type MyQuizzesRandomContext,
+  type MyQuizzesRandomGameModeFilter,
+  type MyQuizzesRandomLanguageFilter,
+} from "@/lib/my-quizzes-random";
+import {
+  clearMyQuizzesRandomPlaybackContext,
+  selectMyQuizzesRandomQuizId,
+  setMyQuizzesRandomPlaybackContext,
+} from "@/lib/my-quizzes-random-client";
 import { focusRemoteControl } from "@/lib/remote-focus";
 
 type UserQuizRow = {
@@ -60,6 +72,8 @@ type ModeFilter = MyQuizzesRandomGameModeFilter;
 type StatusFilter = "all" | "ready" | "generating" | "failed";
 type LanguageFilter = MyQuizzesRandomLanguageFilter;
 type QuizFilterFocusTarget = "mode" | "status" | "language" | "random";
+
+const DASHBOARD_QUIZZES_FILTERS_STORAGE_KEY = "quizplus:filters:dashboard-quizzes:v1";
 
 const modeOptions: Array<{ value: ModeFilter; label: string }> = [
   { value: "all", label: "All Modes" },
@@ -124,6 +138,70 @@ function getQuizFilterTargetFromTvId(tvId: string | undefined): QuizFilterFocusT
   }
 }
 
+function normalizeDashboardQuizStatus(
+  value: string | null | undefined,
+): StatusFilter {
+  if (
+    value === "all" ||
+    value === "ready" ||
+    value === "generating" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+
+  return "all";
+}
+
+function loadStoredDashboardQuizFilters(): {
+  mode: ModeFilter;
+  status: StatusFilter;
+  language: LanguageFilter;
+} {
+  if (typeof window === "undefined") {
+    return {
+      mode: "all",
+      status: "all",
+      language: "all",
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(DASHBOARD_QUIZZES_FILTERS_STORAGE_KEY);
+    if (!rawValue) {
+      return {
+        mode: "all",
+        status: "all",
+        language: "all",
+      };
+    }
+
+    const parsed = JSON.parse(rawValue) as {
+      mode?: unknown;
+      status?: unknown;
+      language?: unknown;
+    };
+
+    return {
+      mode: normalizeMyQuizzesRandomGameMode(
+        typeof parsed.mode === "string" ? parsed.mode : null,
+      ),
+      status: normalizeDashboardQuizStatus(
+        typeof parsed.status === "string" ? parsed.status : null,
+      ),
+      language: normalizeMyQuizzesRandomLanguage(
+        typeof parsed.language === "string" ? parsed.language : null,
+      ),
+    };
+  } catch {
+    return {
+      mode: "all",
+      status: "all",
+      language: "all",
+    };
+  }
+}
+
 type DashboardQuizzesPageClientProps = {
   creatorImage: string | null;
   creatorName: string | null;
@@ -143,6 +221,7 @@ export function DashboardQuizzesPageClient({
   const [language, setLanguage] = useState<LanguageFilter>("all");
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [quizPendingDelete, setQuizPendingDelete] = useState<UserQuizRow | null>(null);
@@ -181,6 +260,30 @@ export function DashboardQuizzesPageClient({
     () => `${mode}|${status}|${language}|${page}`,
     [language, mode, page, status],
   );
+
+  useEffect(() => {
+    const storedFilters = loadStoredDashboardQuizFilters();
+    setMode(storedFilters.mode);
+    setStatus(storedFilters.status);
+    setLanguage(storedFilters.language);
+    setPage(1);
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        DASHBOARD_QUIZZES_FILTERS_STORAGE_KEY,
+        JSON.stringify({ mode, status, language }),
+      );
+    } catch {
+      // Ignore storage write failures and keep the page usable.
+    }
+  }, [filtersReady, language, mode, status]);
 
   const languageOptions = useMemo<Array<{ value: LanguageFilter; label: string }>>(() => {
     const values = new Set(
@@ -253,10 +356,13 @@ export function DashboardQuizzesPageClient({
       const quizId = await selectMyQuizzesRandomQuizId({
         filters: playRandomContext.filters,
       });
+      setMyQuizzesRandomPlaybackContext({
+        quizId,
+        playContext: playRandomContext,
+      });
       router.push(
         buildQuizPlayPath({
           quizId,
-          playContext: playRandomContext,
         }),
       );
     } catch (randomPlayError) {
@@ -317,10 +423,18 @@ export function DashboardQuizzesPageClient({
   }, [language, mode, page, status]);
 
   useEffect(() => {
+    if (!filtersReady) {
+      return;
+    }
+
     void load();
-  }, [fetchKey, load]);
+  }, [fetchKey, filtersReady, load]);
 
   useEffect(() => {
+    if (!filtersReady) {
+      return;
+    }
+
     const hasActiveJobs = jobs.some(
       (job) => job.status === "pending" || job.status === "processing",
     );
@@ -335,7 +449,7 @@ export function DashboardQuizzesPageClient({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [jobs, load, page]);
+  }, [filtersReady, jobs, load, page]);
 
   useEffect(() => {
     function onQuizFilterKeyDown(event: KeyboardEvent) {
@@ -680,7 +794,10 @@ export function DashboardQuizzesPageClient({
                       asChild
                       className={playerButtonBaseClass + " " + playerButtonCyanClass}
                     >
-                      <Link href={`/play/${quiz.id}`}>
+                      <Link
+                        href={`/play/${quiz.id}`}
+                        onClick={() => clearMyQuizzesRandomPlaybackContext()}
+                      >
                         <Play className="mr-2 size-5" />
                         Play
                       </Link>

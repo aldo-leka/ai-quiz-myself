@@ -1,28 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { CouchCoopGame } from "@/components/quiz/CouchCoopGame";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
 import { SinglePlayerGame } from "@/components/quiz/SinglePlayerGame";
 import { WwtbamGame } from "@/components/quiz/WwtbamGame";
-import { parseMyQuizzesRandomContext } from "@/lib/my-quizzes-random";
+import { getMyQuizzesRandomPlaybackContextForQuiz } from "@/lib/my-quizzes-random-client";
 import type { QuizWithQuestions } from "@/lib/quiz-types";
 
 export default function PlayQuizPage() {
   const params = useParams<{ quizId: string }>();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const playContext = useMemo(
-    () => parseMyQuizzesRandomContext(searchParams),
-    [searchParams],
+  const [playContext, setPlayContext] = useState(() =>
+    getMyQuizzesRandomPlaybackContextForQuiz(params.quizId),
   );
   const homePath = playContext ? "/dashboard" : "/";
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [quiz, setQuiz] = useState<QuizWithQuestions | null>(null);
+
+  useEffect(() => {
+    setPlayContext(getMyQuizzesRandomPlaybackContextForQuiz(params.quizId));
+  }, [params.quizId]);
 
   useEffect(() => {
     const quizId = params.quizId;

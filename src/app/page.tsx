@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Shuffle,
 } from "lucide-react";
@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
+import { clearMyQuizzesRandomPlaybackContext } from "@/lib/my-quizzes-random-client";
 import { cn } from "@/lib/utils";
 
 type HubQuiz = {
@@ -50,8 +51,21 @@ type HubThemesResponse = {
 type HubSort = "popular" | "newest";
 type DifficultyFilter = "all" | "easy" | "medium" | "hard" | "mixed";
 type ModeFilter = "all" | "single" | "wwtbam" | "couch_coop";
+type HubFilters = {
+  difficulty: DifficultyFilter;
+  mode: ModeFilter;
+  theme: string | null;
+  sort: HubSort;
+};
 
 const DEFAULT_LIMIT = 20;
+const HUB_FILTERS_STORAGE_KEY = "quizplus:filters:hub:v2";
+const defaultHubFilters: HubFilters = {
+  difficulty: "all",
+  mode: "all",
+  theme: null,
+  sort: "popular",
+};
 
 const DIFFICULTY_OPTIONS: Array<{ value: DifficultyFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -91,7 +105,7 @@ function normalizeMode(value: string | null): ModeFilter {
   if (value === "all" || value === "single" || value === "wwtbam" || value === "couch_coop") {
     return value;
   }
-  return "single";
+  return "all";
 }
 
 function normalizeTheme(value: string | null): string | null {
@@ -99,11 +113,35 @@ function normalizeTheme(value: string | null): string | null {
   return normalized ? normalized : null;
 }
 
-function normalizePositiveInt(value: string | null, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return parsed;
+function loadStoredHubFilters(): HubFilters {
+  if (typeof window === "undefined") {
+    return defaultHubFilters;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(HUB_FILTERS_STORAGE_KEY);
+    if (!rawValue) {
+      return defaultHubFilters;
+    }
+
+    const parsed = JSON.parse(rawValue) as {
+      difficulty?: unknown;
+      mode?: unknown;
+      theme?: unknown;
+      sort?: unknown;
+    };
+
+    return {
+      difficulty: normalizeDifficulty(
+        typeof parsed.difficulty === "string" ? parsed.difficulty : null,
+      ),
+      mode: normalizeMode(typeof parsed.mode === "string" ? parsed.mode : null),
+      theme: normalizeTheme(typeof parsed.theme === "string" ? parsed.theme : null),
+      sort: normalizeSort(typeof parsed.sort === "string" ? parsed.sort : null),
+    };
+  } catch {
+    return defaultHubFilters;
+  }
 }
 
 function userInitials(name: string): string {
@@ -155,7 +193,6 @@ function QuizSkeletonGrid() {
 
 function HomePageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: sessionData } = authClient.useSession();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -172,89 +209,66 @@ function HomePageContent() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isSurpriseLoading, setIsSurpriseLoading] = useState(false);
   const [hubError, setHubError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<HubFilters>(defaultHubFilters);
+  const [page, setPage] = useState(1);
+  const [filtersReady, setFiltersReady] = useState(false);
   const previousFetchRef = useRef<{ key: string; page: number }>({
     key: "",
     page: 1,
   });
 
-  const filters = useMemo(() => {
-    const difficulty = normalizeDifficulty(searchParams.get("difficulty"));
-    const mode = normalizeMode(searchParams.get("mode"));
-    const theme = normalizeTheme(searchParams.get("theme"));
-    const sort = normalizeSort(searchParams.get("sort"));
-    const page = normalizePositiveInt(searchParams.get("page"), 1);
-    const limit = normalizePositiveInt(searchParams.get("limit"), DEFAULT_LIMIT);
+  const filterFetchKey = useMemo(
+    () => `${filters.difficulty}|${filters.mode}|${filters.theme ?? "all"}|${filters.sort}|${DEFAULT_LIMIT}`,
+    [filters],
+  );
 
-    return {
-      difficulty,
-      mode,
-      theme,
-      sort,
-      page,
-      limit,
-      fetchKey: `${difficulty}|${mode}|${theme ?? "all"}|${sort}|${limit}`,
-    };
-  }, [searchParams]);
-
-  const updateQueryParams = useCallback(
-    (
-      updates: Partial<{
-        difficulty: DifficultyFilter;
-        mode: ModeFilter;
-        theme: string | null;
-        sort: HubSort;
-        page: number;
-        limit: number;
-      }>,
-      pushHistory = false,
-    ) => {
-      const next = new URLSearchParams(searchParams.toString());
-
-      const setOrDelete = (key: string, value: string | null | undefined) => {
-        if (!value) {
-          next.delete(key);
-        } else {
-          next.set(key, value);
-        }
+  const updateFilters = useCallback(
+    (updates: Partial<HubFilters>) => {
+      const nextFilters: HubFilters = {
+        difficulty: updates.difficulty ?? filters.difficulty,
+        mode: updates.mode ?? filters.mode,
+        theme: updates.theme !== undefined ? updates.theme : filters.theme,
+        sort: updates.sort ?? filters.sort,
       };
 
-      if (updates.difficulty !== undefined) {
-        setOrDelete("difficulty", updates.difficulty === "all" ? null : updates.difficulty);
+      if (
+        nextFilters.difficulty === filters.difficulty &&
+        nextFilters.mode === filters.mode &&
+        nextFilters.theme === filters.theme &&
+        nextFilters.sort === filters.sort
+      ) {
+        return;
       }
 
-      if (updates.mode !== undefined) {
-        setOrDelete("mode", updates.mode === "single" ? null : updates.mode);
-      }
-
-      if (updates.theme !== undefined) {
-        setOrDelete("theme", updates.theme);
-      }
-
-      if (updates.sort !== undefined) {
-        setOrDelete("sort", updates.sort === "popular" ? null : updates.sort);
-      }
-
-      if (updates.page !== undefined) {
-        setOrDelete("page", updates.page <= 1 ? null : String(updates.page));
-      }
-
-      if (updates.limit !== undefined) {
-        setOrDelete("limit", updates.limit === DEFAULT_LIMIT ? null : String(updates.limit));
-      }
-
-      const query = next.toString();
-      const href = query ? `/?${query}` : "/";
-
-      if (pushHistory) {
-        router.push(href, { scroll: false });
-      } else {
-        router.replace(href, { scroll: false });
-      }
+      setHubError(null);
+      setFilters(nextFilters);
+      setPage(1);
     },
-    [router, searchParams],
+    [filters],
   );
 
   useEffect(() => {
+    setFilters(loadStoredHubFilters());
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(HUB_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // Ignore storage write failures and keep the view usable.
+    }
+  }, [filters, filtersReady]);
+
+  useEffect(() => {
+    if (!filtersReady) {
+      return;
+    }
+
     let isCancelled = false;
     const controller = new AbortController();
 
@@ -265,7 +279,7 @@ function HomePageContent() {
       if (filters.theme) params.set("theme", filters.theme);
       if (filters.sort !== "popular") params.set("sort", filters.sort);
       params.set("page", String(pageNumber));
-      params.set("limit", String(filters.limit));
+      params.set("limit", String(DEFAULT_LIMIT));
 
       const response = await fetch(`/api/quiz/hub?${params.toString()}`, {
         cache: "no-store",
@@ -281,8 +295,8 @@ function HomePageContent() {
 
     async function loadHubQuizzes() {
       const isLoadMore =
-        previousFetchRef.current.key === filters.fetchKey &&
-        filters.page === previousFetchRef.current.page + 1;
+        previousFetchRef.current.key === filterFetchKey &&
+        page === previousFetchRef.current.page + 1;
 
       setHubError(null);
       if (isLoadMore) {
@@ -293,13 +307,13 @@ function HomePageContent() {
 
       try {
         if (isLoadMore) {
-          const payload = await fetchHubPage(filters.page);
+          const payload = await fetchHubPage(page);
           if (isCancelled) return;
           setHubQuizzes((previous) => [...previous, ...payload.quizzes]);
           setTotal(payload.total);
           setHasMore(payload.hasMore);
-        } else if (filters.page > 1) {
-          const pages = Array.from({ length: filters.page }, (_, index) => index + 1);
+        } else if (page > 1) {
+          const pages = Array.from({ length: page }, (_, index) => index + 1);
           const responses = await Promise.all(pages.map((pageNumber) => fetchHubPage(pageNumber)));
           if (isCancelled) return;
 
@@ -319,8 +333,8 @@ function HomePageContent() {
         }
 
         previousFetchRef.current = {
-          key: filters.fetchKey,
-          page: filters.page,
+          key: filterFetchKey,
+          page,
         };
       } catch (error) {
         if (!isCancelled) {
@@ -340,11 +354,16 @@ function HomePageContent() {
       isCancelled = true;
       controller.abort();
     };
-  }, [filters]);
+  }, [filterFetchKey, filters, filtersReady, page]);
 
   useEffect(() => {
+    if (!filtersReady) {
+      return;
+    }
+
     let cancelled = false;
     const controller = new AbortController();
+    setDidLoadThemes(false);
 
     async function loadPopularThemes() {
       try {
@@ -383,7 +402,7 @@ function HomePageContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [filters.mode]);
+  }, [filters.mode, filtersReady]);
 
   const featuredThemeOptions = useMemo(() => {
     const cappedThemes = popularThemes.slice(0, 4);
@@ -520,6 +539,7 @@ function HomePageContent() {
       }
 
       const payload = (await response.json()) as { quiz: { id: string } };
+      clearMyQuizzesRandomPlaybackContext();
       router.push(`/play/${payload.quiz.id}`);
     } catch (error) {
       const fallbackMessage = filters.theme
@@ -551,6 +571,7 @@ function HomePageContent() {
   ) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+      clearMyQuizzesRandomPlaybackContext();
       router.push(`/play/${quizId}`);
       return;
     }
@@ -601,7 +622,7 @@ function HomePageContent() {
                       key={option.value}
                       isActive={filters.sort === option.value}
                       className={`${hubFilterPillClassName} shrink-0`}
-                      onClick={() => updateQueryParams({ sort: option.value, page: 1 })}
+                      onClick={() => updateFilters({ sort: option.value })}
                     >
                       {option.label}
                     </FilterPill>
@@ -617,7 +638,7 @@ function HomePageContent() {
                   <FilterPill
                     isActive={filters.theme === null}
                     className={`${hubFilterPillClassName} max-w-[14rem] shrink-0 md:max-w-[15rem] md:shrink xl:max-w-[16rem]`}
-                    onClick={() => updateQueryParams({ theme: null, page: 1 })}
+                    onClick={() => updateFilters({ theme: null })}
                   >
                     All Themes
                   </FilterPill>
@@ -626,7 +647,7 @@ function HomePageContent() {
                       key={entry.theme}
                       isActive={filters.theme === entry.theme}
                       className={`${hubFilterPillClassName} max-w-[16rem] shrink-0 md:max-w-[17.5rem] md:shrink xl:max-w-[18.5rem]`}
-                      onClick={() => updateQueryParams({ theme: entry.theme, page: 1 })}
+                      onClick={() => updateFilters({ theme: entry.theme })}
                     >
                       {entry.theme}
                     </FilterPill>
@@ -644,7 +665,7 @@ function HomePageContent() {
                       key={option.value}
                       isActive={filters.difficulty === option.value}
                       className={`${hubFilterPillClassName} shrink-0`}
-                      onClick={() => updateQueryParams({ difficulty: option.value, page: 1 })}
+                      onClick={() => updateFilters({ difficulty: option.value })}
                     >
                       {option.label}
                     </FilterPill>
@@ -662,9 +683,7 @@ function HomePageContent() {
                       key={option.value}
                       isActive={filters.mode === option.value}
                       className={`${hubFilterPillClassName} shrink-0`}
-                      onClick={() =>
-                        updateQueryParams({ mode: option.value, theme: null, page: 1 })
-                      }
+                      onClick={() => updateFilters({ mode: option.value, theme: null })}
                     >
                       {option.label}
                     </FilterPill>
@@ -785,7 +804,10 @@ function HomePageContent() {
                       creatorImage={quiz.creatorImage}
                       size="large"
                       statusLabel="Ready"
-                      onClick={() => router.push(`/play/${quiz.id}`)}
+                      onClick={() => {
+                        clearMyQuizzesRandomPlaybackContext();
+                        router.push(`/play/${quiz.id}`);
+                      }}
                       onKeyDown={(event) => handleCardKeyDown(event, index, quiz.id)}
                     />
                   );
@@ -796,7 +818,7 @@ function HomePageContent() {
                 <div className="flex justify-center pt-2">
                   <Button
                     type="button"
-                    onClick={() => updateQueryParams({ page: filters.page + 1 }, true)}
+                    onClick={() => setPage((previous) => previous + 1)}
                     disabled={isLoadingMore}
                     variant="outline"
                     className="min-h-20 min-w-72 border-[#6c8aff]/45 bg-[#6c8aff]/12 px-8 text-3xl font-semibold text-[#e4e4e9] hover:bg-[#6c8aff]/18 focus-visible:ring-[#818cf8]/55 md:text-4xl"
