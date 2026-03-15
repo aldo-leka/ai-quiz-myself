@@ -88,13 +88,13 @@ const REVEAL_FEEDBACK_MIN_MS = 1500;
 const FINAL_LOCK_SUSPENSE_MIN_MS = 1000;
 const MAX_HOST_SPEECH_INPUT_CHARS = 3800;
 const WWTBAM_SFX_URLS: Record<WwtbamSfxKey, string> = {
-  select: "/audio/elevenlabs/select.wav",
-  "final-answer-lock": "/audio/elevenlabs/final-answer-lock.wav",
-  "host-bed": "/audio/elevenlabs/host-bed.wav",
-  "correct-answer": "/audio/elevenlabs/correct-answer.wav",
-  "wrong-answer": "/audio/elevenlabs/wrong-answer.wav",
-  "reveal-hit": "/audio/elevenlabs/reveal-hit.wav",
-  checkpoint: "/audio/elevenlabs/checkpoint.wav",
+  select: "/audio/elevenlabs/select.mp3",
+  "final-answer-lock": "/audio/elevenlabs/final-answer-lock.mp3",
+  "host-bed": "/audio/elevenlabs/host-bed.mp3",
+  "correct-answer": "/audio/elevenlabs/correct-answer.mp3",
+  "wrong-answer": "/audio/elevenlabs/wrong-answer.mp3",
+  "reveal-hit": "/audio/elevenlabs/reveal-hit.mp3",
+  checkpoint: "/audio/elevenlabs/checkpoint.mp3",
 };
 const WWTBAM_SFX_VOLUMES: Record<WwtbamSfxKey, number> = {
   select: 0.45,
