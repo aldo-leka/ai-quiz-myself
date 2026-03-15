@@ -107,11 +107,25 @@ const WWTBAM_SFX_VOLUMES: Record<WwtbamSfxKey, number> = {
 };
 
 type VoteType = "like" | "dislike";
+type AudioContextConstructor = typeof AudioContext;
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function getAudioContextConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const extendedWindow = window as Window &
+    typeof globalThis & {
+      webkitAudioContext?: AudioContextConstructor;
+    };
+
+  return window.AudioContext ?? extendedWindow.webkitAudioContext ?? null;
 }
 
 function computeLikeRatioLabel(likes: number, dislikes: number) {
@@ -267,13 +281,15 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const revealedAnswerRef = useRef(false);
   const questionViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const hostAudioRef = useRef<HTMLAudioElement | null>(null);
-  const hostBedAudioRef = useRef<HTMLAudioElement | null>(null);
   const hostAudioPlaybackResolverRef = useRef<((played: boolean) => void) | null>(null);
   const hostNarrationRunIdRef = useRef(0);
   const hostNarrationSkipRequestedRef = useRef(false);
   const prefetchedHostAudioUrlsRef = useRef(new Set<string>());
-  const preloadedSfxAudioRefs = useRef<Partial<Record<WwtbamSfxKey, HTMLAudioElement>>>({});
-  const activeSfxAudioRef = useRef(new Set<HTMLAudioElement>());
+  const wwtbamAudioContextRef = useRef<AudioContext | null>(null);
+  const preloadedSfxBufferRefs = useRef<Partial<Record<WwtbamSfxKey, Promise<AudioBuffer | null>>>>({});
+  const hostBedSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const hostBedGainRef = useRef<GainNode | null>(null);
+  const activeSfxSourceRefs = useRef(new Set<AudioBufferSourceNode>());
   const readAloudEnabledRef = useRef(false);
   const hasStartedIntroRef = useRef(false);
 
@@ -315,100 +331,196 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   );
   const canUseAskHost = hasStoredAskHostHint;
 
-  const ensureHostBedAudio = useCallback(() => {
+  const ensureWwtbamAudioContext = useCallback(() => {
     if (typeof window === "undefined") {
       return null;
     }
 
-    const existing = hostBedAudioRef.current;
+    const existing = wwtbamAudioContextRef.current;
     if (existing) {
       return existing;
     }
 
-    const audio = new Audio(WWTBAM_SFX_URLS["host-bed"]);
-    audio.preload = "auto";
-    audio.loop = true;
-    audio.volume = WWTBAM_SFX_VOLUMES["host-bed"];
-    hostBedAudioRef.current = audio;
-    return audio;
-  }, []);
-
-  const stopHostBed = useCallback(() => {
-    const audio = hostBedAudioRef.current;
-    if (!audio) return;
-
-    audio.pause();
-    audio.currentTime = 0;
-  }, []);
-
-  const playHostBed = useCallback(async () => {
-    const audio = ensureHostBedAudio();
-    if (!audio) return;
-
-    if (!audio.paused) {
-      return;
+    const AudioContextClass = getAudioContextConstructor();
+    if (!AudioContextClass) {
+      return null;
     }
 
-    try {
-      audio.currentTime = 0;
-      await audio.play();
-    } catch {
-      // Host bed is optional. Ignore autoplay or playback failures.
-    }
-  }, [ensureHostBedAudio]);
+    const context = new AudioContextClass();
+    wwtbamAudioContextRef.current = context;
+    return context;
+  }, []);
+
+  const loadWwtbamSfxBuffer = useCallback(
+    async (key: WwtbamSfxKey) => {
+      const existing = preloadedSfxBufferRefs.current[key];
+      if (existing) {
+        return existing;
+      }
+
+      const context = ensureWwtbamAudioContext();
+      if (!context) {
+        return null;
+      }
+
+      const bufferPromise = fetch(WWTBAM_SFX_URLS[key], {
+        cache: "force-cache",
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load ${key} (${response.status})`);
+          }
+
+          const audioData = await response.arrayBuffer();
+          return context.decodeAudioData(audioData.slice(0));
+        })
+        .catch(() => {
+          delete preloadedSfxBufferRefs.current[key];
+          return null;
+        });
+
+      preloadedSfxBufferRefs.current[key] = bufferPromise;
+      return bufferPromise;
+    },
+    [ensureWwtbamAudioContext],
+  );
 
   const preloadWwtbamSfx = useCallback(() => {
-    if (typeof window === "undefined") {
+    for (const key of Object.keys(WWTBAM_SFX_URLS) as WwtbamSfxKey[]) {
+      void loadWwtbamSfxBuffer(key);
+    }
+  }, [loadWwtbamSfxBuffer]);
+
+  const resumeWwtbamAudioContext = useCallback(
+    async () => {
+      const context = ensureWwtbamAudioContext();
+      if (!context) {
+        return false;
+      }
+
+      if (context.state === "running") {
+        return true;
+      }
+
+      try {
+        await context.resume();
+        return context.state !== "suspended" && context.state !== "closed";
+      } catch {
+        return false;
+      }
+    },
+    [ensureWwtbamAudioContext],
+  );
+
+  const stopHostBed = useCallback(() => {
+    const source = hostBedSourceRef.current;
+    const gain = hostBedGainRef.current;
+
+    if (!source && !gain) {
       return;
     }
 
-    for (const [key, url] of Object.entries(WWTBAM_SFX_URLS) as Array<[WwtbamSfxKey, string]>) {
-      if (key === "host-bed") {
-        const audio = ensureHostBedAudio();
-        audio?.load();
-        continue;
-      }
-
-      if (preloadedSfxAudioRefs.current[key]) {
-        continue;
-      }
-
-      const audio = new Audio(url);
-      audio.preload = "auto";
-      audio.volume = WWTBAM_SFX_VOLUMES[key];
-      audio.load();
-      preloadedSfxAudioRefs.current[key] = audio;
-    }
-  }, [ensureHostBedAudio]);
-
-  const playSfx = useCallback(async (key: WwtbamSfxKey) => {
-    if (typeof window === "undefined" || key === "host-bed") {
-      return false;
-    }
-
-    const baseAudio = preloadedSfxAudioRefs.current[key];
-    const audio = baseAudio ? (baseAudio.cloneNode(true) as HTMLAudioElement) : new Audio(WWTBAM_SFX_URLS[key]);
-    audio.preload = "auto";
-    audio.volume = WWTBAM_SFX_VOLUMES[key];
-    activeSfxAudioRef.current.add(audio);
-
-    const cleanup = () => {
-      audio.onended = null;
-      audio.onerror = null;
-      activeSfxAudioRef.current.delete(audio);
-    };
-
-    audio.onended = cleanup;
-    audio.onerror = cleanup;
+    hostBedSourceRef.current = null;
+    hostBedGainRef.current = null;
 
     try {
-      await audio.play();
-      return true;
+      source?.stop();
     } catch {
-      cleanup();
-      return false;
+      // Ignore duplicate stops when the source already ended.
     }
+
+    source?.disconnect();
+    gain?.disconnect();
   }, []);
+
+  const playHostBed = useCallback(
+    async () => {
+      const context = ensureWwtbamAudioContext();
+      if (!context) {
+        return false;
+      }
+
+      if (!(await resumeWwtbamAudioContext())) {
+        return false;
+      }
+
+      if (hostBedSourceRef.current) {
+        return true;
+      }
+
+      const buffer = await loadWwtbamSfxBuffer("host-bed");
+      if (!buffer) {
+        return false;
+      }
+
+      const gain = context.createGain();
+      gain.gain.value = WWTBAM_SFX_VOLUMES["host-bed"];
+
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(gain);
+      gain.connect(context.destination);
+      source.onended = () => {
+        if (hostBedSourceRef.current === source) {
+          hostBedSourceRef.current = null;
+        }
+        if (hostBedGainRef.current === gain) {
+          hostBedGainRef.current = null;
+        }
+        source.disconnect();
+        gain.disconnect();
+      };
+
+      hostBedSourceRef.current = source;
+      hostBedGainRef.current = gain;
+      source.start(0);
+      return true;
+    },
+    [ensureWwtbamAudioContext, loadWwtbamSfxBuffer, resumeWwtbamAudioContext],
+  );
+
+  const playSfx = useCallback(
+    async (key: WwtbamSfxKey) => {
+      if (typeof window === "undefined" || key === "host-bed") {
+        return false;
+      }
+
+      const context = ensureWwtbamAudioContext();
+      if (!context) {
+        return false;
+      }
+
+      if (!(await resumeWwtbamAudioContext())) {
+        return false;
+      }
+
+      const buffer = await loadWwtbamSfxBuffer(key);
+      if (!buffer) {
+        return false;
+      }
+
+      try {
+        const source = context.createBufferSource();
+        const gain = context.createGain();
+        source.buffer = buffer;
+        gain.gain.value = WWTBAM_SFX_VOLUMES[key];
+        source.connect(gain);
+        gain.connect(context.destination);
+        activeSfxSourceRefs.current.add(source);
+        source.onended = () => {
+          activeSfxSourceRefs.current.delete(source);
+          source.disconnect();
+          gain.disconnect();
+        };
+        source.start(0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [ensureWwtbamAudioContext, loadWwtbamSfxBuffer, resumeWwtbamAudioContext],
+  );
 
   const stopHostNarration = useCallback(() => {
     hostNarrationRunIdRef.current += 1;
@@ -610,9 +722,15 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   }, [currentQuestion, currentQuestionIndex, playOptionalHostNarration, playSfx, quiz.id, ttsFingerprint]);
 
   const resumeQuestionBed = useCallback(() => {
-    if (!currentQuestion) return;
-    if (revealedAnswerRef.current || gameOver || finalAnswerLocked) return;
-    if (!countdownStartedRef.current || (remainingTime ?? 0) <= 0) return;
+    if (!currentQuestion) {
+      return;
+    }
+    if (revealedAnswerRef.current || gameOver || finalAnswerLocked) {
+      return;
+    }
+    if (!countdownStartedRef.current || (remainingTime ?? 0) <= 0) {
+      return;
+    }
 
     void playHostBed();
   }, [currentQuestion, finalAnswerLocked, gameOver, playHostBed, remainingTime]);
@@ -690,8 +808,28 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   }, [preloadWwtbamSfx]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const unlockAudio = () => {
+      void resumeWwtbamAudioContext();
+    };
+
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("touchstart", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [resumeWwtbamAudioContext]);
+
+  useEffect(() => {
     let cancelled = false;
-    const activeSfxAudioSet = activeSfxAudioRef.current;
+    const activeSfxSourceSet = activeSfxSourceRefs.current;
 
     async function initializeGame() {
       setIsLoading(true);
@@ -739,11 +877,21 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
       if (timerRef.current) clearInterval(timerRef.current);
       stopHostNarration();
       stopHostBed();
-      for (const audio of activeSfxAudioSet) {
-        audio.pause();
-        audio.currentTime = 0;
+      for (const source of activeSfxSourceSet) {
+        try {
+          source.stop();
+        } catch {
+          // Ignore duplicate stops during teardown.
+        }
+        source.disconnect();
       }
-      activeSfxAudioSet.clear();
+      activeSfxSourceSet.clear();
+      preloadedSfxBufferRefs.current = {};
+      const context = wwtbamAudioContextRef.current;
+      wwtbamAudioContextRef.current = null;
+      if (context) {
+        void context.close();
+      }
     };
     // Game setup should rerun only when the quiz changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
