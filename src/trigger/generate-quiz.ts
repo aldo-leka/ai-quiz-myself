@@ -37,6 +37,7 @@ import {
   generateWwtbamHostHints,
   type GeneratedWwtbamHostHint,
 } from "@/lib/wwtbam-host-hints";
+import { captureServerEvent } from "@/lib/posthog-server";
 import { reviewHubCandidateTask } from "@/trigger/review-hub-candidates";
 
 const taskPayloadSchema = z.object({
@@ -558,6 +559,24 @@ export async function failGenerationJob(params: {
     refundedCharge: refunded.refunded,
   });
 
+  await captureServerEvent({
+    distinctId: params.userId,
+    event: "quiz_generation_failed",
+    properties: {
+      job_id: params.jobId,
+      source_type: params.sourceType,
+      game_mode: params.input.gameMode,
+      difficulty: params.input.difficulty,
+      language: params.input.language,
+      billing_mode: params.input.billingMode,
+      billed_cents: params.input.billingAmountCents,
+      quantity: params.input.batchSize ?? 1,
+      failure_stage: "job",
+      error_message: params.errorMessage,
+      refunded_charge: refunded.refunded,
+    },
+  });
+
   return {
     ok: false as const,
     jobId: params.jobId,
@@ -864,6 +883,30 @@ export async function runGenerateQuizJob(params: {
       billedCents: settled.charged ? effectiveInput.billingAmountCents : 0,
       generationCostUsdMicros: mergedCostBreakdown.totalUsdMicros,
       hasUnpricedGenerationCost: mergedCostBreakdown.hasUnpricedLineItems,
+    });
+
+    await captureServerEvent({
+      distinctId: job.userId,
+      event: "quiz_generation_completed",
+      properties: {
+        job_id: job.id,
+        quiz_id: quizId,
+        source_type: sourceType,
+        game_mode: effectiveInput.gameMode,
+        difficulty: effectiveInput.difficulty,
+        language: effectiveInput.language,
+        billing_mode: effectiveInput.billingMode,
+        billed_cents: settled.charged ? effectiveInput.billingAmountCents : 0,
+        duplicate,
+        hub_candidate_created: Boolean(hubCandidateId),
+        is_public: effectiveInput.isPublic,
+        is_hub: effectiveInput.isHub,
+        provider: credentials.provider,
+        question_count: questionTexts.length,
+        quantity: effectiveInput.batchSize ?? 1,
+        generation_cost_usd_micros: mergedCostBreakdown.totalUsdMicros,
+        has_unpriced_generation_cost: mergedCostBreakdown.hasUnpricedLineItems,
+      },
     });
 
     return {

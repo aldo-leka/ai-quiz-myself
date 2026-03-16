@@ -14,6 +14,7 @@ import {
   Volume2,
   XCircle,
 } from "lucide-react";
+import posthog from "posthog-js";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -38,6 +39,7 @@ import { cn } from "@/lib/utils";
 type CouchCoopGameProps = {
   quiz: QuizWithQuestions;
   playContext?: MyQuizzesRandomContext | null;
+  entrySource?: "direct" | "share";
 };
 
 type GamePhase = "setup" | "question" | "reveal" | "complete";
@@ -111,7 +113,11 @@ function normalizePlayerNames(rawNames: string[]): string[] {
   });
 }
 
-export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) {
+export function CouchCoopGame({
+  quiz,
+  playContext = null,
+  entrySource = "direct",
+}: CouchCoopGameProps) {
   const router = useRouter();
   const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
@@ -180,6 +186,8 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
   const finishedAtRef = useRef<Date | null>(null);
   const hasPersistedRef = useRef(false);
   const finalizedQuestionKeyRef = useRef<string | null>(null);
+  const playAttemptRef = useRef(0);
+  const hasTrackedCompletionRef = useRef(false);
 
   const totalQuestions = questions.length;
   const currentQuestion = questions[currentQuestionIndex];
@@ -236,6 +244,70 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
     return rows;
   }, []);
 
+  const trackQuizStarted = useCallback(
+    (playerCount: number, startReason: "initial" | "rematch") => {
+      playAttemptRef.current += 1;
+      hasTrackedCompletionRef.current = false;
+      posthog.capture("quiz_started", {
+        quiz_id: quiz.id,
+        game_mode: quiz.gameMode,
+        difficulty: quiz.difficulty,
+        source_type: quiz.sourceType,
+        question_count: quiz.questions.length,
+        entry_source: entrySource,
+        signed_in: Boolean(sessionData?.user?.id),
+        is_random_play: Boolean(playContext),
+        player_count: playerCount,
+        attempt_number: playAttemptRef.current,
+        start_reason: startReason,
+      });
+    },
+    [entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.questions.length, quiz.sourceType, sessionData?.user?.id],
+  );
+
+  const trackQuizCompleted = useCallback(
+    (
+      snapshotPlayers: string[],
+      snapshotScores: number[],
+      snapshotResults: PlayerResult[],
+      finishedAt: Date,
+    ) => {
+      if (hasTrackedCompletionRef.current || !startedAtRef.current) {
+        return;
+      }
+
+      hasTrackedCompletionRef.current = true;
+      const totalScore = snapshotScores.reduce((sum, score) => sum + score, 0);
+      const totalCorrectAnswers = snapshotResults.filter((result) => result.isCorrect).length;
+      const durationMs = Math.max(0, finishedAt.getTime() - startedAtRef.current.getTime());
+      const properties = {
+        quiz_id: quiz.id,
+        game_mode: quiz.gameMode,
+        difficulty: quiz.difficulty,
+        source_type: quiz.sourceType,
+        question_count: totalQuestions,
+        player_count: snapshotPlayers.length,
+        completed_questions: snapshotResults.length,
+        correct_answers: totalCorrectAnswers,
+        total_score: totalScore,
+        team_accuracy_percentage:
+          totalQuestions > 0 ? Math.round((totalCorrectAnswers / totalQuestions) * 100) : 0,
+        duration_ms: durationMs,
+        entry_source: entrySource,
+        signed_in: Boolean(sessionData?.user?.id),
+        is_random_play: Boolean(playContext),
+        attempt_number: playAttemptRef.current,
+      };
+
+      posthog.capture("quiz_completed", properties);
+
+      if (entrySource === "share") {
+        posthog.capture("play_from_shared_link_completed", properties);
+      }
+    },
+    [entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.sourceType, sessionData?.user?.id, totalQuestions],
+  );
+
   const {
     readAloudEnabled,
     readAloudPreferenceReady,
@@ -260,6 +332,11 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
     rememberRecentQuiz("couch_coop", quiz.id);
   }, [quiz.id]);
 
+  useEffect(() => {
+    playAttemptRef.current = 0;
+    hasTrackedCompletionRef.current = false;
+  }, [quiz.id]);
+
   function stopCountdown() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -278,6 +355,7 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
 
       hasPersistedRef.current = true;
       setSaveStatus("saving");
+      trackQuizCompleted(snapshotPlayers, snapshotScores, snapshotResults, finishedAt);
 
       const payload: SaveQuizSessionPayload = {
         quizId: quiz.id,
@@ -315,7 +393,7 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
           setSaveStatus("error");
         });
     },
-    [quiz.id, sessionData?.user],
+    [quiz.id, sessionData?.user, trackQuizCompleted],
   );
 
   const pickAnotherCouchQuiz = useCallback(async () => {
@@ -374,10 +452,15 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
     startedAtRef.current = new Date();
     finishedAtRef.current = null;
     hasPersistedRef.current = false;
+    hasTrackedCompletionRef.current = false;
     finalizedQuestionKeyRef.current = null;
     answerWindowOpenedRef.current = false;
     setAnswerWindowOpen(false);
-  }, [quiz.questions]);
+    trackQuizStarted(
+      trimmedPlayers.length,
+      playerNames.length >= MIN_PLAYERS ? "rematch" : "initial",
+    );
+  }, [playerNames.length, quiz.questions, trackQuizStarted]);
 
   const startGameFromSetup = useCallback(() => {
     const normalized = normalizePlayerNames(setupNames);

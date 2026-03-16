@@ -66,6 +66,7 @@ export default async function QuizFromPdfPage() {
       featuredTitle="Popular quizzes to try while you build"
       featuredDescription="These public quizzes show the kind of gameplay output you can expect after turning your own PDF into a round."
       featuredQuizzes={featuredQuizzes}
+      trackingPage="quiz_from_pdf"
     />
   );
 }

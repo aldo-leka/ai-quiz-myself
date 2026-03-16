@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, FileText, Link2, Sparkles, Target } from "lucide-react";
 import posthog from "posthog-js";
@@ -268,12 +268,20 @@ export function DashboardCreatePageClient({
 }: DashboardCreatePageClientProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasTrackedInitialSourceRef = useRef(false);
+  const hasTrackedInitialModeRef = useRef(false);
   const normalizedInitialSourceType = normalizeSourceType(initialSourceType);
   const normalizedInitialGameMode = normalizeGameMode(initialGameMode);
   const normalizedInitialDifficulty = normalizeDifficulty(
     initialDifficulty,
     normalizedInitialGameMode,
   );
+  const initialSourceWasPrefilled =
+    normalizedInitialSourceType !== "theme" ||
+    initialTheme.trim().length > 0 ||
+    initialUrl.trim().length > 0;
+  const initialModeWasPrefilled =
+    normalizedInitialGameMode !== "single" || normalizedInitialDifficulty !== "mixed";
 
   const [sourceType, setSourceType] = useState<SourceType>(normalizedInitialSourceType);
   const [theme, setTheme] = useState(initialTheme.trim());
@@ -398,6 +406,30 @@ export function DashboardCreatePageClient({
       })),
     [],
   );
+
+  useEffect(() => {
+    const selectionContext = hasTrackedInitialSourceRef.current ? "changed" : "initial";
+    posthog.capture("source_selected", {
+      source_type: sourceType,
+      selection_context: selectionContext,
+      was_prefilled: selectionContext === "initial" && initialSourceWasPrefilled,
+      game_mode: gameMode,
+      difficulty: effectiveDifficulty,
+    });
+    hasTrackedInitialSourceRef.current = true;
+  }, [effectiveDifficulty, gameMode, initialSourceWasPrefilled, sourceType]);
+
+  useEffect(() => {
+    const selectionContext = hasTrackedInitialModeRef.current ? "changed" : "initial";
+    posthog.capture("mode_selected", {
+      game_mode: gameMode,
+      selection_context: selectionContext,
+      was_prefilled: selectionContext === "initial" && initialModeWasPrefilled,
+      source_type: sourceType,
+      difficulty: effectiveDifficulty,
+    });
+    hasTrackedInitialModeRef.current = true;
+  }, [effectiveDifficulty, gameMode, initialModeWasPrefilled, sourceType]);
 
   function applyGameMode(nextMode: GameMode) {
     setGameMode(nextMode);
@@ -711,6 +743,7 @@ export function DashboardCreatePageClient({
         difficulty: effectiveDifficulty,
         quantity: schedulableGenerationCount,
         billing_mode: effectiveBillingMode,
+        failure_stage: "request",
       });
       setStatusMessage(error instanceof Error ? error.message : "Failed to start generation");
     } finally {

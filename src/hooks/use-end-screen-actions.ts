@@ -47,7 +47,7 @@ export function useEndScreenActions({
       return;
     }
 
-    const shareUrl = `${window.location.origin}${buildPublicQuizPath(quizId)}`;
+    const shareUrl = `${window.location.origin}${buildPublicQuizPath(quizId, { ref: "share" })}`;
 
     try {
       await navigator.clipboard.writeText(shareUrl);

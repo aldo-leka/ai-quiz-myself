@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { PostHogAuthSync } from "@/components/posthog/posthog-auth-sync";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { getSiteUrl, SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
@@ -179,7 +180,10 @@ export default function RootLayout({
           </main>
         </div>
         <div id="app-shell">
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <PostHogAuthSync />
+            {children}
+          </TooltipProvider>
         </div>
         <SpeedInsights />
       </body>

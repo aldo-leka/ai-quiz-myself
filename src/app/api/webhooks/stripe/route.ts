@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { billingWebhookEvents, creditTransactions } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { requireEnv } from "@/lib/env";
+import { captureServerEvent } from "@/lib/posthog-server";
 import { getStripeClient } from "@/lib/stripe";
 import { incrementWalletBalanceCents } from "@/lib/wallet";
 
@@ -105,11 +106,24 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
       .returning({ id: creditTransactions.id });
 
     if (updatedTransaction) {
+      await captureServerEvent({
+        distinctId: userId,
+        event: "top_up_completed",
+        properties: {
+          transaction_id: updatedTransaction.id,
+          source,
+          top_up_type: type,
+          credit_amount_cents: walletCreditCents,
+          amount_received_cents: intent.amount_received ?? intent.amount,
+          amount_charged_cents: intent.amount,
+          currency: intent.currency,
+        },
+      });
       return NextResponse.json({ ok: true, credited: walletCreditCents });
     }
   }
 
-  await db.insert(creditTransactions).values({
+  const [createdTransaction] = await db.insert(creditTransactions).values({
     userId,
     amountCents: walletCreditCents,
     currency: intent.currency,
@@ -125,6 +139,20 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
       walletCreditCents,
       amountReceivedCents: intent.amount_received ?? null,
       amountChargedCents: intent.amount,
+    },
+  }).returning({ id: creditTransactions.id });
+
+  await captureServerEvent({
+    distinctId: userId,
+    event: "top_up_completed",
+    properties: {
+      transaction_id: createdTransaction?.id ?? null,
+      source,
+      top_up_type: type,
+      credit_amount_cents: walletCreditCents,
+      amount_received_cents: intent.amount_received ?? intent.amount,
+      amount_charged_cents: intent.amount,
+      currency: intent.currency,
     },
   });
 

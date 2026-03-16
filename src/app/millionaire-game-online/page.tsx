@@ -66,6 +66,7 @@ export default async function MillionaireGameOnlinePage() {
       featuredTitle="Millionaire-style quizzes live now"
       featuredDescription="These public WWTBAM quizzes show the exact play style and pacing this mode is built for."
       featuredQuizzes={featuredQuizzes}
+      trackingPage="millionaire_game_online"
     />
   );
 }

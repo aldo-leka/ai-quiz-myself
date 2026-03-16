@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { FeaturedQuizGrid } from "@/components/marketing/featured-quiz-grid";
+import { PostHogLink } from "@/components/posthog/posthog-link";
 import type { PublicQuizCard } from "@/lib/public-quizzes";
 
 type UseCasePageProps = {
@@ -19,6 +19,7 @@ type UseCasePageProps = {
   featuredTitle: string;
   featuredDescription: string;
   featuredQuizzes: PublicQuizCard[];
+  trackingPage: string;
 };
 
 export function UseCasePage({
@@ -34,6 +35,7 @@ export function UseCasePage({
   featuredTitle,
   featuredDescription,
   featuredQuizzes,
+  trackingPage,
 }: UseCasePageProps) {
   return (
     <div className="min-h-screen bg-[#0b0e17] px-4 py-6 text-[#e4e4e9] md:px-8 md:py-8">
@@ -52,19 +54,31 @@ export function UseCasePage({
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Link
+                <PostHogLink
                   href={ctaHref}
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: trackingPage,
+                    cta_id: "primary",
+                    destination_path: ctaHref,
+                  }}
                   className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg font-semibold text-[#f5f7ff] transition hover:bg-[#6c8aff]/24"
                 >
                   {ctaLabel}
                   <ArrowRight className="size-5" />
-                </Link>
-                <Link
+                </PostHogLink>
+                <PostHogLink
                   href={secondaryHref}
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: trackingPage,
+                    cta_id: "secondary",
+                    destination_path: secondaryHref,
+                  }}
                   className="inline-flex min-h-14 items-center justify-center rounded-full border border-[#252940] bg-[#121625]/92 px-6 text-lg font-semibold text-[#e4e4e9] transition hover:border-[#6c8aff]/45 hover:bg-[#1a1d2e]"
                 >
                   {secondaryLabel}
-                </Link>
+                </PostHogLink>
               </div>
             </div>
 
@@ -102,6 +116,7 @@ export function UseCasePage({
           title={featuredTitle}
           description={featuredDescription}
           quizzes={featuredQuizzes}
+          trackingPage={trackingPage}
         />
       </main>
     </div>

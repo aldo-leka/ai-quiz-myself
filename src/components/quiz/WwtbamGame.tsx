@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, House, LoaderCircle, Square, ThumbsDown, ThumbsUp, User, Volume2 } from "lucide-react";
+import posthog from "posthog-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -65,6 +66,7 @@ type FocusControlId =
 type WwtbamGameProps = {
   quiz: QuizWithQuestions;
   playContext?: MyQuizzesRandomContext | null;
+  entrySource?: "direct" | "share";
 };
 
 type NarrationResult = "completed" | "skipped" | "interrupted";
@@ -222,7 +224,11 @@ function toHostNarrationErrorMessage(error: unknown): string {
   return "Read aloud is unavailable right now.";
 }
 
-export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
+export function WwtbamGame({
+  quiz,
+  playContext = null,
+  entrySource = "direct",
+}: WwtbamGameProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const compactLayout = useCompactQuizLayout();
@@ -297,6 +303,9 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const activeSfxSourceRefs = useRef(new Set<AudioBufferSourceNode>());
   const readAloudEnabledRef = useRef(false);
   const hasStartedIntroRef = useRef(false);
+  const playAttemptRef = useRef(0);
+  const hasTrackedCompletionRef = useRef(false);
+  const lastTrackedStartKeyRef = useRef<string | null>(null);
 
   const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
@@ -312,6 +321,60 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
     difficulty: quiz.difficulty,
     isSignedIn: Boolean(sessionData?.user?.id),
   });
+
+  const trackQuizStarted = useCallback(
+    (startReason: "initial" | "replay") => {
+      playAttemptRef.current += 1;
+      hasTrackedCompletionRef.current = false;
+      posthog.capture("quiz_started", {
+        quiz_id: quiz.id,
+        game_mode: quiz.gameMode,
+        difficulty: quiz.difficulty,
+        source_type: quiz.sourceType,
+        question_count: quiz.questions.length,
+        entry_source: entrySource,
+        signed_in: Boolean(sessionData?.user?.id),
+        is_random_play: Boolean(playContext),
+        attempt_number: playAttemptRef.current,
+        start_reason: startReason,
+      });
+    },
+    [entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.questions.length, quiz.sourceType, sessionData?.user?.id],
+  );
+
+  const trackQuizCompleted = useCallback(
+    (finalAmount: number) => {
+      if (hasTrackedCompletionRef.current) {
+        return;
+      }
+
+      hasTrackedCompletionRef.current = true;
+      const correctAnswers = pendingAnswersRef.current.filter((answer) => answer.isCorrect).length;
+      const durationMs = Math.max(0, Date.now() - startedAtRef.current.getTime());
+      const properties = {
+        quiz_id: quiz.id,
+        game_mode: quiz.gameMode,
+        difficulty: quiz.difficulty,
+        source_type: quiz.sourceType,
+        question_count: quiz.questions.length,
+        answered_questions: pendingAnswersRef.current.length,
+        correct_answers: correctAnswers,
+        won_amount: finalAmount,
+        duration_ms: durationMs,
+        entry_source: entrySource,
+        signed_in: Boolean(sessionData?.user?.id),
+        is_random_play: Boolean(playContext),
+        attempt_number: playAttemptRef.current,
+      };
+
+      posthog.capture("quiz_completed", properties);
+
+      if (entrySource === "share") {
+        posthog.capture("play_from_shared_link_completed", properties);
+      }
+    },
+    [entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.questions.length, quiz.sourceType, sessionData?.user?.id],
+  );
 
   const {
     readAloudEnabled,
@@ -332,6 +395,12 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
     setVote(quiz.currentVote ?? null);
     setVoteError(null);
   }, [quiz.currentVote, quiz.dislikes, quiz.id, quiz.likes]);
+
+  useEffect(() => {
+    playAttemptRef.current = 0;
+    hasTrackedCompletionRef.current = false;
+    lastTrackedStartKeyRef.current = null;
+  }, [quiz.id]);
 
   const questions = quiz.questions;
   const currentQuestion = questions[currentQuestionIndex];
@@ -867,9 +936,15 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
       hasPersistedSessionRef.current = false;
       isAdvancingRef.current = false;
       hasStartedIntroRef.current = false;
+      hasTrackedCompletionRef.current = false;
       questionFlowRunIdRef.current = 0;
       askHostRequestIdRef.current += 1;
       startedAtRef.current = new Date();
+      const startKey = `${quiz.id}:${retryToken || "initial"}`;
+      if (lastTrackedStartKeyRef.current !== startKey) {
+        lastTrackedStartKeyRef.current = startKey;
+        trackQuizStarted(playAttemptRef.current === 0 ? "initial" : "replay");
+      }
 
       if (!cancelled) {
         setIsLoading(false);
@@ -1459,6 +1534,7 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
     stopHostNarration();
     setWonAmount(finalAmount);
     setGameOver(true);
+    trackQuizCompleted(finalAmount);
     await persistSession(finalAmount);
   }
 

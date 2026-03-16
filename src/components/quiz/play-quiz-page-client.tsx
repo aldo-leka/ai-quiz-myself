@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { CouchCoopGame } from "@/components/quiz/CouchCoopGame";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { LoadingScreen } from "@/components/quiz/LoadingScreen";
@@ -16,18 +17,28 @@ type PlayQuizPageClientProps = {
 
 export function PlayQuizPageClient({ quizId }: PlayQuizPageClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [playContext, setPlayContext] = useState(() =>
     getMyQuizzesRandomPlaybackContextForQuiz(quizId),
   );
   const homePath = playContext ? "/dashboard" : "/hub";
+  const sharedLinkTrackedRef = useRef(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [quiz, setQuiz] = useState<QuizWithQuestions | null>(null);
+  const entrySource = useMemo<"direct" | "share">(
+    () => (searchParams.get("ref") === "share" ? "share" : "direct"),
+    [searchParams],
+  );
 
   useEffect(() => {
     setPlayContext(getMyQuizzesRandomPlaybackContextForQuiz(quizId));
   }, [quizId]);
+
+  useEffect(() => {
+    sharedLinkTrackedRef.current = false;
+  }, [entrySource, quizId]);
 
   useEffect(() => {
     if (!quizId) return;
@@ -71,6 +82,21 @@ export function PlayQuizPageClient({ quizId }: PlayQuizPageClientProps) {
     };
   }, [quizId]);
 
+  useEffect(() => {
+    if (!quiz || entrySource !== "share" || sharedLinkTrackedRef.current) {
+      return;
+    }
+
+    sharedLinkTrackedRef.current = true;
+    posthog.capture("shared_link_opened", {
+      quiz_id: quiz.id,
+      game_mode: quiz.gameMode,
+      difficulty: quiz.difficulty,
+      source_type: quiz.sourceType,
+      question_count: quiz.questions.length,
+    });
+  }, [entrySource, quiz]);
+
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -91,15 +117,15 @@ export function PlayQuizPageClient({ quizId }: PlayQuizPageClientProps) {
   }
 
   if (quiz.gameMode === "wwtbam") {
-    return <WwtbamGame quiz={quiz} playContext={playContext} />;
+    return <WwtbamGame quiz={quiz} playContext={playContext} entrySource={entrySource} />;
   }
 
   if (quiz.gameMode === "single") {
-    return <SinglePlayerGame quiz={quiz} playContext={playContext} />;
+    return <SinglePlayerGame quiz={quiz} playContext={playContext} entrySource={entrySource} />;
   }
 
   if (quiz.gameMode === "couch_coop") {
-    return <CouchCoopGame quiz={quiz} playContext={playContext} />;
+    return <CouchCoopGame quiz={quiz} playContext={playContext} entrySource={entrySource} />;
   }
 
   return (

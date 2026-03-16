@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CreditCard, Loader2, RefreshCcw, Wallet } from "lucide-react";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -220,6 +221,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
 
     setTopUpLoading(true);
     setStatusMessage(null);
+    posthog.capture("billing_top_up_checkout_started", {
+      source: "dashboard_billing",
+      amount_cents: amountCents,
+    });
     try {
       const response = await fetch("/api/dashboard/billing/top-up", {
         method: "POST",

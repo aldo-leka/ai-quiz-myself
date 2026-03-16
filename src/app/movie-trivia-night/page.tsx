@@ -70,6 +70,7 @@ export default async function MovieTriviaNightPage() {
       featuredTitle="Movie-friendly public quizzes"
       featuredDescription="These public quizzes are close to the entertainment-night vibe this page is built for and make good warm-up rounds."
       featuredQuizzes={featuredQuizzes}
+      trackingPage="movie_trivia_night"
     />
   );
 }

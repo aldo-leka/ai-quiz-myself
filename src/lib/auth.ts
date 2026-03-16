@@ -8,6 +8,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { resolveStarterCreditsCentsFromSettings } from "@/lib/billing";
 import { detectLocaleFromRequest } from "@/lib/locale";
 import { requireEnv } from "@/lib/env";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 const betterAuthUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 const localhostHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -118,6 +119,16 @@ export const auth = betterAuth({
           }
 
           if (starterCreditsCents <= 0) {
+            await captureServerEvent({
+              distinctId: userRecord.id,
+              event: "signup_completed",
+              properties: {
+                locale: userRecord.locale ?? null,
+                starter_credits_cents: 0,
+                has_starter_bonus: false,
+                is_admin: Boolean(userRecord.isAdmin),
+              },
+            });
             return;
           }
 
@@ -143,6 +154,17 @@ export const auth = betterAuth({
             description: "Starter credits",
             metadata: {
               reason: "signup_bonus",
+            },
+          });
+
+          await captureServerEvent({
+            distinctId: userRecord.id,
+            event: "signup_completed",
+            properties: {
+              locale: userRecord.locale ?? null,
+              starter_credits_cents: starterCreditsCents,
+              has_starter_bonus: true,
+              is_admin: Boolean(userRecord.isAdmin),
             },
           });
         },

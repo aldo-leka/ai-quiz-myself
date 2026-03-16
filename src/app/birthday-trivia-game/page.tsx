@@ -67,6 +67,7 @@ export default async function BirthdayTriviaGamePage() {
       featuredTitle="Popular party-ready quizzes"
       featuredDescription="These public quizzes show the play style and pacing that works well for a birthday room, even if your actual birthday facts come from a private PDF."
       featuredQuizzes={featuredQuizzes}
+      trackingPage="birthday_trivia_game"
     />
   );
 }

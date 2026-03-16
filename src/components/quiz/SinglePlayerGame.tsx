@@ -12,6 +12,7 @@ import {
   Volume2,
   XCircle,
 } from "lucide-react";
+import posthog from "posthog-js";
 import { useRouter } from "next/navigation";
 import { CircularButton } from "@/components/quiz/CircularButton";
 import { GameButton } from "@/components/quiz/GameButton";
@@ -36,6 +37,7 @@ import { cn } from "@/lib/utils";
 type SinglePlayerGameProps = {
   quiz: QuizWithQuestions;
   playContext?: MyQuizzesRandomContext | null;
+  entrySource?: "direct" | "share";
 };
 
 type GamePhase = "question" | "reveal" | "complete";
@@ -84,7 +86,11 @@ function computeLikeRatioLabel(likes: number, dislikes: number) {
   return `${Math.round((likes / total) * 100)}% likes`;
 }
 
-export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameProps) {
+export function SinglePlayerGame({
+  quiz,
+  playContext = null,
+  entrySource = "direct",
+}: SinglePlayerGameProps) {
   const router = useRouter();
   const { data: sessionData, isPending: isSessionPending } = authClient.useSession();
   const sessionUser = sessionData?.user as
@@ -138,6 +144,9 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
   const resultsRef = useRef<QuestionResult[]>([]);
   const hasPersistedRef = useRef(false);
   const finalizedQuestionKeyRef = useRef<string | null>(null);
+  const playAttemptRef = useRef(0);
+  const hasTrackedCompletionRef = useRef(false);
+  const lastTrackedStartKeyRef = useRef<string | null>(null);
 
   const totalQuestions = quiz.questions.length;
   const homePath = playContext ? "/dashboard" : "/hub";
@@ -159,6 +168,60 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
     difficulty: quiz.difficulty,
     isSignedIn: Boolean(sessionData?.user?.id),
   });
+
+  const trackQuizStarted = useCallback(
+    (startReason: "initial" | "replay") => {
+      playAttemptRef.current += 1;
+      hasTrackedCompletionRef.current = false;
+      posthog.capture("quiz_started", {
+        quiz_id: quiz.id,
+        game_mode: quiz.gameMode,
+        difficulty: quiz.difficulty,
+        source_type: quiz.sourceType,
+        question_count: quiz.questions.length,
+        entry_source: entrySource,
+        signed_in: Boolean(sessionData?.user?.id),
+        is_random_play: Boolean(playContext),
+        attempt_number: playAttemptRef.current,
+        start_reason: startReason,
+      });
+    },
+    [entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.questions.length, quiz.sourceType, sessionData?.user?.id],
+  );
+
+  const trackQuizCompleted = useCallback(() => {
+    if (hasTrackedCompletionRef.current) {
+      return;
+    }
+
+    hasTrackedCompletionRef.current = true;
+    const completedQuestions = resultsRef.current.length;
+    const correctAnswers = resultsRef.current.filter((result) => result.isCorrect).length;
+    const durationMs = Math.max(0, completedDurationMs);
+    const properties = {
+      quiz_id: quiz.id,
+      game_mode: quiz.gameMode,
+      difficulty: quiz.difficulty,
+      source_type: quiz.sourceType,
+      question_count: totalQuestions,
+      completed_questions: completedQuestions,
+      correct_answers: correctAnswers,
+      score: scoreRef.current,
+      accuracy_percentage:
+        totalQuestions > 0 ? Math.round((scoreRef.current / totalQuestions) * 100) : 0,
+      duration_ms: durationMs,
+      entry_source: entrySource,
+      signed_in: Boolean(sessionData?.user?.id),
+      is_random_play: Boolean(playContext),
+      attempt_number: playAttemptRef.current,
+    };
+
+    posthog.capture("quiz_completed", properties);
+
+    if (entrySource === "share") {
+      posthog.capture("play_from_shared_link_completed", properties);
+    }
+  }, [completedDurationMs, entrySource, playContext, quiz.difficulty, quiz.gameMode, quiz.id, quiz.sourceType, sessionData?.user?.id, totalQuestions]);
 
   const timerPercentage = useMemo(() => {
     return Math.max(0, (remainingSeconds / QUESTION_TIME_SECONDS) * 100);
@@ -213,6 +276,18 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
   useEffect(() => {
     rememberRecentQuiz("single", quiz.id);
   }, [quiz.id]);
+
+  useEffect(() => {
+    const startKey = `${quiz.id}:initial`;
+    if (lastTrackedStartKeyRef.current === startKey) {
+      return;
+    }
+
+    lastTrackedStartKeyRef.current = startKey;
+    playAttemptRef.current = 0;
+    hasTrackedCompletionRef.current = false;
+    trackQuizStarted("initial");
+  }, [quiz.id, trackQuizStarted]);
 
   const stopCountdown = useCallback(() => {
     if (timerRef.current) {
@@ -711,7 +786,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
       stopCountdown();
       clearAutoAdvance();
     };
-  }, [clearAutoAdvance, stopCountdown]);
+  }, [clearAutoAdvance, stopCountdown, trackQuizStarted]);
 
   useEffect(() => {
     if (phase !== "complete") return;
@@ -724,6 +799,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
 
     hasPersistedRef.current = true;
     setSaveStatus("saving");
+    trackQuizCompleted();
 
     const payload: SaveQuizSessionPayload = {
       quizId: quiz.id,
@@ -756,7 +832,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
       .catch(() => {
         setSaveStatus("error");
       });
-  }, [phase, quiz.id, sessionData?.user]);
+  }, [phase, quiz.id, sessionData?.user, trackQuizCompleted]);
 
   const playAgain = useCallback(() => {
     clearAutoAdvance();
@@ -781,7 +857,8 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
     setCompletedDurationMs(0);
     setSaveStatus("idle");
     setPhase("question");
-  }, [clearAutoAdvance, stopCountdown]);
+    trackQuizStarted("replay");
+  }, [clearAutoAdvance, stopCountdown, trackQuizStarted]);
 
   const submitVote = useCallback(async (nextVote: VoteType) => {
     if (isVoting) return;

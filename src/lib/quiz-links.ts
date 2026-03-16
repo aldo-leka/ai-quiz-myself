@@ -1,6 +1,7 @@
 export type CreateQuizSourceType = "theme" | "url" | "pdf";
 export type CreateQuizMode = "single" | "wwtbam" | "couch_coop";
 export type CreateQuizDifficulty = "easy" | "medium" | "hard" | "mixed" | "escalating";
+export type PublicQuizEntrySource = "share";
 
 export type CreateQuizPrefill = {
   sourceType?: CreateQuizSourceType;
@@ -48,8 +49,18 @@ export function buildCreateQuizSignInPath(prefill: CreateQuizPrefill = {}) {
   return `/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`;
 }
 
-export function buildPublicQuizPath(quizId: string) {
-  return `/play/${quizId}`;
+export function buildPublicQuizPath(
+  quizId: string,
+  options?: { ref?: PublicQuizEntrySource | null },
+) {
+  const params = new URLSearchParams();
+
+  if (options?.ref) {
+    params.set("ref", options.ref);
+  }
+
+  const query = params.toString();
+  return query ? `/play/${quizId}?${query}` : `/play/${quizId}`;
 }
 
 export function computeIncludedQuizCount(

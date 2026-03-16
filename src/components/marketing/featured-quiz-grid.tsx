@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { PostHogLink } from "@/components/posthog/posthog-link";
 import { QuizCard } from "@/components/quiz/QuizCard";
 import type { PublicQuizCard } from "@/lib/public-quizzes";
 import { buildPublicQuizPath } from "@/lib/quiz-links";
@@ -10,6 +10,7 @@ type FeaturedQuizGridProps = {
   quizzes: PublicQuizCard[];
   browseHref?: string;
   browseLabel?: string;
+  trackingPage?: string;
 };
 
 export function FeaturedQuizGrid({
@@ -18,6 +19,7 @@ export function FeaturedQuizGrid({
   quizzes,
   browseHref = "/hub",
   browseLabel = "Browse the full hub",
+  trackingPage = "unknown",
 }: FeaturedQuizGridProps) {
   return (
     <section className="space-y-5 rounded-[2rem] border border-[#252940] bg-[#111421]/82 p-6 md:p-8">
@@ -31,19 +33,37 @@ export function FeaturedQuizGrid({
           </h2>
           <p className="max-w-3xl text-lg text-[#b9bbca] md:text-xl">{description}</p>
         </div>
-        <Link
+        <PostHogLink
           href={browseHref}
+          eventName="featured_quiz_browse_clicked"
+          eventProperties={{
+            page: trackingPage,
+            section_title: title,
+            destination_path: browseHref,
+          }}
           className="inline-flex min-h-12 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-5 text-base font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/18"
         >
           {browseLabel}
           <ArrowRight className="size-4" />
-        </Link>
+        </PostHogLink>
       </div>
 
       {quizzes.length > 0 ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {quizzes.map((quiz) => (
-            <Link key={quiz.id} href={buildPublicQuizPath(quiz.id)} className="block">
+            <PostHogLink
+              key={quiz.id}
+              href={buildPublicQuizPath(quiz.id)}
+              eventName="featured_quiz_clicked"
+              eventProperties={{
+                page: trackingPage,
+                section_title: title,
+                quiz_id: quiz.id,
+                quiz_theme: quiz.theme,
+                game_mode: quiz.gameMode,
+              }}
+              className="block"
+            >
               <QuizCard
                 title={quiz.title}
                 theme={quiz.theme}
@@ -59,7 +79,7 @@ export function FeaturedQuizGrid({
                 showRating
                 className="h-full hover:border-[#6c8aff]/45 hover:bg-[#1a1d2e]"
               />
-            </Link>
+            </PostHogLink>
           ))}
         </div>
       ) : (

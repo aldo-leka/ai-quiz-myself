@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, FileText, Link2, Sparkles, Tv, Users, UserRound } from "lucide-react";
 import { FeaturedQuizGrid } from "@/components/marketing/featured-quiz-grid";
+import { PostHogLink } from "@/components/posthog/posthog-link";
 import { db } from "@/db";
 import { platformSettings } from "@/db/schema";
 import {
@@ -80,53 +80,85 @@ export default async function LandingPage() {
                   Play solo, pass the phone in couch co-op, or run a millionaire-style round with
                   host audio. Build your own quiz in minutes, then send people straight into the game.
                 </p>
-                <p className="max-w-3xl text-base text-[#9fa5bb] md:text-lg">
-                  For private stories, inside jokes, or birthday facts the model cannot infer on its
-                  own, collect the material into a PDF first and upload that as the source.
-                </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Link
+                <PostHogLink
                   href={openCreatorHref}
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "open_creator",
+                    destination_path: openCreatorHref,
+                  }}
                   className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg font-semibold text-[#f5f7ff] transition hover:bg-[#6c8aff]/24"
                 >
                   Open the quiz creator
                   <ArrowRight className="size-5" />
-                </Link>
-                <Link
+                </PostHogLink>
+                <PostHogLink
                   href="/hub"
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "browse_hub",
+                    destination_path: "/hub",
+                  }}
                   className="inline-flex min-h-14 items-center justify-center rounded-full border border-[#252940] bg-[#121625]/92 px-6 text-lg font-semibold text-[#e4e4e9] transition hover:border-[#6c8aff]/45 hover:bg-[#1a1d2e]"
                 >
                   Browse the hub
-                </Link>
+                </PostHogLink>
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Link
+                <PostHogLink
                   href="/birthday-trivia-game"
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "birthday_trivia_game",
+                    destination_path: "/birthday-trivia-game",
+                  }}
                   className="rounded-full border border-[#252940] bg-[#121625]/85 px-4 py-2 text-sm font-semibold text-[#dce0ef] transition hover:border-[#6c8aff]/45"
                 >
                   Birthday trivia game
-                </Link>
-                <Link
+                </PostHogLink>
+                <PostHogLink
                   href="/movie-trivia-night"
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "movie_trivia_night",
+                    destination_path: "/movie-trivia-night",
+                  }}
                   className="rounded-full border border-[#252940] bg-[#121625]/85 px-4 py-2 text-sm font-semibold text-[#dce0ef] transition hover:border-[#6c8aff]/45"
                 >
                   Movie trivia night
-                </Link>
-                <Link
+                </PostHogLink>
+                <PostHogLink
                   href="/millionaire-game-online"
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "millionaire_game_online",
+                    destination_path: "/millionaire-game-online",
+                  }}
                   className="rounded-full border border-[#252940] bg-[#121625]/85 px-4 py-2 text-sm font-semibold text-[#dce0ef] transition hover:border-[#6c8aff]/45"
                 >
                   Millionaire game online
-                </Link>
-                <Link
+                </PostHogLink>
+                <PostHogLink
                   href="/quiz-from-pdf"
+                  eventName="landing_cta_clicked"
+                  eventProperties={{
+                    page: "landing",
+                    cta_id: "quiz_from_pdf",
+                    destination_path: "/quiz-from-pdf",
+                  }}
                   className="rounded-full border border-[#252940] bg-[#121625]/85 px-4 py-2 text-sm font-semibold text-[#dce0ef] transition hover:border-[#6c8aff]/45"
                 >
                   Make a quiz from PDF
-                </Link>
+                </PostHogLink>
               </div>
             </div>
 
@@ -174,8 +206,14 @@ export default async function LandingPage() {
         </section>
 
         <section className="grid gap-4 xl:grid-cols-3">
-          <Link
+          <PostHogLink
             href={createThemeHref}
+            eventName="landing_cta_clicked"
+            eventProperties={{
+              page: "landing",
+              cta_id: "from_topic",
+              destination_path: createThemeHref,
+            }}
             className="rounded-[1.75rem] border border-[#252940] bg-[#121625]/92 p-6 transition hover:border-[#6c8aff]/45 hover:bg-[#171b2a]"
           >
             <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
@@ -186,10 +224,16 @@ export default async function LandingPage() {
               Best for public topics the model can reasonably know already, like sports rivalries,
               movie franchises, or study subjects.
             </p>
-          </Link>
+          </PostHogLink>
 
-          <Link
+          <PostHogLink
             href={createUrlHref}
+            eventName="landing_cta_clicked"
+            eventProperties={{
+              page: "landing",
+              cta_id: "from_url",
+              destination_path: createUrlHref,
+            }}
             className="rounded-[1.75rem] border border-[#252940] bg-[#121625]/92 p-6 transition hover:border-[#6c8aff]/45 hover:bg-[#171b2a]"
           >
             <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
@@ -199,10 +243,16 @@ export default async function LandingPage() {
             <p className="mt-3 text-lg text-[#b8bdd0]">
               Turn an article, wiki page, or match recap into a quiz without writing the questions yourself.
             </p>
-          </Link>
+          </PostHogLink>
 
-          <Link
+          <PostHogLink
             href={createPdfHref}
+            eventName="landing_cta_clicked"
+            eventProperties={{
+              page: "landing",
+              cta_id: "from_pdf",
+              destination_path: createPdfHref,
+            }}
             className="rounded-[1.75rem] border border-[#252940] bg-[#121625]/92 p-6 transition hover:border-[#6c8aff]/45 hover:bg-[#171b2a]"
           >
             <div className="inline-flex rounded-2xl border border-[#6c8aff]/35 bg-[#6c8aff]/12 p-3">
@@ -213,13 +263,14 @@ export default async function LandingPage() {
               Upload a study guide, event brief, birthday notes, or private lore and turn it into
               something your group can actually play.
             </p>
-          </Link>
+          </PostHogLink>
         </section>
 
         <FeaturedQuizGrid
           title="Play something right now"
           description="Try a few public quizzes first, then make your own when you know which mode fits your group."
           quizzes={featuredQuizzes}
+          trackingPage="landing"
         />
       </main>
     </div>
