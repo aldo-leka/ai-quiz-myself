@@ -180,18 +180,6 @@ export function AdminQuizDetailClient({
     }
   }
 
-  function clearHostHint(question: EditableQuestion): EditableQuestion {
-    if (gameMode !== "wwtbam") {
-      return question;
-    }
-
-    return {
-      ...question,
-      hostHintReasoning: null,
-      hostHintGuessedOptionIndex: null,
-    };
-  }
-
   return (
     <main className="space-y-6">
       <Card>
@@ -235,7 +223,7 @@ export function AdminQuizDetailClient({
                 setQuestions((previous) =>
                   previous.map((row) =>
                     row.id === question.id
-                      ? clearHostHint({ ...row, questionText: event.target.value })
+                      ? { ...row, questionText: event.target.value }
                       : row,
                   ),
                 )
@@ -278,7 +266,7 @@ export function AdminQuizDetailClient({
                   setQuestions((previous) =>
                     previous.map((row) =>
                       row.id === question.id
-                        ? clearHostHint({ ...row, correctOptionIndex: Number(value) })
+                        ? { ...row, correctOptionIndex: Number(value) }
                         : row,
                     ),
                   )
@@ -312,7 +300,7 @@ export function AdminQuizDetailClient({
                             ...nextOptions[optionIndex],
                             text: event.target.value,
                           };
-                          return clearHostHint({ ...row, options: nextOptions });
+                          return { ...row, options: nextOptions };
                         }),
                       )
                     }

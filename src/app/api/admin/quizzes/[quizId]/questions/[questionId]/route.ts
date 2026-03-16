@@ -30,16 +30,6 @@ const patchQuestionSchema = z.object({
   subject: z.string().trim().nullable().optional(),
 });
 
-function optionsEqual(
-  left: unknown,
-  right: Array<{
-    text: string;
-    explanation: string;
-  }>,
-): boolean {
-  return JSON.stringify(left ?? null) === JSON.stringify(right);
-}
-
 export async function PATCH(request: Request, { params }: RouteContext) {
   const adminSession = await getAdminSessionOrNull();
   if (!adminSession) {
@@ -93,9 +83,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const [existing] = await db
     .select({
       id: questions.id,
-      questionText: questions.questionText,
-      options: questions.options,
-      correctOptionIndex: questions.correctOptionIndex,
     })
     .from(questions)
     .where(and(eq(questions.id, questionId), eq(questions.quizId, quizId)))
@@ -105,16 +92,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Question not found" }, { status: 404 });
   }
 
-  const questionTextChanged =
-    payload.questionText !== undefined && payload.questionText !== existing.questionText;
-  const optionsChanged =
-    payload.options !== undefined && !optionsEqual(existing.options, payload.options);
-  const correctOptionChanged =
-    payload.correctOptionIndex !== undefined &&
-    payload.correctOptionIndex !== existing.correctOptionIndex;
-  const shouldClearStoredHostHint =
-    !hostHintReasoningProvided && (questionTextChanged || optionsChanged || correctOptionChanged);
-
   const [updated] = await db
     .update(questions)
     .set({
@@ -123,14 +100,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       correctOptionIndex: payload.correctOptionIndex,
       hostHintReasoning: hostHintReasoningProvided
         ? payload.hostHintReasoning ?? null
-        : shouldClearStoredHostHint
-          ? null
-          : undefined,
+        : undefined,
       hostHintGuessedOptionIndex: hostHintGuessedOptionIndexProvided
         ? payload.hostHintGuessedOptionIndex ?? null
-        : shouldClearStoredHostHint
-          ? null
-          : undefined,
+        : undefined,
       difficulty: payload.difficulty,
       subject: payload.subject,
     })

@@ -97,18 +97,6 @@ export function DashboardQuizDetailClient({
     setEditMode(false);
   }
 
-  function clearHostHint(question: EditableQuestion): EditableQuestion {
-    if (gameMode !== "wwtbam") {
-      return question;
-    }
-
-    return {
-      ...question,
-      hostHintReasoning: null,
-      hostHintGuessedOptionIndex: null,
-    };
-  }
-
   async function saveTitle() {
     const nextTitle = quizTitle.trim();
     if (!nextTitle) {
@@ -327,7 +315,7 @@ export function DashboardQuizDetailClient({
                     setQuestions((previousQuestions) =>
                       previousQuestions.map((row) =>
                         row.id === question.id
-                          ? clearHostHint({ ...row, questionText: event.target.value })
+                          ? { ...row, questionText: event.target.value }
                           : row,
                       ),
                     )
@@ -356,7 +344,7 @@ export function DashboardQuizDetailClient({
                                 ...nextOptions[optionIndex],
                                 text: event.target.value,
                               };
-                              return clearHostHint({ ...row, options: nextOptions });
+                              return { ...row, options: nextOptions };
                             }),
                           )
                         }
@@ -392,7 +380,7 @@ export function DashboardQuizDetailClient({
                       setQuestions((previousQuestions) =>
                         previousQuestions.map((row) =>
                           row.id === question.id
-                            ? clearHostHint({ ...row, correctOptionIndex: Number(value) })
+                            ? { ...row, correctOptionIndex: Number(value) }
                             : row,
                         ),
                       )
