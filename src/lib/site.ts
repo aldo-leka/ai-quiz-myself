@@ -1,6 +1,6 @@
 export const SITE_NAME = "QuizPlus";
 export const SITE_DESCRIPTION =
-  "AI-generated quizzes for solo play, couch co-op, and WWTBAM, with a public hub, user dashboard, and creator tools.";
+  "Make instant custom trivia from a topic, article, or PDF, then play solo, couch co-op, or a millionaire-style quiz show.";
 
 export function getSiteUrl(): URL {
   const candidate =

@@ -21,6 +21,7 @@ import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { useEndScreenActions } from "@/hooks/use-end-screen-actions";
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
@@ -56,6 +57,8 @@ type CompleteFocusTarget =
   | HeaderActionTarget
   | "like"
   | "dislike"
+  | "share"
+  | "make-one-like-this"
   | "complete-rematch"
   | "complete-random";
 
@@ -119,7 +122,7 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
     | undefined;
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
-  const homePath = playContext ? "/dashboard" : "/";
+  const homePath = playContext ? "/dashboard" : "/hub";
 
   const [phase, setPhase] = useState<GamePhase>("setup");
   const [setupNames, setSetupNames] = useState<string[]>(["", ""]);
@@ -151,6 +154,13 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
   const nextHeaderLabel = playContext
     ? (isLoadingNextQuiz ? "Loading next random" : "Next Random")
     : (isLoadingNextQuiz ? "Loading next quiz" : "Next quiz");
+  const { shareState, shareQuiz, makeOneLikeThis } = useEndScreenActions({
+    quizId: quiz.id,
+    theme: quiz.theme,
+    mode: quiz.gameMode,
+    difficulty: quiz.difficulty,
+    isSignedIn: Boolean(sessionData?.user?.id),
+  });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const headerButtonRefs = useRef<Record<HeaderActionTarget, HTMLButtonElement | null>>({
@@ -220,8 +230,8 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
 
   const completeFocusRows = useMemo<CompleteFocusTarget[][]>(() => {
     const rows: CompleteFocusTarget[][] = [["header-quit", "header-next"]];
+    rows.push(["share", "make-one-like-this"]);
     rows.push(["like", "dislike"]);
-
     rows.push(["complete-random", "complete-rematch"]);
     return rows;
   }, []);
@@ -1003,6 +1013,16 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
 
         if (focusedCompleteTarget === "dislike") {
           void submitVote("dislike");
+          return;
+        }
+
+        if (focusedCompleteTarget === "share") {
+          void shareQuiz();
+          return;
+        }
+
+        if (focusedCompleteTarget === "make-one-like-this") {
+          makeOneLikeThis();
         }
         return;
       }
@@ -1044,7 +1064,7 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [completeFocusRows, focusedCompleteTarget, homePath, phase, pickAnotherCouchQuiz, rematch, router, submitVote]);
+  }, [completeFocusRows, focusedCompleteTarget, homePath, makeOneLikeThis, phase, pickAnotherCouchQuiz, rematch, router, shareQuiz, submitVote]);
 
   useEffect(() => {
     return () => {
@@ -1462,6 +1482,38 @@ export function CouchCoopGame({ quiz, playContext = null }: CouchCoopGameProps) 
                   <p className="text-5xl font-black text-emerald-300">{entry.score}</p>
                 </div>
               ))}
+
+              <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+                <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Share or spin another version</p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <GameButton
+                    ref={(node) => {
+                      completeFocusRefs.current.share = node;
+                    }}
+                    centered
+                    className="min-h-20 text-2xl md:text-3xl"
+                    focused={focusedCompleteTarget === "share"}
+                    onClick={() => void shareQuiz()}
+                  >
+                    {shareState === "copied"
+                      ? "Link Copied"
+                      : shareState === "error"
+                        ? "Copy Failed"
+                        : "Share This Quiz"}
+                  </GameButton>
+                  <GameButton
+                    ref={(node) => {
+                      completeFocusRefs.current["make-one-like-this"] = node;
+                    }}
+                    centered
+                    className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl md:text-3xl"
+                    focused={focusedCompleteTarget === "make-one-like-this"}
+                    onClick={makeOneLikeThis}
+                  >
+                    Make One Like This
+                  </GameButton>
+                </div>
+              </div>
 
               <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
                 <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Rate this quiz</p>

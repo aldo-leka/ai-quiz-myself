@@ -151,7 +151,7 @@ function SignInPageContent() {
             <div className="flex h-full flex-col">
               <div>
                 <Link
-                  href="/"
+                  href="/hub"
                   onFocus={() => setFocusedTarget("back")}
                   className={cn(
                     "inline-flex min-h-11 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-4 py-2 text-sm font-semibold text-[#e4e4e9] transition hover:bg-[#6c8aff]/18 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",

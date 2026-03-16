@@ -19,6 +19,7 @@ import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { useEndScreenActions } from "@/hooks/use-end-screen-actions";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { useQuestionReadAloud } from "@/hooks/use-question-read-aloud";
 import { authClient } from "@/lib/auth-client";
@@ -50,6 +51,8 @@ type CompleteFocusTarget =
   | `breakdown-${number}`
   | "like"
   | "dislike"
+  | "share"
+  | "make-one-like-this"
   | "sign-in";
 
 type QuestionResult = {
@@ -137,7 +140,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
   const finalizedQuestionKeyRef = useRef<string | null>(null);
 
   const totalQuestions = quiz.questions.length;
-  const homePath = playContext ? "/dashboard" : "/";
+  const homePath = playContext ? "/dashboard" : "/hub";
   const nextButtonLabel = playContext ? "Next Random" : "Play Next";
   const nextHeaderLabel = playContext
     ? (isLoadingNextQuiz ? "Loading next random" : "Next Random")
@@ -149,6 +152,13 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
     totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
   const shouldShowSaveStatusCard =
     saveStatus === "saving" || saveStatus === "error" || saveStatus === "anonymous";
+  const { shareState, shareQuiz, makeOneLikeThis } = useEndScreenActions({
+    quizId: quiz.id,
+    theme: quiz.theme,
+    mode: quiz.gameMode,
+    difficulty: quiz.difficulty,
+    isSignedIn: Boolean(sessionData?.user?.id),
+  });
 
   const timerPercentage = useMemo(() => {
     return Math.max(0, (remainingSeconds / QUESTION_TIME_SECONDS) * 100);
@@ -167,6 +177,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
     const rows: CompleteFocusTarget[][] = [
       ["header-quit", "header-next"],
       ["top-play-next", "top-play-again"],
+      ["share", "make-one-like-this"],
       ["like", "dislike"],
       ...Array.from({ length: results.length }, (_, index) => [`breakdown-${index}` as const]),
     ];
@@ -881,6 +892,16 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
           return;
         }
 
+        if (focusedCompleteTarget === "share") {
+          void shareQuiz();
+          return;
+        }
+
+        if (focusedCompleteTarget === "make-one-like-this") {
+          makeOneLikeThis();
+          return;
+        }
+
         if (focusedCompleteTarget === "sign-in") {
           router.push("/sign-in?callbackURL=/dashboard");
           return;
@@ -914,7 +935,7 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusedCompleteTarget, getNextCompleteTarget, homePath, phase, playAgain, playNext, router, submitVote]);
+  }, [focusedCompleteTarget, getNextCompleteTarget, homePath, makeOneLikeThis, phase, playAgain, playNext, router, shareQuiz, submitVote]);
 
   useEffect(() => {
     if (phase !== "reveal") return;
@@ -1332,6 +1353,34 @@ export function SinglePlayerGame({ quiz, playContext = null }: SinglePlayerGameP
                 {computeLikeRatioLabel(likes, dislikes)}
               </p>
               {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
+            </div>
+
+            <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">
+              <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Keep this round moving</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <GameButton
+                  ref={registerCompleteFocusRef("share")}
+                  centered
+                  className="min-h-20 text-2xl md:text-3xl"
+                  focused={focusedCompleteTarget === "share"}
+                  onClick={() => void shareQuiz()}
+                >
+                  {shareState === "copied"
+                    ? "Link Copied"
+                    : shareState === "error"
+                      ? "Copy Failed"
+                      : "Share This Quiz"}
+                </GameButton>
+                <GameButton
+                  ref={registerCompleteFocusRef("make-one-like-this")}
+                  centered
+                  className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl md:text-3xl"
+                  focused={focusedCompleteTarget === "make-one-like-this"}
+                  onClick={makeOneLikeThis}
+                >
+                  Make One Like This
+                </GameButton>
+              </div>
             </div>
 
             <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:p-7">

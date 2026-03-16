@@ -241,7 +241,7 @@ export function DashboardHistoryPageClient() {
               asChild
               className="mt-5 min-h-14 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/18 px-6 text-lg text-[#e4e4e9] hover:bg-[#818cf8]/24 md:text-xl"
             >
-              <Link href="/">Back to Hub</Link>
+              <Link href="/hub">Back to Hub</Link>
             </Button>
           </div>
         ) : null}

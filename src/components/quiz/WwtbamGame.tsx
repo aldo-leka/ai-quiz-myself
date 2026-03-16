@@ -10,6 +10,7 @@ import { QuizPlayHeader } from "@/components/quiz/QuizPlayHeader";
 import { SlantedBar } from "@/components/quiz/SlantedBar";
 import { Switch } from "@/components/ui/switch";
 import { useCompactQuizLayout, useTvLikeQuizLayout } from "@/hooks/useCompactQuizLayout";
+import { useEndScreenActions } from "@/hooks/use-end-screen-actions";
 import { useReadAloudPreference } from "@/hooks/use-read-aloud-preference";
 import { authClient } from "@/lib/auth-client";
 import { buildQuizPlayPath, type MyQuizzesRandomContext } from "@/lib/my-quizzes-random";
@@ -56,6 +57,8 @@ type FocusControlId =
   | "lifeline-ask-host"
   | "gameover-like"
   | "gameover-dislike"
+  | "gameover-share"
+  | "gameover-make-one-like-this"
   | "gameover-play-next"
   | "gameover-play-again";
 
@@ -225,7 +228,7 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
   const compactLayout = useCompactQuizLayout();
   const tvLikeLayout = useTvLikeQuizLayout();
   const retryToken = searchParams.get("retry") ?? "";
-  const homePath = playContext ? "/dashboard" : "/";
+  const homePath = playContext ? "/dashboard" : "/hub";
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -302,6 +305,13 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
         readAloudEnabled?: boolean;
       }
     | undefined;
+  const { shareState, shareQuiz, makeOneLikeThis } = useEndScreenActions({
+    quizId: quiz.id,
+    theme: quiz.theme,
+    mode: quiz.gameMode,
+    difficulty: quiz.difficulty,
+    isSignedIn: Boolean(sessionData?.user?.id),
+  });
 
   const {
     readAloudEnabled,
@@ -750,6 +760,7 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
       return [
         ["header-quit", "header-next"],
         ["gameover-like", "gameover-dislike"],
+        ["gameover-share", "gameover-make-one-like-this"],
         ["gameover-play-next", "gameover-play-again"],
       ];
     }
@@ -1649,6 +1660,16 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
       return;
     }
 
+    if (controlId === "gameover-share") {
+      void shareQuiz();
+      return;
+    }
+
+    if (controlId === "gameover-make-one-like-this") {
+      makeOneLikeThis();
+      return;
+    }
+
     if (controlId === "gameover-play-next") {
       void playRandomAgain();
       return;
@@ -1774,6 +1795,34 @@ export function WwtbamGame({ quiz, playContext = null }: WwtbamGameProps) {
                   {computeLikeRatioLabel(likes, dislikes)}
                 </p>
                 {voteError ? <p className="text-lg text-rose-300 md:text-xl">{voteError}</p> : null}
+              </div>
+
+              <div className="space-y-5 rounded-3xl border border-[#252940] bg-[#0f1117]/72 p-6 md:col-span-2 md:p-7">
+                <p className="text-3xl font-semibold text-[#e4e4e9] md:text-4xl">Share or spin another version</p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <GameButton
+                    ref={registerFocusControlRef("gameover-share")}
+                    centered
+                    focused={focusedControl === "gameover-share"}
+                    className="min-h-20 text-2xl md:text-3xl"
+                    onClick={() => void shareQuiz()}
+                  >
+                    {shareState === "copied"
+                      ? "Link Copied"
+                      : shareState === "error"
+                        ? "Copy Failed"
+                        : "Share This Quiz"}
+                  </GameButton>
+                  <GameButton
+                    ref={registerFocusControlRef("gameover-make-one-like-this")}
+                    centered
+                    focused={focusedControl === "gameover-make-one-like-this"}
+                    className="min-h-20 border-[#6c8aff]/45 bg-[#6c8aff]/12 text-2xl md:text-3xl"
+                    onClick={makeOneLikeThis}
+                  >
+                    Make One Like This
+                  </GameButton>
+                </div>
               </div>
 
               <GameButton

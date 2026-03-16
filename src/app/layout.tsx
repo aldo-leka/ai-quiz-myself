@@ -26,11 +26,12 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   keywords: [
     "QuizPlus",
-    "AI quiz generator",
-    "single player quiz",
+    "custom trivia game",
+    "quiz from pdf",
+    "birthday trivia game",
+    "movie trivia night",
+    "millionaire game online",
     "couch co-op quiz",
-    "WWTBAM",
-    "quiz hub",
   ],
   alternates: {
     canonical: "/",

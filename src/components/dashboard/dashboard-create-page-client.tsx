@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, FileText, Link2, Sparkles, Target } from "lucide-react";
+import posthog from "posthog-js";
 import { FilterPill } from "@/components/quiz/FilterPill";
 import { PlayerSelect } from "@/components/dashboard/player-select";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,11 @@ type DashboardCreatePageClientProps = {
   pdfGenerationCostCents: number;
   platformBillingAvailable: boolean;
   pdfMaxFileSizeBytes: number;
+  initialSourceType?: string;
+  initialTheme?: string;
+  initialUrl?: string;
+  initialGameMode?: string;
+  initialDifficulty?: string;
 };
 
 const sourceCards: Array<{
@@ -85,7 +91,13 @@ const languageOptions = [
   { value: "sq", label: "Albanian" },
 ];
 
-const topUpOptionsCents = [500, 1000, 2000, 5000, 10000];
+const topUpOptions = [
+  { amountCents: 500, label: "Quick Warm-Up" },
+  { amountCents: 1000, label: "Party Starter" },
+  { amountCents: 2000, label: "Game Night Pack" },
+  { amountCents: 5000, label: "Weekend Marathon" },
+  { amountCents: 10000, label: "Host Mode" },
+] as const;
 const batchCountPresets = [1, 5, 10, 15, 25, 50, 100];
 const maxBatchCounts: Record<SourceType, number> = {
   theme: 100,
@@ -102,6 +114,34 @@ function normalizeLocale(value: string): string {
   if (languageOptions.some((option) => option.value === primaryTag)) return primaryTag;
 
   return "en";
+}
+
+function normalizeSourceType(value: string | null | undefined): SourceType {
+  if (value === "url" || value === "pdf") {
+    return value;
+  }
+
+  return "theme";
+}
+
+function normalizeGameMode(value: string | null | undefined): GameMode {
+  if (value === "couch_coop" || value === "wwtbam") {
+    return value;
+  }
+
+  return "single";
+}
+
+function normalizeDifficulty(value: string | null | undefined, gameMode: GameMode): Difficulty {
+  if (gameMode === "wwtbam") {
+    return "escalating";
+  }
+
+  if (value === "easy" || value === "medium" || value === "hard") {
+    return value;
+  }
+
+  return "mixed";
 }
 
 function isValidHttpUrl(value: string): boolean {
@@ -220,21 +260,32 @@ export function DashboardCreatePageClient({
   pdfGenerationCostCents,
   platformBillingAvailable,
   pdfMaxFileSizeBytes,
+  initialSourceType = "theme",
+  initialTheme = "",
+  initialUrl = "",
+  initialGameMode = "single",
+  initialDifficulty = "mixed",
 }: DashboardCreatePageClientProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const normalizedInitialSourceType = normalizeSourceType(initialSourceType);
+  const normalizedInitialGameMode = normalizeGameMode(initialGameMode);
+  const normalizedInitialDifficulty = normalizeDifficulty(
+    initialDifficulty,
+    normalizedInitialGameMode,
+  );
 
-  const [sourceType, setSourceType] = useState<SourceType>("theme");
-  const [theme, setTheme] = useState("");
+  const [sourceType, setSourceType] = useState<SourceType>(normalizedInitialSourceType);
+  const [theme, setTheme] = useState(initialTheme.trim());
   const [themeBatchText, setThemeBatchText] = useState("");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl.trim());
   const [quantity, setQuantity] = useState(1);
-  const [gameMode, setGameMode] = useState<GameMode>("single");
-  const [difficulty, setDifficulty] = useState<Difficulty>("mixed");
+  const [gameMode, setGameMode] = useState<GameMode>(normalizedInitialGameMode);
+  const [difficulty, setDifficulty] = useState<Difficulty>(normalizedInitialDifficulty);
   const [language, setLanguage] = useState(normalizeLocale(initialLocale));
   const [billingMode, setBillingMode] = useState<BillingMode>(
     computeInitialBillingMode({
-      sourceType: "theme",
+      sourceType: normalizedInitialSourceType,
       isAdmin,
       hasApiKey,
       platformBillingAvailable,
@@ -248,7 +299,7 @@ export function DashboardCreatePageClient({
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState(String(topUpOptionsCents[1]));
+  const [topUpAmount, setTopUpAmount] = useState(String(topUpOptions[1]?.amountCents ?? 1000));
   const [topUpLoading, setTopUpLoading] = useState(false);
 
   const isWwtbam = gameMode === "wwtbam";
@@ -341,9 +392,9 @@ export function DashboardCreatePageClient({
 
   const topUpSelectOptions = useMemo(
     () =>
-      topUpOptionsCents.map((amountCents) => ({
+      topUpOptions.map(({ amountCents, label }) => ({
         value: String(amountCents),
-        label: `${formatUsd(amountCents)} top-up`,
+        label: `${label} · ${formatUsd(amountCents)}`,
       })),
     [],
   );
@@ -493,6 +544,10 @@ export function DashboardCreatePageClient({
 
     setTopUpLoading(true);
     setStatusMessage(null);
+    posthog.capture("billing_top_up_checkout_started", {
+      source: "dashboard_create",
+      amount_cents: amountCents,
+    });
 
     try {
       const response = await fetch("/api/dashboard/billing/top-up", {
@@ -532,6 +587,13 @@ export function DashboardCreatePageClient({
 
     setSubmitting(true);
     setStatusMessage(null);
+    posthog.capture("quiz_generation_started", {
+      source_type: sourceType,
+      game_mode: gameMode,
+      difficulty: effectiveDifficulty,
+      quantity: schedulableGenerationCount,
+      billing_mode: effectiveBillingMode,
+    });
 
     try {
       const requestQuantity = schedulableGenerationCount;
@@ -633,9 +695,23 @@ export function DashboardCreatePageClient({
         throw new Error(payload.error ?? "Failed to start generation");
       }
 
+      posthog.capture("quiz_generation_enqueued", {
+        source_type: sourceType,
+        game_mode: gameMode,
+        difficulty: effectiveDifficulty,
+        quantity: schedulableGenerationCount,
+        billing_mode: effectiveBillingMode,
+      });
       router.push("/dashboard");
       router.refresh();
     } catch (error) {
+      posthog.capture("quiz_generation_failed", {
+        source_type: sourceType,
+        game_mode: gameMode,
+        difficulty: effectiveDifficulty,
+        quantity: schedulableGenerationCount,
+        billing_mode: effectiveBillingMode,
+      });
       setStatusMessage(error instanceof Error ? error.message : "Failed to start generation");
     } finally {
       setSubmitting(false);
@@ -649,7 +725,7 @@ export function DashboardCreatePageClient({
           <div className="flex h-full flex-col justify-between gap-5">
             <div className="space-y-2">
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9394a5] md:text-base">
-                Wallet
+                Quiz Balance
               </p>
               <p className="text-4xl font-black text-[#e4e4e9] md:text-5xl xl:text-[4.15rem]">
                 {formatUsd(walletBalanceCents)}
@@ -677,7 +753,7 @@ export function DashboardCreatePageClient({
                 className="min-h-12 rounded-2xl border-[#6c8aff]/45 bg-[#6c8aff]/12 px-5 text-base text-[#e4e4e9] hover:bg-[#6c8aff]/18 md:text-lg"
               >
                 <CreditCard className="mr-2 size-5" />
-                Add to credit balance
+                Top up balance
               </Button>
               <Button
                 asChild
@@ -1039,9 +1115,9 @@ export function DashboardCreatePageClient({
       <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
         <DialogContent className="max-w-md rounded-3xl border border-[#252940] bg-gradient-to-br from-[#1a1d2e] to-[#0f1117] p-6 text-[#e4e4e9]">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-3xl font-black text-[#e4e4e9]">Add to credit balance</DialogTitle>
+            <DialogTitle className="text-3xl font-black text-[#e4e4e9]">Choose a top-up pack</DialogTitle>
             <DialogDescription className="text-lg text-[#9394a5]">
-              Choose a top-up amount. You will complete payment in Stripe checkout.
+              Pick a pack, then finish the purchase in Stripe checkout.
             </DialogDescription>
           </DialogHeader>
 

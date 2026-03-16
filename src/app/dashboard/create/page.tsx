@@ -12,11 +12,28 @@ import {
 import { MAX_R2_PDF_FILE_SIZE_BYTES } from "@/lib/r2";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
-export default async function DashboardCreatePage() {
+type DashboardCreatePageProps = {
+  searchParams?: Promise<{
+    sourceType?: string;
+    theme?: string;
+    url?: string;
+    mode?: string;
+    difficulty?: string;
+  }>;
+};
+
+function normalizeQueryValue(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+export default async function DashboardCreatePage({ searchParams }: DashboardCreatePageProps) {
   const session = await getUserSessionOrNull();
   if (!session?.user?.id) {
     return null;
   }
+
+  const resolvedSearchParams = searchParams ? await searchParams : {};
 
   const [userRow, apiKeyRows, creditRow, costRows] = await Promise.all([
     db
@@ -67,6 +84,11 @@ export default async function DashboardCreatePage() {
       pdfGenerationCostCents={generationCostCents}
       platformBillingAvailable={Boolean(process.env.OPENAI_API_KEY)}
       pdfMaxFileSizeBytes={MAX_R2_PDF_FILE_SIZE_BYTES}
+      initialSourceType={normalizeQueryValue(resolvedSearchParams.sourceType)}
+      initialTheme={normalizeQueryValue(resolvedSearchParams.theme)}
+      initialUrl={normalizeQueryValue(resolvedSearchParams.url)}
+      initialGameMode={normalizeQueryValue(resolvedSearchParams.mode)}
+      initialDifficulty={normalizeQueryValue(resolvedSearchParams.difficulty)}
     />
   );
 }

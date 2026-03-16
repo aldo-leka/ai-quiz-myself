@@ -557,7 +557,7 @@ export function DashboardShell({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <Link
-                  href="/"
+                  href="/hub"
                   className={cn(
                     "inline-flex min-h-14 items-center gap-2 rounded-full border border-[#6c8aff]/45 bg-[#6c8aff]/12 px-5 py-2.5 text-base font-semibold text-[#e4e4e9] transition md:px-6 md:text-lg",
                     "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#818cf8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1117]",
