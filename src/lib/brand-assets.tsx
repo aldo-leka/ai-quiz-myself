@@ -94,6 +94,12 @@ type SocialCardProps = {
   accentLabel?: string;
 };
 
+type SquareSocialCardProps = {
+  accentLabel?: string;
+  headline?: string;
+  supportingCopy?: string;
+};
+
 function SocialPill({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -215,6 +221,150 @@ export function SocialCard({ accentLabel = "Play smarter" }: SocialCardProps) {
               quizplus.io
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SquareSocialCard({
+  accentLabel = "Custom trivia night",
+  headline = "Make a quiz. Play it like a game show.",
+  supportingCopy = "Turn a topic, article, or PDF into instant trivia, then play solo, couch co-op, or millionaire-style.",
+}: SquareSocialCardProps) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        width: "100%",
+        height: "100%",
+        padding: "64px",
+        background: `radial-gradient(circle at top center, rgba(34, 211, 238, 0.22), transparent 38%),
+          linear-gradient(145deg, ${brandColors.bgFrom}, ${brandColors.bgTo})`,
+        color: brandColors.text,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          width: "100%",
+          height: "100%",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          borderRadius: 52,
+          border: `1px solid ${brandColors.border}`,
+          background:
+            "linear-gradient(180deg, rgba(15, 31, 69, 0.88), rgba(2, 6, 23, 0.92))",
+          padding: "54px",
+          boxShadow: "0 24px 88px rgba(2, 6, 23, 0.34)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: -140,
+            right: -110,
+            width: 380,
+            height: 380,
+            borderRadius: "50%",
+            background: "rgba(34, 211, 238, 0.08)",
+          }}
+        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 24,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <BrandMark size={176} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 560 }}>
+              <div
+                style={{
+                  display: "flex",
+                  color: brandColors.cyan,
+                  fontSize: 24,
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {accentLabel}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  fontSize: 78,
+                  fontWeight: 900,
+                  letterSpacing: "-0.06em",
+                  lineHeight: 0.94,
+                }}
+              >
+                {SITE_NAME}
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 999,
+              border: `1px solid ${brandColors.border}`,
+              background: "rgba(8, 17, 41, 0.72)",
+              padding: "14px 24px",
+              color: brandColors.textMuted,
+              fontSize: 26,
+              fontWeight: 700,
+            }}
+          >
+            quizplus.io
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
+          <div
+            style={{
+              display: "flex",
+              maxWidth: 880,
+              fontSize: 88,
+              fontWeight: 900,
+              letterSpacing: "-0.08em",
+              lineHeight: 0.94,
+            }}
+          >
+            {headline}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              maxWidth: 860,
+              fontSize: 34,
+              lineHeight: 1.3,
+              color: brandColors.textMuted,
+            }}
+          >
+            {supportingCopy}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <SocialPill>Topic</SocialPill>
+          <SocialPill>Article</SocialPill>
+          <SocialPill>PDF</SocialPill>
+          <SocialPill>Single Player</SocialPill>
+          <SocialPill>Couch Co-op</SocialPill>
+          <SocialPill>Millionaire Mode</SocialPill>
         </div>
       </div>
     </div>
