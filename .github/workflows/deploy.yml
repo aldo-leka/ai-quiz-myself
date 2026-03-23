@@ -72,8 +72,8 @@ jobs:
 
       - name: Deploy on VPS
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          /root/ai-quiz-myself/scripts/deploy.sh "$SHORT_SHA"
+          IMAGE_TAG="sha-${GITHUB_SHA::7}"
+          /root/ai-quiz-myself/scripts/deploy.sh "$IMAGE_TAG"
 
       - name: Log out of GHCR
         if: always()
