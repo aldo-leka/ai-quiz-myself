@@ -5,21 +5,13 @@ RUN npm ci
 
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
-ARG BETTER_AUTH_URL
-ARG NEXT_PUBLIC_BETTER_AUTH_URL
-ARG NEXT_PUBLIC_POSTHOG_KEY
-ARG NEXT_PUBLIC_POSTHOG_HOST
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV BETTER_AUTH_URL=$BETTER_AUTH_URL
-ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL
-ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
-ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN --mount=type=secret,id=DATABASE_URL \
-    --mount=type=secret,id=SENTRY_AUTH_TOKEN \
-    export DATABASE_URL="$(cat /run/secrets/DATABASE_URL)" && \
-    export SENTRY_AUTH_TOKEN="$(cat /run/secrets/SENTRY_AUTH_TOKEN)" && \
+RUN --mount=type=secret,id=BUILD_ENV \
+    set -a && \
+    . /run/secrets/BUILD_ENV && \
+    set +a && \
     npm run build
 
 FROM node:20-bookworm-slim AS runner

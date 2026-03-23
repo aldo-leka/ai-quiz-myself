@@ -46,14 +46,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BETTER_AUTH_URL=https://quizplus.io
-            NEXT_PUBLIC_BETTER_AUTH_URL=https://quizplus.io
-            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
-            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
           secrets: |
-            DATABASE_URL=${{ secrets.BUILD_DATABASE_URL }}
-            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+            BUILD_ENV=${{ secrets.BUILD_ENV }}
 
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.0
