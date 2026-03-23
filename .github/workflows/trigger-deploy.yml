@@ -49,7 +49,7 @@ jobs:
           TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
           TRIGGER_API_URL: https://trigger.aldo.al
         run: |
-          set -a
-          . "${RUNNER_TEMP}/trigger.env"
-          set +a
-          npm run trigger:prod -- --self-hosted --push
+          npm run trigger:prod -- \
+            --api-url "${TRIGGER_API_URL}" \
+            --env-file "${RUNNER_TEMP}/trigger.env" \
+            --local-build
