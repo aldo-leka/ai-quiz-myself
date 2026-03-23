@@ -9,7 +9,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN --mount=type=secret,id=BUILD_ENV \
-    node -e "const fs=require('fs'); const dotenv=require('dotenv'); const {spawnSync}=require('child_process'); const parsed=dotenv.parse(fs.readFileSync('/run/secrets/BUILD_ENV')); const result=spawnSync('npm', ['run', 'build'], { stdio: 'inherit', env: { ...process.env, ...parsed } }); process.exit(result.status ?? 1)"
+    cp /run/secrets/BUILD_ENV .env.production && \
+    npm run build && \
+    rm -f .env.production
 
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
