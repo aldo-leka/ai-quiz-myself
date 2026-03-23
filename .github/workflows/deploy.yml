@@ -10,8 +10,12 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: app-deploy
+  cancel-in-progress: true
+
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,8 +29,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: aldo-leka
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -55,27 +59,22 @@ jobs:
           secret-files: |
             BUILD_ENV=${{ runner.temp }}/build.env
 
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+  deploy:
+    needs: build-and-push
+    runs-on:
+      - self-hosted
+      - deploy
+      - quizplus-vps
 
-      - name: Add VPS host key
-        run: ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GHCR_PUSH_TOKEN }}" | docker login ghcr.io -u aldo-leka --password-stdin
 
       - name: Deploy on VPS
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          GH_ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          SHORT_SHA="${IMAGE_TAG::7}"
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
-            set -euo pipefail
-            echo \"$GH_TOKEN\" | docker login ghcr.io -u \"$GH_ACTOR\" --password-stdin
-            /root/ai-quiz-myself/scripts/deploy.sh \"$SHORT_SHA\"
-            docker logout ghcr.io
-          "
+          SHORT_SHA="${GITHUB_SHA::7}"
+          /root/ai-quiz-myself/scripts/deploy.sh "$SHORT_SHA"
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
