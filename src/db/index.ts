@@ -1,8 +1,24 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { requireEnv } from "@/lib/env";
 import * as schema from "@/db/schema";
 
-const sql = neon(requireEnv("DATABASE_URL"));
+declare global {
+  // eslint-disable-next-line no-var
+  var __aiQuizPgPool: Pool | undefined;
+}
 
-export const db = drizzle(sql, { schema });
+const connectionString = requireEnv("DATABASE_URL");
+
+const pool =
+  global.__aiQuizPgPool ??
+  new Pool({
+    connectionString,
+    max: process.env.NODE_ENV === "production" ? 20 : 5,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  global.__aiQuizPgPool = pool;
+}
+
+export const db = drizzle({ client: pool, schema });

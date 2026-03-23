@@ -1,0 +1,13 @@
+.git
+.github
+.next
+node_modules
+npm-debug.log
+.env*
+!.env.example
+README.md
+docs
+infra
+.claude
+.idea
+coverage
