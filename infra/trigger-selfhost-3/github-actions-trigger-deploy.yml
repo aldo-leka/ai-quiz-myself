@@ -1,0 +1,54 @@
+name: Deploy Trigger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: trigger-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy-trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: your-github-user
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      - name: Write Trigger env file
+        run: |
+          cat > "${RUNNER_TEMP}/trigger.env" <<'EOF'
+          ${{ secrets.BUILD_ENV }}
+          EOF
+
+      - name: Deploy Trigger tasks
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          TRIGGER_API_URL: https://trigger.example.com
+        run: |
+          npm run trigger:prod -- \
+            --api-url "${TRIGGER_API_URL}" \
+            --env-file "${RUNNER_TEMP}/trigger.env"

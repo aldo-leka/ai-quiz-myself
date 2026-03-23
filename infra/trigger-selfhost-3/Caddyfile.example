@@ -1,0 +1,15 @@
+# Use one of these blocks, not both.
+
+# If Caddy runs on the VPS host, proxy to the localhost bind.
+trigger.example.com {
+  reverse_proxy 127.0.0.1:3000
+}
+
+# If Caddy itself runs in Docker, join it to ${TRIGGER_INTERNAL_NETWORK}
+# and proxy to the stable network alias exposed by this compose stack.
+trigger.example.com {
+  reverse_proxy trigger-webapp:3000
+}
+
+# If you are using Cloudflare and `tls internal`, use SSL mode "Full",
+# not "Full (strict)", unless you install a real origin certificate.
