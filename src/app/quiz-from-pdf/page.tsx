@@ -4,6 +4,8 @@ import { getHubQuizCards } from "@/lib/public-quizzes";
 import { buildCreateQuizPath, buildCreateQuizSignInPath } from "@/lib/quiz-links";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Make A Quiz From PDF",
   description:

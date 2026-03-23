@@ -15,6 +15,8 @@ import {
 } from "@/lib/quiz-links";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Custom Trivia Games For Solo Play, Parties, And PDF Quiz Nights",
   description:
