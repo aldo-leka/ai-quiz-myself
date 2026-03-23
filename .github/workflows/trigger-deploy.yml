@@ -35,8 +35,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: aldo-leka
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
 
       - name: Write Trigger env file
         run: |
