@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { user } from "@/db/schema/auth";
+import { toAppUrl } from "@/lib/app-base-url";
 import { createBillingPortalSession, ensureStripeCustomer } from "@/lib/stripe";
 import { getUserSessionOrNull } from "@/lib/user-auth";
 
@@ -34,14 +35,9 @@ export async function POST() {
       .where(eq(user.id, session.user.id));
   }
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ??
-    process.env.BETTER_AUTH_URL ??
-    "http://localhost:3000";
-
   const portal = await createBillingPortalSession({
     customerId: stripeCustomerId,
-    returnUrl: `${baseUrl}/dashboard/billing`,
+    returnUrl: toAppUrl("/dashboard/billing").toString(),
   });
 
   return NextResponse.json({ url: portal.url });

@@ -198,9 +198,8 @@ Use `.env.example` as the source of truth. The sections below explain what each 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Neon/Postgres connection string |
+| `APP_BASE_URL` | Yes | Public app URL for redirects, billing return URLs, metadata, and server-side absolute links |
 | `BETTER_AUTH_SECRET` | Yes | better-auth signing secret |
-| `BETTER_AUTH_URL` | Yes | Server auth base URL |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | Yes | Client auth base URL |
 | `ADMIN_EMAILS` | Yes for admin access | Comma-separated admin allowlist |
 
 This app keeps Better Auth's default cookie names outside `localhost`. On `localhost`, it uses an app-specific cookie prefix scoped to the configured port so Google OAuth/session cookies do not collide with other local Better Auth apps.
@@ -541,10 +540,9 @@ Check:
 
 Check:
 
+- `APP_BASE_URL`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `BETTER_AUTH_URL`
-- `NEXT_PUBLIC_BETTER_AUTH_URL`
 
 ## Current state of auth
 

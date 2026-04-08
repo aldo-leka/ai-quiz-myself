@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { user } from "@/db/schema";
 import { getAdminSessionOrNull } from "@/lib/admin-auth";
+import { toAppUrl } from "@/lib/app-base-url";
 import { ADMIN_IMPERSONATION_COOKIE_NAME } from "@/lib/user-auth";
 
 const impersonationCookieOptions = {
@@ -29,7 +30,7 @@ function clearImpersonationCookie(response: NextResponse) {
 export async function POST(request: Request) {
   const adminSession = await getAdminSessionOrNull();
   if (!adminSession) {
-    return NextResponse.redirect(new URL("/", request.url), 303);
+    return NextResponse.redirect(toAppUrl("/"), 303);
   }
 
   const formData = await request.formData();
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   );
 
   if (intent === "stop") {
-    const response = NextResponse.redirect(new URL(redirectTo, request.url), 303);
+    const response = NextResponse.redirect(toAppUrl(redirectTo), 303);
     clearImpersonationCookie(response);
     return response;
   }
@@ -48,10 +49,10 @@ export async function POST(request: Request) {
   const userIdValue = formData.get("userId");
   const userId = typeof userIdValue === "string" ? userIdValue.trim() : "";
   if (!userId) {
-    return NextResponse.redirect(new URL("/admin/users", request.url), 303);
+    return NextResponse.redirect(toAppUrl("/admin/users"), 303);
   }
 
-  const response = NextResponse.redirect(new URL(redirectTo, request.url), 303);
+  const response = NextResponse.redirect(toAppUrl(redirectTo), 303);
 
   if (userId === adminSession.user.id) {
     clearImpersonationCookie(response);
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     .limit(1);
 
   if (!targetUser) {
-    return NextResponse.redirect(new URL("/admin/users", request.url), 303);
+    return NextResponse.redirect(toAppUrl("/admin/users"), 303);
   }
 
   response.cookies.set({

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { creditTransactions } from "@/db/schema";
 import { user } from "@/db/schema/auth";
+import { toAppUrl } from "@/lib/app-base-url";
 import { TOP_UP_MAX_CENTS, TOP_UP_MIN_CENTS } from "@/lib/billing";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import {
@@ -62,9 +63,10 @@ export async function POST(request: Request) {
     const orgDefaultCurrency = getStripeDefaultCurrency();
     const checkoutCurrency = payload.currency ?? orgDefaultCurrency;
     const returnPath = payload.returnPath ?? "/dashboard/billing";
-    const baseUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-    const successUrl = `${baseUrl}${returnPath}?topup=success`;
-    const cancelUrl = `${baseUrl}${returnPath}?topup=cancel`;
+    const successUrl = toAppUrl(returnPath);
+    const cancelUrl = toAppUrl(returnPath);
+    successUrl.searchParams.set("topup", "success");
+    cancelUrl.searchParams.set("topup", "cancel");
 
     const [userRow] = await db
       .select({
@@ -115,8 +117,8 @@ export async function POST(request: Request) {
       userEmail: session.user.email,
       amountCents: payload.amountCents,
       currency: checkoutCurrency,
-      successUrl,
-      cancelUrl,
+      successUrl: successUrl.toString(),
+      cancelUrl: cancelUrl.toString(),
       customerId: stripeCustomerId,
       metadata: {
         user_id: session.user.id,

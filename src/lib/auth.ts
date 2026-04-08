@@ -7,25 +7,23 @@ import * as schema from "@/db/schema";
 import { isAdminEmail } from "@/lib/admin";
 import { resolveStarterCreditsCentsFromSettings } from "@/lib/billing";
 import { detectLocaleFromRequest } from "@/lib/locale";
+import { getConfiguredAppBaseUrl } from "@/lib/app-base-url";
 import { requireEnv } from "@/lib/env";
 import { captureServerEvent } from "@/lib/posthog-server";
 
-const betterAuthUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-const localhostHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const betterAuthUrl = getConfiguredAppBaseUrl().toString();
+const localhostHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const trustedAuthOrigins = new Set([betterAuthUrl]);
 
 function resolveLocalCookiePrefix() {
-  try {
-    const url = new URL(betterAuthUrl);
-    if (!localhostHosts.has(url.hostname)) {
-      return undefined;
-    }
-
-    const host = url.hostname.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-    const port = url.port || (url.protocol === "https:" ? "443" : "80");
-    return `ai-quiz-myself-${host}-${port}`;
-  } catch {
+  const url = new URL(betterAuthUrl);
+  if (!localhostHosts.has(url.hostname)) {
     return undefined;
   }
+
+  const host = url.hostname.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const port = url.port || (url.protocol === "https:" ? "443" : "80");
+  return `ai-quiz-myself-${host}-${port}`;
 }
 
 const localCookiePrefix = resolveLocalCookiePrefix();
@@ -193,9 +191,12 @@ export const auth = betterAuth({
       }
     : {}),
   trustedOrigins(request) {
-    const origin = request?.headers.get("origin");
-    const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined;
-    return [betterAuthUrl, process.env.NEXT_PUBLIC_BETTER_AUTH_URL, origin, vercelUrl];
+    const originHeader = request?.headers.get("origin");
+    if (originHeader) {
+      return Array.from(new Set([...trustedAuthOrigins, originHeader]));
+    }
+
+    return Array.from(trustedAuthOrigins);
   },
   plugins: [nextCookies()],
 });
