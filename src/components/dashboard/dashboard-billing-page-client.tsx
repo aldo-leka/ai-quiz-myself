@@ -475,10 +475,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <div className="flex h-full flex-col gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
                   <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">Trigger threshold ($5-$95)</p>
                   <p className="text-sm text-[#9394a5] md:text-base">Auto recharge starts at or below this balance.</p>
-                  <div className="relative">
+                  <div className="relative mt-auto">
                     <Input
                       data-tv-id="billing-threshold-input"
                       data-tv-input="true"
@@ -494,10 +494,10 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                     </span>
                   </div>
                 </div>
-                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <div className="flex h-full flex-col gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
                   <p className="text-lg font-semibold text-[#e4e4e9] md:text-2xl">Target balance ($10-$100)</p>
                   <p className="text-sm text-[#9394a5] md:text-base">Each recharge brings your wallet back to this amount.</p>
-                  <div className="relative">
+                  <div className="relative mt-auto">
                     <Input
                       data-tv-id="billing-target-input"
                       data-tv-input="true"
@@ -513,12 +513,12 @@ export function DashboardBillingPageClient({ topUpStatus = null }: DashboardBill
                     </span>
                   </div>
                 </div>
-                <div className="space-y-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
+                <div className="flex h-full flex-col gap-3 rounded-2xl border border-[#252940] bg-[#0f1117]/82 p-4">
                   <p className="text-lg font-semibold text-[#9394a5] md:text-2xl">
                     Monthly cap ($10-$1000, optional)
                   </p>
                   <p className="text-sm text-[#9394a5] md:text-base">Limit total auto recharges per calendar month.</p>
-                  <div className="relative">
+                  <div className="relative mt-auto">
                     <Input
                       data-tv-id="billing-monthly-cap-input"
                       data-tv-input="true"
