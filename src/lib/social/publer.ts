@@ -4,7 +4,17 @@ import type { SocialPublishMode } from "@/lib/social/types";
 
 const PUBLER_API_BASE_URL = "https://app.publer.com/api/v1";
 const PUBLER_JOB_POLL_INTERVAL_MS = 2_000;
-const PUBLER_JOB_TIMEOUT_MS = 90_000;
+const PUBLER_JOB_TIMEOUT_MS = Number.parseInt(process.env.PUBLER_JOB_TIMEOUT_MS ?? "90000", 10);
+
+class PublerJobPollingError extends Error {
+  details: Record<string, unknown>;
+
+  constructor(message: string, details: Record<string, unknown>) {
+    super(message);
+    this.name = "PublerJobPollingError";
+    this.details = details;
+  }
+}
 
 export type PublerTargetConfig = {
   apiKey: string;
@@ -226,7 +236,9 @@ async function pollPublerJob(params: {
   config: PublerTargetConfig;
   jobId: string;
 }) {
-  const deadline = Date.now() + PUBLER_JOB_TIMEOUT_MS;
+  const startedAt = Date.now();
+  const deadline = startedAt + PUBLER_JOB_TIMEOUT_MS;
+  const observations: Array<Record<string, unknown>> = [];
 
   while (Date.now() < deadline) {
     const response = await fetch(`${PUBLER_API_BASE_URL}/job_status/${params.jobId}`, {
@@ -234,23 +246,60 @@ async function pollPublerJob(params: {
       cache: "no-store",
     });
     const payload = await parseJsonResponse(response);
-    if (!response.ok) {
-      throw new Error(`Publer job polling failed: ${JSON.stringify(payload)}`);
+    const status = extractPublerJobStatus(payload);
+    const observation = {
+      observedAt: new Date().toISOString(),
+      httpStatus: response.status,
+      status,
+      payload: payload ?? null,
+    } satisfies Record<string, unknown>;
+
+    observations.push(observation);
+    if (observations.length > 10) {
+      observations.shift();
     }
 
-    const status = extractPublerJobStatus(payload);
+    if (!response.ok) {
+      throw new PublerJobPollingError(`Publer job polling failed: ${JSON.stringify(payload)}`, {
+        jobId: params.jobId,
+        timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+        elapsedMs: Date.now() - startedAt,
+        lastObservation: observation,
+        recentObservations: observations,
+      });
+    }
+
     if (status === "completed") {
       return payload;
     }
 
     if (status === "failed" || status === "error") {
-      throw new Error(`Publer job ${params.jobId} failed: ${JSON.stringify(payload)}`);
+      throw new PublerJobPollingError(`Publer job ${params.jobId} failed: ${JSON.stringify(payload)}`, {
+        jobId: params.jobId,
+        timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+        elapsedMs: Date.now() - startedAt,
+        lastObservation: observation,
+        recentObservations: observations,
+      });
     }
 
     await sleep(PUBLER_JOB_POLL_INTERVAL_MS);
   }
 
-  throw new Error(`Timed out waiting for Publer job ${params.jobId}.`);
+  const lastObservation = observations.at(-1) ?? null;
+  const lastStatus =
+    lastObservation && typeof lastObservation.status === "string" ? lastObservation.status : null;
+
+  throw new PublerJobPollingError(
+    `Timed out waiting for Publer job ${params.jobId}.${lastStatus ? ` Last status: ${lastStatus}.` : ""}`,
+    {
+      jobId: params.jobId,
+      timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+      elapsedMs: Date.now() - startedAt,
+      lastObservation,
+      recentObservations: observations,
+    },
+  );
 }
 
 function buildCommentCallbacks(firstComment: string | null | undefined) {
@@ -417,6 +466,14 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
     publishMode: params.publishMode,
   };
 
+  let createResult:
+    | {
+        jobId: string;
+        requestPayload: Record<string, unknown>;
+        responsePayload: Record<string, unknown>;
+      }
+    | null = null;
+
   try {
     await recordSocialPostAttempt({
       socialPostId: params.socialPostId,
@@ -507,7 +564,7 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
       );
     }
 
-    const createResult = await createPublerPostJob({
+    createResult = await createPublerPostJob({
       config,
       publishMode: params.publishMode,
       posts,
@@ -557,11 +614,20 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Publer publishing error";
+    const debugPayload = {
+      publerJobId: createResult?.jobId ?? null,
+      createPostJobResponse: createResult?.responsePayload ?? null,
+      pollDiagnostics:
+        error instanceof PublerJobPollingError ? error.details : null,
+      timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+    } satisfies Record<string, unknown>;
+
     await recordSocialPostAttempt({
       socialPostId: params.socialPostId,
       stage: "publish_failed",
       success: false,
       requestPayload: uploadStageRequest,
+      responsePayload: debugPayload,
       errorMessage: message,
     });
     await updateSocialPostAfterPublish({
@@ -572,6 +638,8 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
       firstComment: params.firstComment ?? null,
       tiktokTitle: params.tiktokTitle ?? null,
       publerWorkspaceId: config.workspaceId,
+      publerJobId: createResult?.jobId ?? null,
+      publerResponse: debugPayload,
       lastError: message,
     });
     throw error;

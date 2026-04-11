@@ -16,6 +16,7 @@
     "db:seed:couch": "npx tsx src/db/seed-couch.ts",
     "social:preview": "npx tsx scripts/social-create-preview.ts",
     "social:openclaw": "python3 scripts/openclaw_social_publish.py",
+    "social:debug": "node scripts/social-debug-post.cjs",
     "costs:backfill:tts": "npx tsx scripts/backfill-estimated-tts-costs.ts",
     "audio:prewarm:wwtbam-host": "npx tsx scripts/prewarm-wwtbam-host-audio.ts",
     "audio:generate:wwtbam-sfx": "node scripts/generate-wwtbam-sfx.mjs",

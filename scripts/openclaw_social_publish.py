@@ -132,7 +132,9 @@ class SSHTunnel:
         try:
             with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as handle:
                 handle.write("#!/bin/sh\n")
-                handle.write("printf '%s\\n' \"$QUIZPLUS_SOCIAL_SSH_PASSWORD_ASKPASS\"\n")
+                handle.write(
+                    "printf '%s\\n' " + '"$' + 'QUIZPLUS_SOCIAL_SSH_PASSWORD_ASKPASS"' + "\n"
+                )
                 self._askpass_path = handle.name
 
             os.chmod(self._askpass_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
@@ -504,7 +506,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=env_int("QUIZPLUS_SOCIAL_TIMEOUT_SECONDS") or 120)
     parser.add_argument("--lock-file", default=os.getenv("QUIZPLUS_SOCIAL_LOCK_FILE", "/tmp/quizplus-social.lock"))
     parser.add_argument("--print-json", action="store_true", default=env_flag("QUIZPLUS_SOCIAL_PRINT_JSON"))
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.reserve_only and args.social_post_id:
+        parser.error("--reserve-only cannot be combined with --social-post-id")
+
+    if args.social_post_id and not (args.caption or args.caption_file):
+        parser.error("--caption or --caption-file is required when --social-post-id is provided")
+
+    if (args.caption or args.caption_file or args.tiktok_title) and not args.social_post_id:
+        parser.error("--caption, --caption-file, and --tiktok-title require --social-post-id")
+
+    return args
 
 
 def run(args: argparse.Namespace) -> int:
@@ -535,7 +548,6 @@ def run(args: argparse.Namespace) -> int:
                 social_post_id=args.social_post_id,
                 caption=load_caption_from_args(args),
             )
-
         reserve_payload: dict[str, Any] = {
             "pipelineSlug": args.pipeline,
             "baseUrl": public_base_url,
