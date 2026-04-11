@@ -235,6 +235,7 @@ async function loadCandidateQuizzes(pipeline: SocialPipelineRecord) {
     .where(
       and(
         eq(quizzes.isPublic, true),
+        eq(quizzes.isHub, true),
         inArray(quizzes.gameMode, allowedGameModes),
       ),
     );
