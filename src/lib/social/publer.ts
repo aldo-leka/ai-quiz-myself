@@ -269,7 +269,7 @@ async function pollPublerJob(params: {
       });
     }
 
-    if (status === "completed") {
+    if (status === "completed" || status === "complete") {
       return payload;
     }
 
@@ -393,6 +393,61 @@ function buildPostPayload(params: {
   };
 }
 
+type PublerProvider = "instagram" | "facebook" | "tiktok";
+
+type PublerCreateJobResult = {
+  jobId: string;
+  requestPayload: Record<string, unknown>;
+  responsePayload: Record<string, unknown>;
+};
+
+type PublerPlatformPlan = {
+  provider: PublerProvider;
+  accountId: string;
+  mediaIds: string[];
+  caption: string;
+  firstComment?: string | null;
+  scheduleAt?: string | null;
+  tiktokTitle?: string | null;
+};
+
+type PublerPlatformResult = {
+  provider: PublerProvider;
+  accountId: string;
+  success: boolean;
+  jobId: string | null;
+  createPostJobRequest: Record<string, unknown> | null;
+  createPostJobResponse: Record<string, unknown> | null;
+  finalJobPayload: Record<string, unknown> | null;
+  errorMessage: string | null;
+  pollDiagnostics: Record<string, unknown> | null;
+};
+
+class PublerPlatformFailuresError extends Error {
+  details: Record<string, unknown>;
+
+  constructor(message: string, details: Record<string, unknown>) {
+    super(message);
+    this.name = "PublerPlatformFailuresError";
+    this.details = details;
+  }
+}
+
+function summarizePublerJobIds(results: PublerPlatformResult[]) {
+  const parts = results
+    .filter((result) => result.jobId)
+    .map((result) => `${result.provider}:${result.jobId}`);
+
+  return parts.length > 0 ? parts.join(",") : null;
+}
+
+function summarizePlatformFailures(results: PublerPlatformResult[]) {
+  return results
+    .filter((result) => !result.success)
+    .map((result) => `${result.provider}: ${result.errorMessage ?? "Unknown error"}`)
+    .join(" | ");
+}
+
 async function createPublerPostJob(params: {
   config: PublerTargetConfig;
   publishMode: SocialPublishMode;
@@ -431,7 +486,104 @@ async function createPublerPostJob(params: {
     jobId,
     requestPayload: payload,
     responsePayload: responsePayload ?? {},
-  };
+  } satisfies PublerCreateJobResult;
+}
+
+async function publishPlatformToPubler(params: {
+  socialPostId: string;
+  config: PublerTargetConfig;
+  publishMode: SocialPublishMode;
+  plan: PublerPlatformPlan;
+}) {
+  let createResult: PublerCreateJobResult | null = null;
+
+  try {
+    createResult = await createPublerPostJob({
+      config: params.config,
+      publishMode: params.publishMode,
+      posts: [
+        buildPostPayload({
+          provider: params.plan.provider,
+          accountId: params.plan.accountId,
+          mediaIds: params.plan.mediaIds,
+          caption: params.plan.caption,
+          firstComment: params.plan.firstComment,
+          scheduleAt: params.plan.scheduleAt,
+          tiktokTitle: params.plan.tiktokTitle,
+        }),
+      ],
+    });
+
+    await recordSocialPostAttempt({
+      socialPostId: params.socialPostId,
+      stage: `create_post_job_${params.plan.provider}`,
+      success: true,
+      requestPayload: createResult.requestPayload,
+      responsePayload: createResult.responsePayload,
+    });
+
+    const finalJobPayload = await pollPublerJob({
+      config: params.config,
+      jobId: createResult.jobId,
+    });
+
+    await recordSocialPostAttempt({
+      socialPostId: params.socialPostId,
+      stage: `poll_post_job_${params.plan.provider}`,
+      success: true,
+      requestPayload: {
+        provider: params.plan.provider,
+        jobId: createResult.jobId,
+      },
+      responsePayload: finalJobPayload ?? {},
+    });
+
+    return {
+      provider: params.plan.provider,
+      accountId: params.plan.accountId,
+      success: true,
+      jobId: createResult.jobId,
+      createPostJobRequest: createResult.requestPayload,
+      createPostJobResponse: createResult.responsePayload,
+      finalJobPayload: finalJobPayload ?? null,
+      errorMessage: null,
+      pollDiagnostics: null,
+    } satisfies PublerPlatformResult;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Publer platform publish error";
+    const debugPayload = {
+      provider: params.plan.provider,
+      accountId: params.plan.accountId,
+      publerJobId: createResult?.jobId ?? null,
+      createPostJobResponse: createResult?.responsePayload ?? null,
+      pollDiagnostics: error instanceof PublerJobPollingError ? error.details : null,
+      timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+    } satisfies Record<string, unknown>;
+
+    await recordSocialPostAttempt({
+      socialPostId: params.socialPostId,
+      stage: `publish_failed_${params.plan.provider}`,
+      success: false,
+      requestPayload: createResult?.requestPayload ?? {
+        provider: params.plan.provider,
+        accountId: params.plan.accountId,
+      },
+      responsePayload: debugPayload,
+      errorMessage: message,
+    });
+
+    return {
+      provider: params.plan.provider,
+      accountId: params.plan.accountId,
+      success: false,
+      jobId: createResult?.jobId ?? null,
+      createPostJobRequest: createResult?.requestPayload ?? null,
+      createPostJobResponse: createResult?.responsePayload ?? null,
+      finalJobPayload: null,
+      errorMessage: message,
+      pollDiagnostics: error instanceof PublerJobPollingError ? error.details : null,
+    } satisfies PublerPlatformResult;
+  }
 }
 
 export async function publishSocialPreviewToPubler(params: PublishSocialPreviewParams) {
@@ -466,13 +618,7 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
     publishMode: params.publishMode,
   };
 
-  let createResult:
-    | {
-        jobId: string;
-        requestPayload: Record<string, unknown>;
-        responsePayload: Record<string, unknown>;
-      }
-    | null = null;
+  const platformResults: PublerPlatformResult[] = [];
 
   try {
     await recordSocialPostAttempt({
@@ -524,74 +670,65 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
       }),
     );
 
-    const posts: Array<Record<string, unknown>> = [];
+    const plans: PublerPlatformPlan[] = [];
     if (config.instagramAccountId) {
-      posts.push(
-        buildPostPayload({
-          provider: "instagram",
-          accountId: config.instagramAccountId,
-          mediaIds: feedMediaIds,
-          caption: params.caption,
-          firstComment: params.firstComment,
-          scheduleAt: params.scheduleAt,
-        }),
-      );
+      plans.push({
+        provider: "instagram",
+        accountId: config.instagramAccountId,
+        mediaIds: feedMediaIds,
+        caption: params.caption,
+        firstComment: params.firstComment,
+        scheduleAt: params.scheduleAt,
+      });
     }
 
     if (config.facebookAccountId) {
-      posts.push(
-        buildPostPayload({
-          provider: "facebook",
-          accountId: config.facebookAccountId,
-          mediaIds: feedMediaIds,
-          caption: params.caption,
-          firstComment: params.firstComment,
-          scheduleAt: params.scheduleAt,
-        }),
-      );
+      plans.push({
+        provider: "facebook",
+        accountId: config.facebookAccountId,
+        mediaIds: feedMediaIds,
+        caption: params.caption,
+        firstComment: params.firstComment,
+        scheduleAt: params.scheduleAt,
+      });
     }
 
     if (config.tiktokAccountId) {
-      posts.push(
-        buildPostPayload({
-          provider: "tiktok",
-          accountId: config.tiktokAccountId,
-          mediaIds: storyMediaIds,
-          caption: params.caption,
-          scheduleAt: params.scheduleAt,
-          tiktokTitle: params.tiktokTitle,
+      plans.push({
+        provider: "tiktok",
+        accountId: config.tiktokAccountId,
+        mediaIds: storyMediaIds,
+        caption: params.caption,
+        scheduleAt: params.scheduleAt,
+        tiktokTitle: params.tiktokTitle,
+      });
+    }
+
+    for (const plan of plans) {
+      platformResults.push(
+        await publishPlatformToPubler({
+          socialPostId: params.socialPostId,
+          config,
+          publishMode: params.publishMode,
+          plan,
         }),
       );
     }
 
-    createResult = await createPublerPostJob({
-      config,
-      publishMode: params.publishMode,
-      posts,
-    });
+    const successPayload = {
+      timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+      jobResults: platformResults,
+      successfulProviders: platformResults.filter((result) => result.success).map((result) => result.provider),
+      failedProviders: platformResults.filter((result) => !result.success).map((result) => result.provider),
+    } satisfies Record<string, unknown>;
 
-    await recordSocialPostAttempt({
-      socialPostId: params.socialPostId,
-      stage: "create_post_job",
-      success: true,
-      requestPayload: createResult.requestPayload as Record<string, unknown>,
-      responsePayload: createResult.responsePayload,
-    });
-
-    const finalJobPayload = await pollPublerJob({
-      config,
-      jobId: createResult.jobId,
-    });
-
-    await recordSocialPostAttempt({
-      socialPostId: params.socialPostId,
-      stage: "poll_post_job",
-      success: true,
-      requestPayload: {
-        jobId: createResult.jobId,
-      },
-      responsePayload: finalJobPayload ?? {},
-    });
+    const failedProviders = platformResults.filter((result) => !result.success);
+    if (failedProviders.length > 0) {
+      throw new PublerPlatformFailuresError(
+        `Publer publish failed for ${failedProviders.map((result) => result.provider).join(", ")}. ${summarizePlatformFailures(platformResults)}`,
+        successPayload,
+      );
+    }
 
     const updatedSocialPost = await updateSocialPostAfterPublish({
       socialPostId: params.socialPostId,
@@ -601,26 +738,31 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
       firstComment: params.firstComment ?? null,
       tiktokTitle: params.tiktokTitle ?? null,
       publerWorkspaceId: config.workspaceId,
-      publerJobId: createResult.jobId,
-      publerResponse: finalJobPayload ?? createResult.responsePayload,
+      publerJobId: summarizePublerJobIds(platformResults),
+      publerResponse: successPayload,
     });
 
     return {
       socialPost: updatedSocialPost,
       publer: {
-        jobId: createResult.jobId,
-        finalJobPayload,
+        jobResults: platformResults,
       },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Publer publishing error";
-    const debugPayload = {
-      publerJobId: createResult?.jobId ?? null,
-      createPostJobResponse: createResult?.responsePayload ?? null,
-      pollDiagnostics:
-        error instanceof PublerJobPollingError ? error.details : null,
-      timeoutMs: PUBLER_JOB_TIMEOUT_MS,
-    } satisfies Record<string, unknown>;
+    const debugPayload =
+      error instanceof PublerPlatformFailuresError
+        ? error.details
+        : ({
+            timeoutMs: PUBLER_JOB_TIMEOUT_MS,
+            jobResults: platformResults,
+            successfulProviders: platformResults
+              .filter((result) => result.success)
+              .map((result) => result.provider),
+            failedProviders: platformResults
+              .filter((result) => !result.success)
+              .map((result) => result.provider),
+          } satisfies Record<string, unknown>);
 
     await recordSocialPostAttempt({
       socialPostId: params.socialPostId,
@@ -638,7 +780,7 @@ export async function publishSocialPreviewToPubler(params: PublishSocialPreviewP
       firstComment: params.firstComment ?? null,
       tiktokTitle: params.tiktokTitle ?? null,
       publerWorkspaceId: config.workspaceId,
-      publerJobId: createResult?.jobId ?? null,
+      publerJobId: summarizePublerJobIds(platformResults),
       publerResponse: debugPayload,
       lastError: message,
     });
