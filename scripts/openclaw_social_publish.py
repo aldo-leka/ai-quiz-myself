@@ -367,6 +367,118 @@ def build_tiktok_title(snapshot: dict[str, Any]) -> str:
     return clip_text(f"Can you finish this QuizPlus quiz? {title}", 90) if title else "Can you finish this QuizPlus quiz?"
 
 
+def load_caption_from_args(args: argparse.Namespace) -> str:
+    if args.caption_file:
+        caption_path = Path(args.caption_file)
+        if not caption_path.exists():
+            raise FileNotFoundError(f"Caption file not found: {caption_path}")
+        return caption_path.read_text(encoding="utf-8").strip()
+
+    return clean_text(args.caption)
+
+
+def print_reserve_result(
+    *,
+    reserve_result: dict[str, Any],
+    audience: str,
+    print_json: bool,
+) -> int:
+    if reserve_result.get("status") == "empty":
+        message = {
+            "status": "empty",
+            "audience": audience,
+            "pipeline": reserve_result.get("pipeline"),
+            "remainingEligible": reserve_result.get("remainingEligible"),
+            "nudge": reserve_result.get("nudge"),
+        }
+        print(json.dumps(message, indent=2, sort_keys=True) if print_json else "No eligible public QuizPlus quizzes remain.")
+        return 0
+
+    if reserve_result.get("status") != "ok" or not isinstance(reserve_result.get("socialPost"), dict):
+        print(f"Unexpected reserve response: {json.dumps(reserve_result)}", file=sys.stderr)
+        return 1
+
+    social_post = reserve_result["socialPost"]
+    snapshot = social_post.get("quizSnapshot")
+    if not isinstance(snapshot, dict):
+        print(f"Reserve response did not include quizSnapshot: {json.dumps(reserve_result)}", file=sys.stderr)
+        return 1
+
+    result = {
+        "status": "reserved",
+        "audience": audience,
+        "socialPostId": clean_text(social_post.get("id")),
+        "quizId": clean_text(snapshot.get("quizId")),
+        "quizTitle": clean_text(snapshot.get("title")),
+        "gameMode": clean_text(snapshot.get("gameMode")),
+        "playUrl": clean_text(social_post.get("playUrl")) or clean_text(snapshot.get("playUrl")),
+        "reviewUrl": social_post.get("reviewUrl"),
+        "remainingEligibleBeforeReservation": reserve_result.get("remainingEligible"),
+        "nudge": reserve_result.get("nudge"),
+        "quizSnapshot": snapshot,
+    }
+
+    if print_json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Reserved QuizPlus carousel for {audience}.")
+        print(f"Social post: {result['socialPostId']}")
+        print(f"Quiz: {result['quizTitle']}")
+        print(f"Mode: {result['gameMode']}")
+        print(f"Play URL: {result['playUrl']}")
+        print(f"Review URL: {result['reviewUrl']}")
+        if result["nudge"]:
+            print(f"Nudge: {json.dumps(result['nudge'])}")
+
+    return 0
+
+
+def publish_existing_post(
+    *,
+    args: argparse.Namespace,
+    tunneled_base_url: str,
+    social_post_id: str,
+    caption: str,
+) -> int:
+    if not caption:
+        print("Missing --caption or --caption-file for publish.", file=sys.stderr)
+        return 1
+
+    publish_result = request_json(
+        method="POST",
+        url=endpoint_url(tunneled_base_url, PUBLISH_PATH),
+        secret=args.secret,
+        payload={
+            "socialPostId": social_post_id,
+            "caption": caption,
+            "firstComment": None,
+            "tiktokTitle": clean_text(args.tiktok_title) or clip_text(caption, 90),
+            "publishMode": "publish",
+        },
+        connect_ip="127.0.0.1",
+        insecure_tls=args.insecure_tls,
+        timeout=args.timeout,
+    )
+
+    result = {
+        "status": "published",
+        "audience": args.audience,
+        "socialPostId": social_post_id,
+        "publish": publish_result,
+    }
+
+    if args.print_json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Published QuizPlus carousel for {args.audience}.")
+        print(f"Social post: {social_post_id}")
+        publer = publish_result.get("publer")
+        if isinstance(publer, dict) and publer.get("jobId"):
+            print(f"Publer job: {publer['jobId']}")
+
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     load_dotenv()
 
@@ -375,6 +487,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default=os.getenv("QUIZPLUS_SOCIAL_BASE_URL", DEFAULT_BASE_URL), help="QuizPlus base URL, for example https://quizplus.io")
     parser.add_argument("--pipeline", default=os.getenv("QUIZPLUS_SOCIAL_PIPELINE_SLUG", DEFAULT_PIPELINE))
     parser.add_argument("--quiz-id", default=os.getenv("QUIZPLUS_SOCIAL_QUIZ_ID"), help="Optional exact quiz UUID for a one-off test")
+    parser.add_argument("--reserve-only", action="store_true", help="Reserve the next carousel and print its quiz data without publishing")
+    parser.add_argument("--social-post-id", help="Publish an already reserved social post id")
+    parser.add_argument("--caption", help="Caption to use when publishing an already reserved post")
+    parser.add_argument("--caption-file", help="File containing the caption to use when publishing an already reserved post")
+    parser.add_argument("--tiktok-title", help="Optional TikTok title to use when publishing an already reserved post")
     parser.add_argument("--secret", default=os.getenv("CRON_SECRET"), help="Bearer secret for internal social endpoints")
     parser.add_argument("--ssh-host", default=os.getenv("QUIZPLUS_SOCIAL_SSH_HOST"), required=os.getenv("QUIZPLUS_SOCIAL_SSH_HOST") is None)
     parser.add_argument("--ssh-user", default=os.getenv("QUIZPLUS_SOCIAL_SSH_USER"), required=os.getenv("QUIZPLUS_SOCIAL_SSH_USER") is None)
@@ -411,6 +528,14 @@ def run(args: argparse.Namespace) -> int:
         local_port = tunnel.__enter__()
         tunneled_base_url = replace_url_port(public_base_url, local_port)
 
+        if args.social_post_id:
+            return publish_existing_post(
+                args=args,
+                tunneled_base_url=tunneled_base_url,
+                social_post_id=args.social_post_id,
+                caption=load_caption_from_args(args),
+            )
+
         reserve_payload: dict[str, Any] = {
             "pipelineSlug": args.pipeline,
             "baseUrl": public_base_url,
@@ -427,6 +552,13 @@ def run(args: argparse.Namespace) -> int:
             insecure_tls=args.insecure_tls,
             timeout=args.timeout,
         )
+
+        if args.reserve_only:
+            return print_reserve_result(
+                reserve_result=reserve_result,
+                audience=args.audience,
+                print_json=args.print_json,
+            )
 
         if reserve_result.get("status") == "empty":
             message = {

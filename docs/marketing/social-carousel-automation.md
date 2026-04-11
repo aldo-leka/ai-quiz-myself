@@ -44,14 +44,14 @@ Notes:
 
 ## OpenClaw Flow
 
-For the actual cron job, prefer the committed runner:
+For OpenClaw cron, use the committed runner in two steps so OpenClaw can own the copy:
 
 ```bash
-python3 scripts/openclaw_social_publish.py --audience us
-python3 scripts/openclaw_social_publish.py --audience india
+python3 scripts/openclaw_social_publish.py --audience us --reserve-only --print-json
+python3 scripts/openclaw_social_publish.py --social-post-id <reserved-social-post-id> --caption-file /tmp/quizplus-social-caption.txt --tiktok-title "<short title>"
 ```
 
-The runner opens the required password-based SSH tunnel, reserves one eligible quiz, writes default caption copy, and calls the publish endpoint with `publishMode: "publish"`. It does not store generated images on the OpenClaw machine.
+The reserve command opens the required password-based SSH tunnel, reserves one eligible quiz, and prints the quiz data. OpenClaw should then write the caption from that JSON and call the publish command. The app still owns selection state, image rendering, Publer uploads, and posting history. It does not store generated images on the OpenClaw machine.
 
 Create `.env.openclaw` in the repo root on the OpenClaw machine. It is ignored by git.
 
@@ -79,8 +79,8 @@ Recommended daily schedules:
 
 ```cron
 TZ=Europe/Amsterdam
-30 2 * * * cd /path/to/ai-quiz-myself && python3 scripts/openclaw_social_publish.py --audience us >> /var/log/openclaw/quizplus-social.log 2>&1
-30 15 * * * cd /path/to/ai-quiz-myself && python3 scripts/openclaw_social_publish.py --audience india >> /var/log/openclaw/quizplus-social.log 2>&1
+30 2 * * * OpenClaw runs the two-step reserve/write-copy/publish flow for --audience us
+30 15 * * * OpenClaw runs the two-step reserve/write-copy/publish flow for --audience india
 ```
 
 The script has its own lock file at `/tmp/quizplus-social.lock`, so the two jobs will not overlap if one run stalls.
