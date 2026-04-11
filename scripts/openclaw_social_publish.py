@@ -503,7 +503,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ssh-remote-host", default=os.getenv("QUIZPLUS_SOCIAL_SSH_REMOTE_HOST", "127.0.0.1"))
     parser.add_argument("--ssh-remote-port", type=int, default=env_int("QUIZPLUS_SOCIAL_SSH_REMOTE_PORT") or 443)
     parser.add_argument("--insecure-tls", action="store_true", default=env_flag("QUIZPLUS_SOCIAL_INSECURE_TLS"))
-    parser.add_argument("--timeout", type=int, default=env_int("QUIZPLUS_SOCIAL_TIMEOUT_SECONDS") or 120)
+    parser.add_argument("--timeout", type=int, default=env_int("QUIZPLUS_SOCIAL_TIMEOUT_SECONDS") or 300)
     parser.add_argument("--lock-file", default=os.getenv("QUIZPLUS_SOCIAL_LOCK_FILE", "/tmp/quizplus-social.lock"))
     parser.add_argument("--print-json", action="store_true", default=env_flag("QUIZPLUS_SOCIAL_PRINT_JSON"))
     args = parser.parse_args()
